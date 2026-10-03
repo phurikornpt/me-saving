@@ -10,7 +10,7 @@ export const authConfig = {
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;
-      if (pathname === "/login" || pathname.startsWith("/api/auth")) return true;
+      if (pathname === "/login" || pathname === "/api/health" || pathname.startsWith("/api/auth")) return true;
       return !!auth?.user;
     },
   },
