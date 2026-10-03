@@ -1,4 +1,5 @@
 import { getSequelize } from "@/infrastructure/db/sequelize";
+import { parseExtraAccounts } from "@/infrastructure/security/env-credential-verifier";
 import { isWellFormedHash } from "@/infrastructure/security/password";
 import { cleanEnv } from "@/lib/env";
 
@@ -34,6 +35,9 @@ export async function GET() {
     hashHadQuotesOrWhitespace: rawHash ? cleanEnv(rawHash) !== rawHash : false,
     emailLength: rawEmail?.length ?? 0,
     emailHadQuotesOrWhitespace: rawEmail ? cleanEnv(rawEmail) !== rawEmail : false,
+    // AUTH_EXTRA_USERS: how many entries were set vs. how many parsed (a mangled paste parses to fewer)
+    extraUsersSet: process.env.AUTH_EXTRA_USERS ? process.env.AUTH_EXTRA_USERS.split(";").filter((s) => s.trim()).length : 0,
+    extraUsersParsed: parseExtraAccounts(cleanEnv(process.env.AUTH_EXTRA_USERS)).filter((a) => isWellFormedHash(a.passwordHash)).length,
   };
 
   const missing = REQUIRED.filter((k) => !process.env[k]);
