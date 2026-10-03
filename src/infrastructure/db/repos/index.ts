@@ -64,6 +64,26 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
       });
       return rows.map(toRecord);
     },
+    async onDay(day) {
+      const { start, end } = bangkokDayRange(day);
+      const rows = await m.Entry.findAll({
+        where: { occurredAt: { [Op.gte]: start, [Op.lt]: end } },
+        order: [["occurredAt", "DESC"]],
+        ...t,
+      });
+      return rows.map(toRecord);
+    },
+    async findById(id) {
+      const row = await m.Entry.findByPk(id, t);
+      return row ? toRecord(row) : null;
+    },
+    async update(id, patch) {
+      const row = await m.Entry.findByPk(id, t);
+      return row ? toRecord(await row.update(patch, t)) : null;
+    },
+    async remove(id) {
+      return (await m.Entry.destroy({ where: { id }, ...t })) > 0; // receipt lines cascade in the DB
+    },
   };
 
   const loggedDays: LoggedDayRepo = {

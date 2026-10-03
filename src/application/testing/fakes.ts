@@ -46,6 +46,24 @@ export function createFakeRepos() {
       async recent(limit) {
         return [...entries].reverse().slice(0, limit);
       },
+      async onDay(day) {
+        return entries.filter((e) => bangkokDay(e.occurredAt) === day);
+      },
+      async findById(id) {
+        return entries.find((e) => e.id === id) ?? null;
+      },
+      async update(id, patch) {
+        const i = entries.findIndex((e) => e.id === id);
+        if (i < 0) return null;
+        entries[i] = { ...entries[i], ...patch };
+        return entries[i];
+      },
+      async remove(id) {
+        const i = entries.findIndex((e) => e.id === id);
+        if (i < 0) return false;
+        entries.splice(i, 1);
+        return true;
+      },
     },
     loggedDays: {
       async has(day) {

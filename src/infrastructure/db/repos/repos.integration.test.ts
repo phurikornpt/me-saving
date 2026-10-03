@@ -2,6 +2,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import type { Sequelize } from "sequelize";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
+import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
@@ -245,5 +246,27 @@ describe("receipt save against real Postgres", () => {
     const bad = new SaveReceiptEntry(tx, new FixedClock(NOON));
     await expect(bad.execute({ total: 100, lines: [{ ...lines[0], owner: "nobody" as never }] })).rejects.toThrow();
     expect(await createRepos(sequelize).entries.recent(5)).toHaveLength(0);
+  });
+});
+
+describe("changing entries rolls back for real", () => {
+  it("a delete that would drive the partner balance negative leaves the row in place", async () => {
+    const u = useCases();
+    const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "split" } });
+    await u.recordRepayment.execute({ amount: 5000 });
+    await expect(new DeleteEntry(createTransactionRunner(sequelize)).execute(entry.id)).rejects.toMatchObject({
+      code: "BALANCE_WOULD_GO_NEGATIVE",
+    });
+    expect(await u.repos.entries.findById(entry.id)).not.toBeNull();
+  });
+
+  it("an edit that would drive it negative keeps the old values", async () => {
+    const u = useCases();
+    const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "split" } });
+    await u.recordRepayment.execute({ amount: 4000 });
+    await expect(
+      new UpdateEntry(createTransactionRunner(sequelize)).execute(entry.id, { split: { kind: "none" } }),
+    ).rejects.toMatchObject({ code: "BALANCE_WOULD_GO_NEGATIVE" });
+    expect((await u.repos.entries.findById(entry.id))?.partnerShare).toBe(5000);
   });
 });

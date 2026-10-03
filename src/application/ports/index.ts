@@ -30,6 +30,14 @@ export interface EntryRepo {
   insert(entry: NewEntry): Promise<EntryRecord>;
   partnerLedger(): Promise<{ expenses: PartnerExpense[]; repayments: Repayment[] }>;
   recent(limit: number): Promise<EntryRecord[]>;
+  /** Entries that happened on a Bangkok calendar day, newest first. */
+  onDay(day: DayKey): Promise<EntryRecord[]>;
+  findById(id: string): Promise<EntryRecord | null>;
+  update(
+    id: string,
+    patch: Partial<Pick<EntryRecord, "occurredAt" | "total" | "partnerShare" | "categoryId" | "note" | "merchant">>,
+  ): Promise<EntryRecord | null>;
+  remove(id: string): Promise<boolean>;
 }
 
 export interface LoggedDayRepo {
