@@ -12,9 +12,11 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts up",
     "db:rollback": "tsx --env-file=.env.local scripts/migrate.ts down",
-    "auth:hash": "tsx scripts/hash-password.ts"
+    "auth:hash": "tsx scripts/hash-password.ts",
+    "db:migrate:prod": "tsx scripts/migrate.ts up"
   },
   "dependencies": {
+    "@google/genai": "^2.26.0",
     "next": "16.3.8",
     "next-auth": "5.0.0-beta.32",
     "pg": "^8.23.1",
@@ -39,5 +41,9 @@
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^5.0.3"
+  },
+  "packageManager": "pnpm@11.17.0",
+  "engines": {
+    "node": ">=22"
   }
 }
