@@ -35,7 +35,11 @@ export function NewEntryScreen() {
   const [choice, setChoice] = useState<PartnerChoice>("split");
   const [customShare, setCustomShare] = useState("");
   const [note, setNote] = useState("");
-  const [day, setDay] = useState("");
+  // ?day=YYYY-MM-DD comes from "add to this day" on the calendar; ignore anything that isn't a past/today date
+  const dayParam = params.get("day");
+  const [day, setDay] = useState(
+    dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) && dayParam <= new Date().toISOString().slice(0, 10) ? dayParam : "",
+  );
 
   const visible = useMemo(
     () => sortByUsage(categories.filter((c) => c.kind === kind && !c.archived)),

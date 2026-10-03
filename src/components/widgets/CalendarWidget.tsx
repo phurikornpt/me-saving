@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import type { EntryDTO } from "@/client/types";
@@ -102,9 +103,9 @@ export function CalendarWidget({ today }: { today: string }) {
           ))}
         </ul>
         {openDay && openDay < addDays(today, 1) && (
-          <a href={`/new?mode=expense`} className="btn3d key mt-4 w-full text-sm">
-            <Icon name="add" size={18} /> จดเพิ่ม (เลือกวันที่ในหน้าจด)
-          </a>
+          <Link href={`/new?mode=expense&day=${openDay}`} className="btn3d key mt-4 w-full text-sm">
+            <Icon name="add" size={18} /> {openDay === today ? "จดเพิ่มวันนี้" : "จดย้อนหลังวันนี้ (ไม่ต่อ streak)"}
+          </Link>
         )}
       </Sheet>
       <EditEntrySheet entry={editing} onClose={() => setEditing(null)} />
