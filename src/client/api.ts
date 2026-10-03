@@ -1,5 +1,5 @@
 import type {
-  ActivityDTO, CalendarDTO, CategoryDTO, DashboardDTO, EntryDTO, OutstandingDTO, PresetDTO,
+  ActivityDTO, CalendarDTO, CategoryBreakdownDTO, CategoryDTO, DashboardDTO, EntryDTO, OutstandingDTO, PresetDTO,
   ReceiptDraftDTO, SettingsDTO, SplitMode,
 } from "./types";
 
@@ -35,6 +35,7 @@ const q = (params: Record<string, string | number | undefined>) => {
 export const api = {
   dashboard: () => request<DashboardDTO>("GET", "/api/dashboard"),
   calendar: (month: string) => request<CalendarDTO>("GET", `/api/calendar${q({ month })}`),
+  categoryBreakdown: (month: string) => request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
   outstanding: () => request<OutstandingDTO>("GET", "/api/partner/outstanding"),
   categories: () => request<CategoryDTO[]>("GET", "/api/categories"),

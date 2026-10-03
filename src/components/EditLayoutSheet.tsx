@@ -15,6 +15,7 @@ const NAMES: Record<WidgetId, string> = {
   presets: "ปุ่มลัด",
   today: "วันนี้",
   calendar: "ปฏิทิน",
+  summary: "สรุปรายเดือนตามหมวด",
   recent: "รายการล่าสุด",
 };
 

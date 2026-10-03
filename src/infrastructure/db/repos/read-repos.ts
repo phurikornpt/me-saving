@@ -28,6 +28,26 @@ export function createStatsRepo(sequelize: Sequelize): StatsRepo {
       );
       return rows.map((r) => ({ day: r.day, spent: Number(r.spent), earned: Number(r.earned) }));
     },
+    async categoryTotals(from, toExclusive) {
+      const start = bangkokDayRange(from).start;
+      const end = bangkokDayRange(toExclusive).start;
+      // Receipt entries carry no category themselves: their lines do, and only our share of each line counts.
+      const rows = await sequelize.query<{ category_id: string | null; spent: string }>(
+        `SELECT category_id, SUM(spent) AS spent FROM (
+           SELECT category_id, total - partner_share AS spent
+             FROM entries
+            WHERE kind = 'expense' AND source <> 'receipt' AND occurred_at >= :start AND occurred_at < :end
+           UNION ALL
+           SELECT l.category_id,
+                  CASE l.owner WHEN 'me' THEN l.price WHEN 'partner' THEN 0 ELSE l.price - l.price / 2 END AS spent
+             FROM receipt_lines l JOIN entries e ON e.id = l.entry_id
+            WHERE e.kind = 'expense' AND e.occurred_at >= :start AND e.occurred_at < :end
+         ) t
+         GROUP BY category_id HAVING SUM(spent) > 0 ORDER BY SUM(spent) DESC`,
+        { replacements: { start, end }, type: QueryTypes.SELECT },
+      );
+      return rows.map((r) => ({ categoryId: r.category_id, spent: Number(r.spent) }));
+    },
     async loggedKinds(from, toExclusive) {
       const rows = await sequelize.query<{ day: string; kind: "entry" | "no_spend" }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day, kind FROM logged_days

@@ -13,6 +13,7 @@ const NOON = new Date("2026-10-03T05:00:00Z");
 
 function stats(totals: DailyTotal[] = [], kinds: { day: string; kind: "entry" | "no_spend" }[] = []): StatsRepo {
   return {
+    categoryTotals: async () => [],
     dailyTotals: async (from, to) => totals.filter((t) => t.day >= from && t.day < to),
     loggedKinds: async (from, to) => kinds.filter((k) => k.day >= from && k.day < to),
   };

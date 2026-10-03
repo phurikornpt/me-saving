@@ -286,3 +286,26 @@ describe("model registration is minifier-proof", () => {
     }
   });
 });
+
+describe("category totals", () => {
+  it("counts our share per category, receipts by their lines, and ignores income and repayments", async () => {
+    const u = useCases();
+    const tx = createTransactionRunner(sequelize);
+    const [food, ride] = (await createCategoryRepo(sequelize).list()).filter((c) => c.kind === "expense");
+    await u.recordEntry.execute({ kind: "expense", total: 10000, categoryId: food.id, split: { kind: "split" } }); // ours 5000
+    await u.recordEntry.execute({ kind: "expense", total: 3000, categoryId: ride.id });
+    await u.recordEntry.execute({ kind: "income", total: 99999 });
+    await new SaveReceiptEntry(tx, u.clock).execute({
+      total: 2001,
+      lines: [
+        { rawName: "a", canonicalName: "a", qty: 1, price: 1001, owner: "split", categoryId: food.id }, // ours 501
+        { rawName: "b", canonicalName: "b", qty: 1, price: 1000, owner: "partner", categoryId: food.id }, // ours 0
+      ],
+    });
+    const totals = await createStatsRepo(sequelize).categoryTotals("2026-10-01", "2026-11-01");
+    expect(totals).toEqual([
+      { categoryId: food.id, spent: 5501 },
+      { categoryId: ride.id, spent: 3000 },
+    ]);
+  });
+});

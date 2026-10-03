@@ -38,6 +38,11 @@ export interface CalendarDTO {
   totals: { spent: number; earned: number; net: number };
   maxSpent: number;
 }
+export interface CategoryBreakdownDTO {
+  month: string;
+  total: number;
+  slices: { categoryId: string | null; name: string; icon: string; spent: number }[];
+}
 export interface OutstandingDTO { balance: number; items: { id: string; occurredAt: string; partnerShare: number; outstanding: number }[] }
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owner: Owner; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }

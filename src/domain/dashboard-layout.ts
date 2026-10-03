@@ -1,4 +1,4 @@
-export const WIDGET_IDS = ["streak", "partner", "presets", "today", "calendar", "recent"] as const;
+export const WIDGET_IDS = ["streak", "partner", "presets", "today", "calendar", "summary", "recent"] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
 export interface LayoutItem {
@@ -13,6 +13,7 @@ export const DEFAULT_LAYOUT: LayoutItem[] = [
   { id: "presets", enabled: true },
   { id: "today", enabled: false },
   { id: "calendar", enabled: true },
+  { id: "summary", enabled: true },
   { id: "recent", enabled: true },
 ];
 

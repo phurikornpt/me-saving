@@ -13,6 +13,7 @@ export function useAfterLog() {
   return (a: ActivityDTO) => {
     void qc.invalidateQueries({ queryKey: ["dashboard"] });
     void qc.invalidateQueries({ queryKey: ["calendar"] });
+    void qc.invalidateQueries({ queryKey: ["breakdown"] });
     void qc.invalidateQueries({ queryKey: ["outstanding"] });
     fb.xp(a.xpGained);
     const firstOfDay = a.xpGained >= 10; // only the first log of a day moves the streak

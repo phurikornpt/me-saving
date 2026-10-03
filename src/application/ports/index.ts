@@ -122,6 +122,8 @@ export interface StatsRepo {
   dailyTotals(from: DayKey, toExclusive: DayKey): Promise<DailyTotal[]>;
   /** (day, kind) of logged days in [from, toExclusive). */
   loggedKinds(from: DayKey, toExclusive: DayKey): Promise<{ day: DayKey; kind: "entry" | "no_spend" }[]>;
+  /** Our own spending per category in [from, toExclusive); receipts count by their lines. categoryId null = uncategorised. */
+  categoryTotals(from: DayKey, toExclusive: DayKey): Promise<{ categoryId: string | null; spent: Satang }[]>;
 }
 
 export interface CategoryRecord {

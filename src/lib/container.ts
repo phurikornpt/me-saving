@@ -2,6 +2,7 @@ import { cleanEnv } from "./env";
 import { AuthenticateUser } from "@/application/use-cases/authenticate-user";
 import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { GetCalendarMonth } from "@/application/use-cases/get-calendar-month";
+import { GetCategoryBreakdown } from "@/application/use-cases/get-category-breakdown";
 import { GetDashboard } from "@/application/use-cases/get-dashboard";
 import { GetPartnerOutstanding } from "@/application/use-cases/get-partner-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
@@ -42,6 +43,7 @@ function build() {
     ),
     getDashboard: new GetDashboard(repos, stats, presets, settings, systemClock),
     getCalendarMonth: new GetCalendarMonth(stats),
+    getCategoryBreakdown: new GetCategoryBreakdown(stats, categories),
     getPartnerOutstanding: new GetPartnerOutstanding(repos),
     listEntries: new ListEntries(repos),
     updateEntry: new UpdateEntry(tx),
