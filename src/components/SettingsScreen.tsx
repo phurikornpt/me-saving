@@ -2,10 +2,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { api } from "@/client/api";
 import { ICON_CHOICES } from "@/client/icons";
 import { useCategories, useDashboard, useSettings } from "@/client/queries";
+import { readTheme, setTheme, subscribeTheme, type ThemePref } from "@/client/theme";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
@@ -81,6 +82,7 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
   });
   const archive = useMutation({ mutationFn: api.archiveCategory, onSuccess: () => qc.invalidateQueries({ queryKey: ["categories"] }) });
 
+  const theme = useSyncExternalStore(subscribeTheme, readTheme, (): ThemePref => "system");
   const [loggingOut, setLoggingOut] = useState(false);
 
   return (
@@ -93,6 +95,18 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
       </header>
 
       <div className="flex flex-col gap-3">
+        <Section title="ธีม (ตั้งไว้เฉพาะเครื่องนี้)">
+          <div className="flex gap-2">
+            {(
+              [["system", "ตามระบบ"], ["light", "สว่าง"], ["dark", "มืด"]] as const
+            ).map(([k, label]) => (
+              <button key={k} className="pill flex-1" aria-pressed={theme === k} onClick={() => setTheme(k)}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </Section>
+
         <Section title="โน้ตเกี่ยวกับแฟน (ให้ AI ช่วยเดาว่าของชิ้นไหนเป็นของใคร)">
           <textarea
             value={note}

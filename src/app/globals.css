@@ -24,8 +24,32 @@
   --on-ink: #ffffff;
 }
 
+:root {
+  color-scheme: light;
+}
+
+/* Dark: explicit choice (data-theme="dark") or, with no choice, the system preference.
+   The two blocks must stay identical. */
+:root[data-theme="dark"] {
+  --bg: #111111;
+  --surface: #111111;
+  --card: #1c1c1e;
+  --text: #ffffff;
+  --text-2: rgba(255, 255, 255, 0.65);
+  --text-3: rgba(255, 255, 255, 0.4);
+  --line: rgba(255, 255, 255, 0.12);
+  --income: #3ddc77;
+  --expense: #ff7a59;
+  --partner: #7b95ff;
+  --key: #2a2a2d;
+  --key-edge: #0c0c0d;
+  --ink: #ffffff;
+  --on-ink: #000000;
+  color-scheme: dark;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --bg: #111111;
     --surface: #111111;
     --card: #1c1c1e;
@@ -40,6 +64,7 @@
     --key-edge: #0c0c0d;
     --ink: #ffffff;
     --on-ink: #000000;
+    color-scheme: dark;
   }
 }
 

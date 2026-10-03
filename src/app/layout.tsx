@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Anuphan, Mitr } from "next/font/google";
 import { iconFontUrl } from "@/client/icons";
 import { Providers } from "@/client/Providers";
+import { THEME_INIT_SCRIPT } from "@/client/theme";
 import { FeedbackProvider } from "@/components/Feedback";
 import "./globals.css";
 
@@ -27,8 +28,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="th" className={`${mitr.variable} ${anuphan.variable} h-full antialiased`}>
+    // suppressHydrationWarning: the theme script sets data-theme on <html> before React hydrates
+    <html lang="th" suppressHydrationWarning className={`${mitr.variable} ${anuphan.variable} h-full antialiased`}>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Material Symbols subset: only the glyphs listed in src/client/icons.ts */}
