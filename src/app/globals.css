@@ -1,26 +1,140 @@
 @import "tailwindcss";
 
+/* Design tokens: see docs/DESIGN.md */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --bg: #ffffff;
+  --surface: #f5f3f1;
+  --card: #ffffff;
+  --text: #000000;
+  --text-2: rgba(0, 0, 0, 0.6);
+  --text-3: rgba(0, 0, 0, 0.4);
+  --line: rgba(0, 0, 0, 0.1);
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --primary: #29cc57;
+  --primary-edge: #15b441;
+  --income: #1fa34a;
+  --expense: #f2603d;
+  --partner: #456dff;
+  --streak: #d7f25a;
+  --xp: #8b6cff;
+
+  --key: #ffffff;
+  --key-edge: #e5e2de;
+  --ink: #000000; /* "selected" chip fill */
+  --on-ink: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg: #111111;
+    --surface: #111111;
+    --card: #1c1c1e;
+    --text: #ffffff;
+    --text-2: rgba(255, 255, 255, 0.65);
+    --text-3: rgba(255, 255, 255, 0.4);
+    --line: rgba(255, 255, 255, 0.12);
+    --income: #3ddc77;
+    --expense: #ff7a59;
+    --partner: #7b95ff;
+    --key: #2a2a2d;
+    --key-edge: #0c0c0d;
+    --ink: #ffffff;
+    --on-ink: #000000;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-card: var(--card);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-2);
+  --color-ink-3: var(--text-3);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-partner: var(--partner);
+  --color-streak: var(--streak);
+  --color-xp: var(--xp);
+  --font-sans: var(--font-anuphan), system-ui, sans-serif;
+  --font-display: var(--font-mitr), var(--font-anuphan), system-ui, sans-serif;
+  --radius-card: 24px;
+  --radius-section: 32px;
 }
+
+html {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-text-size-adjust: 100%;
+  overscroll-behavior-y: none;
+}
+body {
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  min-height: 100dvh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Material Symbols (the Google CSS defines the font-face; this sets the glyph defaults) */
+.material-symbols-rounded {
+  font-family: "Material Symbols Rounded";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 3D pill buttons: raised on a hard edge, pressed flat (Brilliant x Duolingo) */
+.btn3d {
+  --face: var(--primary);
+  --edge: var(--primary-edge);
+  --fg: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: var(--face);
+  color: var(--fg);
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  box-shadow: 0 5px 0 var(--edge);
+  transform: translateY(-5px);
+  transition: transform 80ms ease, box-shadow 80ms ease;
+  touch-action: manipulation;
+  user-select: none;
+}
+.btn3d:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: 0 0 0 var(--edge);
+}
+.btn3d:disabled { opacity: 0.5; }
+.btn3d.key {
+  --face: var(--key);
+  --edge: var(--key-edge);
+  --fg: var(--text);
+  box-shadow: 0 4px 0 var(--edge);
+  transform: translateY(-4px);
+}
+
+.pill {
+  border-radius: 9999px;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+  background: var(--card);
+  color: var(--text-3);
+  border: 2px solid var(--line);
+  transition: background 120ms, color 120ms;
+}
+.pill[aria-pressed="true"], .pill.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
+
+.safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
+.safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }

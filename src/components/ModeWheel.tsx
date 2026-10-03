@@ -1,0 +1,147 @@
+"use client";
+
+import { AnimatePresence, motion } from "motion/react";
+import { useRef, useState } from "react";
+import type { IconName } from "@/client/icons";
+import { Icon } from "./Icon";
+
+export interface WheelSlot {
+  id: string;
+  icon: IconName;
+  label: string;
+  tone: string; // css color for the icon
+  disabled?: boolean;
+}
+
+const HOLD_MS = 250;
+const INNER = 36; // dead zone around the centre (release there = cancel)
+const OUTER = 175; // beyond this you're "outside the wheel" (release there = cancel)
+const RADIUS = 112;
+
+/** Which slot an offset from the wheel centre points at (slot 0 at the top, clockwise), or null. */
+export function slotAt(dx: number, dy: number, count: number): number | null {
+  const dist = Math.hypot(dx, dy);
+  if (dist < INNER || dist > OUTER) return null;
+  const angle = (Math.atan2(dx, -dy) * 180) / Math.PI; // 0 = up, clockwise
+  const step = 360 / count;
+  return Math.floor((((angle + step / 2) % 360) + 360) % 360 / step);
+}
+
+/**
+ * GTA-style radial picker on the [+] button. Tap = onTap. Hold ~250 ms = the wheel opens in the
+ * middle of the screen; drag the finger onto a slot and release to choose it.
+ * Releasing without entering the ring cancels.
+ */
+export function ModeWheel({
+  slots,
+  onTap,
+  onPick,
+  onPress,
+}: {
+  slots: WheelSlot[];
+  onTap: () => void;
+  onPick: (id: string) => void;
+  /** Fires the instant a finger lands (used to warm the backend before the user finishes typing). */
+  onPress?: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState<number | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const opened = useRef(false);
+  const origin = useRef({ x: 0, y: 0 });
+  const centre = () => ({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+
+  const compute = (clientX: number, clientY: number) => {
+    const c = centre();
+    const moved = Math.hypot(clientX - origin.current.x, clientY - origin.current.y) > 12;
+    if (!moved) return null; // the finger starts far from the ring; don't preselect anything
+    const i = slotAt(clientX - c.x, clientY - c.y, slots.length);
+    return i !== null && !slots[i].disabled ? i : null;
+  };
+
+  const close = () => {
+    clearTimeout(timer.current);
+    opened.current = false;
+    setOpen(false);
+    setActive(null);
+  };
+
+  return (
+    <>
+      <button
+        aria-label="เพิ่มรายการ (กดค้างเพื่อเลือกโหมด)"
+        className="btn3d fixed bottom-[max(1.75rem,env(safe-area-inset-bottom))] left-1/2 z-30 h-16 w-16 -translate-x-1/2 !p-0"
+        style={{ touchAction: "none" }}
+        onContextMenu={(e) => e.preventDefault()}
+        onPointerDown={(e) => {
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId); // keeps move/up events coming while the finger leaves the button
+          } catch {
+            /* synthetic or already-released pointers can't be captured; the wheel still works */
+          }
+          origin.current = { x: e.clientX, y: e.clientY };
+          opened.current = false;
+          onPress?.();
+          timer.current = setTimeout(() => {
+            opened.current = true;
+            setOpen(true);
+            navigator.vibrate?.(10);
+          }, HOLD_MS);
+        }}
+        onPointerMove={(e) => {
+          if (!opened.current) return;
+          const next = compute(e.clientX, e.clientY);
+          setActive((cur) => {
+            if (next !== cur && next !== null) navigator.vibrate?.(6);
+            return next;
+          });
+        }}
+        onPointerUp={(e) => {
+          clearTimeout(timer.current);
+          if (!opened.current) return onTap();
+          const picked = compute(e.clientX, e.clientY);
+          close();
+          if (picked !== null) onPick(slots[picked].id);
+        }}
+        onPointerCancel={close}
+      >
+        <Icon name="add" size={36} />
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            className="pointer-events-none fixed inset-0 z-50 bg-black/55 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+          >
+            <div className="absolute left-1/2 top-1/2">
+              {slots.map((s, i) => {
+                const a = ((i * 360) / slots.length) * (Math.PI / 180);
+                const on = active === i;
+                return (
+                  <motion.div
+                    key={s.id}
+                    initial={{ x: 0, y: 0, scale: 0.4, opacity: 0 }}
+                    animate={{ x: Math.sin(a) * RADIUS, y: -Math.cos(a) * RADIUS, scale: on ? 1.25 : 1, opacity: s.disabled ? 0.3 : 1 }}
+                    transition={{ type: "spring", stiffness: 420, damping: 26 }}
+                    className={`absolute -ml-10 -mt-10 flex h-20 w-20 flex-col items-center justify-center rounded-full text-center shadow-lg ${
+                      on ? "bg-ink text-[var(--on-ink)]" : "bg-card text-ink"
+                    }`}
+                  >
+                    <Icon name={s.icon} size={28} className={on ? "" : s.tone} />
+                    <span className="mt-0.5 px-1 text-[10px] leading-tight">{s.label}</span>
+                  </motion.div>
+                );
+              })}
+              <div className="absolute -ml-3 -mt-3 h-6 w-6 rounded-full border-2 border-white/50" />
+              <p className="absolute -ml-32 mt-[150px] w-64 text-center text-sm text-white/80">ลากไปที่ช่อง แล้วปล่อยนิ้ว</p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}
