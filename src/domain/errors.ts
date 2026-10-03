@@ -3,7 +3,8 @@ export type DomainErrorCode =
   | "INVALID_SPLIT"
   | "REPAYMENT_EXCEEDS_BALANCE"
   | "NO_SPEND_ALREADY_LOGGED"
-  | "RECEIPT_TOTAL_MISMATCH";
+  | "RECEIPT_TOTAL_MISMATCH"
+  | "RATE_LIMITED";
 
 export class DomainError extends Error {
   constructor(

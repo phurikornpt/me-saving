@@ -12,3 +12,9 @@ export function addDays(day: DayKey, n: number): DayKey {
   const t = Date.parse(`${day}T00:00:00Z`) + n * DAY_MS;
   return new Date(t).toISOString().slice(0, 10);
 }
+
+/** [start, end) instants of a Bangkok calendar day, for range queries on timestamptz columns. */
+export function bangkokDayRange(day: DayKey): { start: Date; end: Date } {
+  const start = new Date(Date.parse(`${day}T00:00:00Z`) - BANGKOK_OFFSET_MS);
+  return { start, end: new Date(start.getTime() + DAY_MS) };
+}

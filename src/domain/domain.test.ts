@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocateToBillTotal } from "./allocate";
-import { addDays, bangkokDay } from "./day";
+import { addDays, bangkokDay, bangkokDayRange } from "./day";
 import { DomainError } from "./errors";
 import { formatBaht, formatCompact, parseBaht } from "./money";
 import {
@@ -123,6 +123,11 @@ describe("days (Asia/Bangkok)", () => {
   it("17:00 UTC is already tomorrow in Bangkok", () => {
     expect(bangkokDay(new Date("2026-10-03T16:59:59Z"))).toBe("2026-10-03");
     expect(bangkokDay(new Date("2026-10-03T17:00:00Z"))).toBe("2026-10-04");
+  });
+  it("a Bangkok day spans 17:00Z to 17:00Z", () => {
+    const { start, end } = bangkokDayRange("2026-10-04");
+    expect(start.toISOString()).toBe("2026-10-03T17:00:00.000Z");
+    expect(end.toISOString()).toBe("2026-10-04T17:00:00.000Z");
   });
   it("adds days across month ends", () => {
     expect(addDays("2026-10-31", 1)).toBe("2026-11-01");

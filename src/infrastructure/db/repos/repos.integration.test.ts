@@ -8,6 +8,7 @@ import { FixedClock } from "@/application/testing/fakes";
 import { createMigrator } from "../migrate";
 import { createSequelize } from "../sequelize";
 import { createRepos, createTransactionRunner } from "./index";
+import { createLoginAttemptRepo } from "./login-attempt-repo";
 
 let container: StartedPostgreSqlContainer;
 let sequelize: Sequelize;
@@ -117,5 +118,22 @@ describe("Sequelize repos against real Postgres", () => {
     const u = useCases();
     expect(await u.markNoSpend.execute()).toMatchObject({ xpGained: 10, streak: 1 });
     await expect(u.markNoSpend.execute()).rejects.toMatchObject({ code: "NO_SPEND_ALREADY_LOGGED" });
+  });
+});
+
+describe("login attempt repo", () => {
+  it("counts failures per key inside the window and clears them", async () => {
+    await sequelize.query("TRUNCATE login_attempts");
+    const repo = createLoginAttemptRepo(sequelize);
+    const t0 = new Date("2026-10-03T05:00:00Z");
+    await repo.record("email:a@x.com", t0);
+    await repo.record("email:a@x.com", new Date(t0.getTime() + 1000));
+    await repo.record("ip:1.1.1.1", t0);
+    expect(await repo.countSince("email:a@x.com", new Date(t0.getTime() - 1000))).toBe(2);
+    expect(await repo.countSince("email:a@x.com", new Date(t0.getTime() + 500))).toBe(1);
+    expect(await repo.countSince("ip:1.1.1.1", new Date(t0.getTime() - 1000))).toBe(1);
+    await repo.clear("email:a@x.com");
+    expect(await repo.countSince("email:a@x.com", new Date(t0.getTime() - 1000))).toBe(0);
+    expect(await repo.countSince("ip:1.1.1.1", new Date(t0.getTime() - 1000))).toBe(1);
   });
 });

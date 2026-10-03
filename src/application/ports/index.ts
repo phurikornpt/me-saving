@@ -53,3 +53,14 @@ export interface Repos {
 export interface TransactionRunner {
   run<T>(fn: (repos: Repos) => Promise<T>): Promise<T>;
 }
+
+export interface LoginAttemptRepo {
+  countSince(key: string, since: Date): Promise<number>;
+  record(key: string, at: Date): Promise<void>;
+  clear(key: string): Promise<void>;
+}
+
+/** Checks the single configured account. Must take the same time for a wrong email as for a wrong password. */
+export interface CredentialVerifier {
+  verify(email: string, password: string): Promise<boolean>;
+}
