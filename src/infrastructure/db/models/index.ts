@@ -116,7 +116,16 @@ const initialised = new WeakSet<Sequelize>();
 export function initModels(sequelize: Sequelize): Models {
   if (!initialised.has(sequelize)) {
     const uuid = { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true };
-    const opts = (tableName: string) => ({ sequelize, tableName, timestamps: false, underscored: true });
+    // modelName MUST be explicit: Sequelize otherwise uses the class name, which the production minifier
+    // mangles. The association accessors (setEntry, getEntry...) are built from that name, and a mangled
+    // one makes them overwrite Model#set and recurse until the process dies with "Maximum call stack".
+    const opts = (modelName: string, tableName: string) => ({
+      sequelize,
+      modelName,
+      tableName,
+      timestamps: false,
+      underscored: true,
+    });
 
     Category.init(
       {
@@ -127,7 +136,7 @@ export function initModels(sequelize: Sequelize): Models {
         sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
         archived: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       },
-      opts("categories"),
+      opts("Category", "categories"),
     );
     Entry.init(
       {
@@ -142,7 +151,7 @@ export function initModels(sequelize: Sequelize): Models {
         merchant: { type: DataTypes.TEXT, allowNull: true },
         source: { type: DataTypes.TEXT, allowNull: false, defaultValue: "manual" },
       },
-      opts("entries"),
+      opts("Entry", "entries"),
     );
     ReceiptLine.init(
       {
@@ -157,7 +166,7 @@ export function initModels(sequelize: Sequelize): Models {
         categoryId: { type: DataTypes.UUID, allowNull: true },
         lowConfidence: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       },
-      opts("receipt_lines"),
+      opts("ReceiptLine", "receipt_lines"),
     );
     OwnerMemory.init(
       {
@@ -165,7 +174,7 @@ export function initModels(sequelize: Sequelize): Models {
         owner: { type: DataTypes.TEXT, allowNull: false },
         updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       },
-      opts("owner_memory"),
+      opts("OwnerMemory", "owner_memory"),
     );
     Preset.init(
       {
@@ -177,7 +186,7 @@ export function initModels(sequelize: Sequelize): Models {
         partnerMode: { type: DataTypes.TEXT, allowNull: true },
         sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       },
-      opts("presets"),
+      opts("Preset", "presets"),
     );
     LoggedDay.init(
       {
@@ -185,7 +194,7 @@ export function initModels(sequelize: Sequelize): Models {
         kind: { type: DataTypes.TEXT, allowNull: false },
         firstLoggedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       },
-      opts("logged_days"),
+      opts("LoggedDay", "logged_days"),
     );
     XpEvent.init(
       {
@@ -194,7 +203,7 @@ export function initModels(sequelize: Sequelize): Models {
         reason: { type: DataTypes.TEXT, allowNull: false },
         amount: { type: DataTypes.INTEGER, allowNull: false },
       },
-      opts("xp_events"),
+      opts("XpEvent", "xp_events"),
     );
     Setting.init(
       {
@@ -202,7 +211,7 @@ export function initModels(sequelize: Sequelize): Models {
         partnerNote: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
         dashboardLayout: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       },
-      opts("settings"),
+      opts("Setting", "settings"),
     );
     LoginAttempt.init(
       {
@@ -210,7 +219,7 @@ export function initModels(sequelize: Sequelize): Models {
         key: { type: DataTypes.TEXT, allowNull: false },
         attemptedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       },
-      opts("login_attempts"),
+      opts("LoginAttempt", "login_attempts"),
     );
 
     Entry.hasMany(ReceiptLine, { foreignKey: "entryId", as: "lines", onDelete: "CASCADE" });

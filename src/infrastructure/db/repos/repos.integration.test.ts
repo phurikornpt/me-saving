@@ -270,3 +270,19 @@ describe("changing entries rolls back for real", () => {
     expect((await u.repos.entries.findById(entry.id))?.partnerShare).toBe(5000);
   });
 });
+
+describe("model registration is minifier-proof", () => {
+  it("every model has an explicit name and no association accessor is called plain 'set'", async () => {
+    const { initModels } = await import("../models");
+    const models = initModels(sequelize);
+    for (const [expected, model] of Object.entries(models)) {
+      // production builds mangle class names; Sequelize derives accessors from this name
+      expect(model.name).toBe(expected);
+      for (const assoc of Object.values(model.associations) as { accessors: Record<string, string> }[]) {
+        expect(assoc.accessors).toBeDefined();
+        const names = Object.values(assoc.accessors);
+        expect(names).not.toContain("set"); // that spelling overwrites Model#set and recurses forever
+      }
+    }
+  });
+});

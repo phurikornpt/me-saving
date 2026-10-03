@@ -78,6 +78,8 @@ src/components, src/client   (UI; แตะได้เฉพาะ domain เ�
 - `scripts/smoke/api.py` และ `scripts/smoke/receipt.py` เป็นสคริปต์ตรวจ end-to-end แบบ **manual** ยิงไปที่ dev server (`http://localhost:3111`) ต้องมีบัญชีทดสอบเอง ไม่ได้รวมใน `pnpm test`
 - `scripts/try-receipt.ts` ลองให้ Gemini อ่านรูปใบเสร็จจากไฟล์: `pnpm tsx --env-file=.env.local scripts/try-receipt.ts <รูป>`
 
+> **ทดสอบแบบ production build ด้วย** (`pnpm build && pnpm start` แล้วรัน `scripts/smoke/api.py`) บั๊กบางอย่างเกิดเฉพาะโค้ดที่ถูกย่อ เช่น Sequelize ที่สร้างชื่อฟังก์ชันจากชื่อ class ซึ่งถูกเปลี่ยนตอน build (ทำให้ `/api/receipts` ล่มบน Vercel ทั้งที่โหมด dev ปกติ แก้โดยกำหนด `modelName` ชัดเจนใน `src/infrastructure/db/models`)
+
 ## Deploy
 - push ขึ้น branch **`develop`** → Vercel deploy ให้ (ตั้ง env ทุกตัวข้างบนใน Vercel)
 - **Vercel ไม่รัน migration ให้** ต้องรันเองด้วย `DATABASE_URL=<neon direct url> pnpm db:migrate:prod` ทุกครั้งที่มี migration ใหม่ ควรใช้ connection string แบบ direct (ไม่ใช่ `-pooler`) ของ Neon ส่วนตัวแอปใช้แบบ pooled

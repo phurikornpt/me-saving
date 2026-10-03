@@ -302,3 +302,10 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 - **Migrations:** ใช้ **Umzug** (ไม่ใช้ `sequelize-cli`) รายการ migration ลงทะเบียนใน `src/infrastructure/db/migrate.ts` เก็บสถานะในตาราง `schema_migrations` เอง · `001-initial` เป็น SQL ดิบ (มี CHECK constraint) · **ห้ามใช้ `sync({ alter: true })` บน production**
 - **เวลา:** ตั้ง `timezone: '+00:00'` ให้ Sequelize เก็บเป็น UTC แล้วไปแปลงเป็น Asia/Bangkok ใน query หรือฝั่งแอปเอง
 - **สตางค์:** คอลัมน์เงินใช้ `DataTypes.INTEGER` (ถ้ากลัวล้นใช้ `BIGINT` ซึ่ง pg จะคืนค่าเป็น string ต้องแปลงเอง)
+
+
+## บทเรียนจาก production (Vercel)
+- **ต้องกำหนด `modelName` ของ Sequelize ทุก model เอง:** ถ้าไม่กำหนด Sequelize ใช้ชื่อ class ซึ่งตัวย่อโค้ดตอน production เปลี่ยนไป ทำให้ฟังก์ชัน association (`setEntry` ฯลฯ) ไปทับ `Model#set` แล้วเรียกวนจน stack ล้น function ล่มด้วย `FUNCTION_INVOCATION_FAILED` เฉพาะตอนบันทึกใบเสร็จ (โหมด dev ไม่ย่อโค้ดจึงไม่เจอ) มีเทสกันไว้ใน `repos.integration.test.ts`
+- **ต้องส่ง `pg` เป็น `dialectModule`** ไม่งั้น Vercel ไม่แพ็ก driver เข้า function (`Please install pg package manually`)
+- **env ใน Vercel มี scope:** push ที่ `develop` เป็น Preview ถ้าติ๊กตัวแปรไว้แค่ Production จะไม่มาถึง และการแก้ env ไม่ trigger redeploy เอง ใช้ `/api/health` ตรวจ
+- **ทดสอบ production build ก่อน push เสมอ** (`pnpm build && pnpm start` + `scripts/smoke/api.py`) โหมด dev ปิดบังบั๊กพวกนี้
