@@ -33,6 +33,7 @@ export function ScanScreen() {
   const [header, setHeader] = useState<Header | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
+  const [totalText, setTotalText] = useState("");
   const [editing, setEditing] = useState<DraftLine | null>(null);
   const camera = useRef<HTMLInputElement>(null);
   const album = useRef<HTMLInputElement>(null);
@@ -51,7 +52,11 @@ export function ScanScreen() {
         lowConfidence: l.lowConfidence,
       })),
     );
-    setTotal(draft.total);
+    // If the model couldn't read the paid total, fall back to what the lines add up to,
+    // otherwise the save button would sit disabled with no explanation.
+    const paid = draft.total > 0 ? draft.total : draft.lines.reduce((sum, l) => sum + l.price, 0);
+    setTotal(paid);
+    setTotalText(formatBaht(paid).replace(/,/g, ""));
     setHeader({ merchant: draft.merchant, date: draft.date });
   };
 
@@ -201,19 +206,21 @@ export function ScanScreen() {
           </ul>
 
           <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg px-5 pt-3">
-            {sum.mismatch && (
+            {(sum.mismatch || total === 0) && (
               <p className="mb-2 rounded-xl bg-streak/40 px-3 py-2 text-xs" role="alert">
                 ผลรวมรายการ ฿{formatBaht(sum.printed)} ไม่ตรงกับยอดที่จ่ายจริง ฿{formatBaht(total)} (อาจมีส่วนลด/VAT หรือ AI อ่านผิด) ระบบจะปรับสัดส่วนให้
                 <label className="mt-1 flex items-center gap-2">
                   แก้ยอดที่จ่ายจริง ฿
                   <input
                     inputMode="decimal"
-                    defaultValue={formatBaht(total).replace(/,/g, "")}
-                    onBlur={(e) => {
+                    value={totalText}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^\d.]/g, "");
+                      setTotalText(v);
                       try {
-                        setTotal(parseBaht(e.target.value));
+                        setTotal(v ? parseBaht(v) : 0);
                       } catch {
-                        /* keep the old total */
+                        /* half-typed number like "12." : keep the previous total */
                       }
                     }}
                     className="w-24 rounded-full border border-line bg-card px-3 py-1"
@@ -229,6 +236,11 @@ export function ScanScreen() {
             <button className="btn3d w-full py-4 text-lg" disabled={!sum.valid || save.isPending} onClick={() => save.mutate()}>
               บันทึก
             </button>
+            {!sum.valid && (
+              <p className="mt-1 text-center text-xs text-expense" role="status">
+                {lines.length === 0 ? "ไม่มีรายการ เพิ่มรายการก่อน" : total === 0 ? "ใส่ยอดที่จ่ายจริงก่อน" : "ราคารายการรวมเป็น 0 แก้ราคาก่อน"}
+              </p>
+            )}
           </div>
         </>
       )}
