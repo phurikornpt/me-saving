@@ -39,10 +39,15 @@ export const toPerson = (p: Person): PersonRecord => ({
   archived: p.archived,
 });
 
-/** Every repo gets the same transaction, so one use case commits or rolls back as a unit. */
-export function createRepos(sequelize: Sequelize, transaction?: Transaction): Repos {
+/**
+ * Every repo is scoped to one account: each read filters on `userId` and each write stamps it, so one
+ * account can never see or touch another's data. All repos share the same transaction, so one use case
+ * commits or rolls back as a unit.
+ */
+export function createRepos(sequelize: Sequelize, userId: string, transaction?: Transaction): Repos {
   const m = initModels(sequelize);
   const t = { transaction };
+  const mine = { userId };
   const withShares = { include: [{ model: m.EntryShare, as: "shares", attributes: ["personId", "amount"] }] };
 
   const writeShares = (entryId: string, shares: Share[]) =>
@@ -50,7 +55,7 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
 
   const entries: EntryRepo = {
     async insert({ shares, ...e }: NewEntry) {
-      const row = await m.Entry.create({ ...e, othersShare: sumShares(shares) }, t);
+      const row = await m.Entry.create({ ...e, userId, othersShare: sumShares(shares) }, t);
       if (shares.length) await writeShares(row.id, shares);
       return toRecord(row, shares);
     },
@@ -58,10 +63,10 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
       const [shares, repayments] = await Promise.all([
         m.EntryShare.findAll({
           attributes: ["entryId", "personId", "amount"],
-          include: [{ model: m.Entry, attributes: ["occurredAt"], where: { kind: "expense" } }],
+          include: [{ model: m.Entry, attributes: ["occurredAt"], where: { ...mine, kind: "expense" } }],
           ...t,
         }),
-        m.Entry.findAll({ attributes: ["personId", "total"], where: { kind: "repayment" }, ...t }),
+        m.Entry.findAll({ attributes: ["personId", "total"], where: { ...mine, kind: "repayment" }, ...t }),
       ]);
       return {
         shares: shares.map((s) => ({
@@ -75,6 +80,7 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
     },
     async recent(limit) {
       const rows = await m.Entry.findAll({
+        where: mine,
         order: [
           ["occurredAt", "DESC"],
           ["createdAt", "DESC"],
@@ -88,7 +94,7 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
     async onDay(day) {
       const { start, end } = bangkokDayRange(day);
       const rows = await m.Entry.findAll({
-        where: { occurredAt: { [Op.gte]: start, [Op.lt]: end } },
+        where: { ...mine, occurredAt: { [Op.gte]: start, [Op.lt]: end } },
         order: [["occurredAt", "DESC"]],
         ...withShares,
         ...t,
@@ -96,11 +102,11 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
       return rows.map((r) => toRecord(r));
     },
     async findById(id) {
-      const row = await m.Entry.findByPk(id, { ...withShares, ...t });
+      const row = await m.Entry.findOne({ where: { ...mine, id }, ...withShares, ...t });
       return row ? toRecord(row) : null;
     },
     async update(id, { shares, ...patch }) {
-      const row = await m.Entry.findByPk(id, { ...withShares, ...t });
+      const row = await m.Entry.findOne({ where: { ...mine, id }, ...withShares, ...t });
       if (!row) return null;
       if (shares) {
         await m.EntryShare.destroy({ where: { entryId: id }, ...t });
@@ -110,38 +116,38 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
       return toRecord(row, shares ?? (row.shares ?? []).map((s) => ({ personId: s.personId, amount: s.amount })));
     },
     async remove(id) {
-      return (await m.Entry.destroy({ where: { id }, ...t })) > 0; // lines and shares cascade in the DB
+      return (await m.Entry.destroy({ where: { ...mine, id }, ...t })) > 0; // lines and shares cascade in the DB
     },
   };
 
   const loggedDays: LoggedDayRepo = {
     async has(day) {
-      return (await m.LoggedDay.count({ where: { day }, ...t })) > 0;
+      return (await m.LoggedDay.count({ where: { ...mine, day }, ...t })) > 0;
     },
     async add(day, kind, at) {
       await m.LoggedDay.findOrCreate({
-        where: { day },
-        defaults: { day, kind, firstLoggedAt: at },
+        where: { ...mine, day },
+        defaults: { userId, day, kind, firstLoggedAt: at },
         ...t,
       });
     },
     async allDays() {
-      const rows = await m.LoggedDay.findAll({ attributes: ["day"], order: [["day", "ASC"]], ...t });
+      const rows = await m.LoggedDay.findAll({ attributes: ["day"], where: mine, order: [["day", "ASC"]], ...t });
       return rows.map((r) => r.day);
     },
   };
 
   const xp: XpRepo = {
     async add(reason, amount, at) {
-      await m.XpEvent.create({ reason, amount, createdAt: at }, t);
+      await m.XpEvent.create({ userId, reason, amount, createdAt: at }, t);
     },
     async total() {
-      return (await m.XpEvent.sum("amount", t)) || 0;
+      return (await m.XpEvent.sum("amount", { where: mine, ...t })) || 0;
     },
     async extraEntryXpOnDay(day) {
       const { start, end } = bangkokDayRange(day);
       const sum = await m.XpEvent.sum("amount", {
-        where: { reason: "extra_entry", createdAt: { [Op.gte]: start, [Op.lt]: end } },
+        where: { ...mine, reason: "extra_entry", createdAt: { [Op.gte]: start, [Op.lt]: end } },
         ...t,
       });
       return sum || 0;
@@ -159,7 +165,7 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
 
   const ownerMemory: OwnerMemoryRepo = {
     async all() {
-      const rows = await m.OwnerMemory.findAll(t);
+      const rows = await m.OwnerMemory.findAll({ where: mine, ...t });
       return new Map(rows.map((r) => [r.canonicalName, { me: r.includesMe, people: r.people }]));
     },
     async upsertMany(items, at) {
@@ -167,7 +173,7 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
       // later duplicates within one receipt win, matching what the user saw last
       const unique = [...new Map(items.map((i) => [i.canonicalName, i])).values()];
       await m.OwnerMemory.bulkCreate(
-        unique.map((i) => ({ canonicalName: i.canonicalName, includesMe: i.owners.me, people: i.owners.people, updatedAt: at })),
+        unique.map((i) => ({ userId, canonicalName: i.canonicalName, includesMe: i.owners.me, people: i.owners.people, updatedAt: at })),
         { ...t, updateOnDuplicate: ["includesMe", "people", "updatedAt"] },
       );
     },
@@ -175,13 +181,13 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
 
   const people: PersonRepo = {
     async list() {
-      return (await m.Person.findAll({ order: [["sort", "ASC"], ["name", "ASC"]], ...t })).map(toPerson);
+      return (await m.Person.findAll({ where: mine, order: [["sort", "ASC"], ["name", "ASC"]], ...t })).map(toPerson);
     },
     async create(p) {
-      return toPerson(await m.Person.create(p, t));
+      return toPerson(await m.Person.create({ ...p, userId }, t));
     },
     async update(id, patch) {
-      const row = await m.Person.findByPk(id, t);
+      const row = await m.Person.findOne({ where: { ...mine, id }, ...t });
       return row ? toPerson(await row.update(patch, t)) : null;
     },
   };
@@ -189,8 +195,8 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
   return { entries, loggedDays, xp, receiptLines, ownerMemory, people };
 }
 
-export function createTransactionRunner(sequelize: Sequelize): TransactionRunner {
+export function createTransactionRunner(sequelize: Sequelize, userId: string): TransactionRunner {
   return {
-    run: (fn) => sequelize.transaction((tx) => fn(createRepos(sequelize, tx))),
+    run: (fn) => sequelize.transaction((tx) => fn(createRepos(sequelize, userId, tx))),
   };
 }

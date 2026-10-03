@@ -12,7 +12,7 @@ import type {
 import { initModels } from "../models";
 
 /** Raw SQL on purpose: grouping by Bangkok day with conditional sums is a hot path the ORM can't express cheaply. */
-export function createStatsRepo(sequelize: Sequelize): StatsRepo {
+export function createStatsRepo(sequelize: Sequelize, userId: string): StatsRepo {
   return {
     async dailyTotals(from, toExclusive) {
       const start = bangkokDayRange(from).start;
@@ -22,9 +22,9 @@ export function createStatsRepo(sequelize: Sequelize): StatsRepo {
                 COALESCE(SUM(CASE WHEN kind = 'expense' THEN total - others_share END), 0) AS spent,
                 COALESCE(SUM(CASE WHEN kind = 'income'  THEN total END), 0) AS earned
            FROM entries
-          WHERE occurred_at >= :start AND occurred_at < :end AND kind IN ('expense', 'income')
+          WHERE user_id = :userId AND occurred_at >= :start AND occurred_at < :end AND kind IN ('expense', 'income')
           GROUP BY 1 ORDER BY 1`,
-        { replacements: { start, end }, type: QueryTypes.SELECT },
+        { replacements: { userId, start, end }, type: QueryTypes.SELECT },
       );
       return rows.map((r) => ({ day: r.day, spent: Number(r.spent), earned: Number(r.earned) }));
     },
@@ -38,31 +38,32 @@ export function createStatsRepo(sequelize: Sequelize): StatsRepo {
         `SELECT category_id, SUM(spent) AS spent FROM (
            SELECT category_id, total - others_share AS spent
              FROM entries
-            WHERE kind = 'expense' AND source NOT IN ('receipt', 'itemized') AND occurred_at >= :start AND occurred_at < :end
+            WHERE user_id = :userId AND kind = 'expense' AND source NOT IN ('receipt', 'itemized')
+              AND occurred_at >= :start AND occurred_at < :end
            UNION ALL
            SELECT l.category_id,
                   l.price - (l.price / (cardinality(l.people) + CASE WHEN l.includes_me THEN 1 ELSE 0 END))
                             * cardinality(l.people) AS spent
              FROM receipt_lines l JOIN entries e ON e.id = l.entry_id
-            WHERE e.kind = 'expense' AND e.occurred_at >= :start AND e.occurred_at < :end
+            WHERE e.user_id = :userId AND e.kind = 'expense' AND e.occurred_at >= :start AND e.occurred_at < :end
          ) t
          GROUP BY category_id HAVING SUM(spent) > 0 ORDER BY SUM(spent) DESC`,
-        { replacements: { start, end }, type: QueryTypes.SELECT },
+        { replacements: { userId, start, end }, type: QueryTypes.SELECT },
       );
       return rows.map((r) => ({ categoryId: r.category_id, spent: Number(r.spent) }));
     },
     async loggedKinds(from, toExclusive) {
       const rows = await sequelize.query<{ day: string; kind: "entry" | "no_spend" }>(
         `SELECT to_char(day, 'YYYY-MM-DD') AS day, kind FROM logged_days
-          WHERE day >= :from::date AND day < :to::date ORDER BY day`,
-        { replacements: { from, to: toExclusive }, type: QueryTypes.SELECT },
+          WHERE user_id = :userId AND day >= :from::date AND day < :to::date ORDER BY day`,
+        { replacements: { userId, from, to: toExclusive }, type: QueryTypes.SELECT },
       );
       return rows;
     },
   };
 }
 
-export function createCategoryRepo(sequelize: Sequelize): CategoryRepo {
+export function createCategoryRepo(sequelize: Sequelize, userId: string): CategoryRepo {
   const { Category } = initModels(sequelize);
   const toRec = (c: InstanceType<typeof Category>): CategoryRecord => ({
     id: c.id,
@@ -74,20 +75,20 @@ export function createCategoryRepo(sequelize: Sequelize): CategoryRepo {
   });
   return {
     async list() {
-      return (await Category.findAll({ order: [["sort", "ASC"], ["name", "ASC"]] })).map(toRec);
+      return (await Category.findAll({ where: { userId }, order: [["sort", "ASC"], ["name", "ASC"]] })).map(toRec);
     },
     async create(c) {
-      return toRec(await Category.create(c));
+      return toRec(await Category.create({ ...c, userId }));
     },
     async update(id, patch) {
-      const row = await Category.findByPk(id);
+      const row = await Category.findOne({ where: { userId, id } });
       if (!row) return null;
       return toRec(await row.update(patch));
     },
   };
 }
 
-export function createPresetRepo(sequelize: Sequelize): PresetRepo {
+export function createPresetRepo(sequelize: Sequelize, userId: string): PresetRepo {
   const { Preset } = initModels(sequelize);
   const toRec = (p: InstanceType<typeof Preset>): PresetRecord => ({
     id: p.id,
@@ -101,32 +102,32 @@ export function createPresetRepo(sequelize: Sequelize): PresetRepo {
   });
   return {
     async list() {
-      return (await Preset.findAll({ order: [["sort", "ASC"], ["label", "ASC"]] })).map(toRec);
+      return (await Preset.findAll({ where: { userId }, order: [["sort", "ASC"], ["label", "ASC"]] })).map(toRec);
     },
     async create(p) {
-      return toRec(await Preset.create(p));
+      return toRec(await Preset.create({ ...p, userId }));
     },
     async update(id, patch) {
-      const row = await Preset.findByPk(id);
+      const row = await Preset.findOne({ where: { userId, id } });
       return row ? toRec(await row.update(patch)) : null;
     },
     async remove(id) {
-      return (await Preset.destroy({ where: { id } })) > 0;
+      return (await Preset.destroy({ where: { userId, id } })) > 0;
     },
   };
 }
 
-export function createSettingsRepo(sequelize: Sequelize): SettingsRepo {
+export function createSettingsRepo(sequelize: Sequelize, userId: string): SettingsRepo {
   const { Setting } = initModels(sequelize);
   const get = async () => {
-    const [row] = await Setting.findOrCreate({ where: { id: 1 }, defaults: { id: 1 } });
+    const [row] = await Setting.findOrCreate({ where: { userId }, defaults: { userId } });
     return { dashboardLayout: normalizeLayout(row.dashboardLayout) };
   };
   return {
     get,
     async update(patch) {
       await get();
-      await Setting.update(patch, { where: { id: 1 } });
+      await Setting.update(patch, { where: { userId } });
       return get();
     },
   };

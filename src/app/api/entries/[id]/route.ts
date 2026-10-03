@@ -5,11 +5,11 @@ import { updateEntryBody } from "@/lib/schemas";
 export const runtime = "nodejs";
 type Ctx = { params: Promise<{ id: string }> };
 
-export const PATCH = api<Ctx>(async (req, { params }) => {
+export const PATCH = api<Ctx>(async (req, { params }, me) => {
   const { id } = await params;
-  return container().updateEntry.execute(id, await readJson(req, updateEntryBody.parse));
+  return container().forUser(me.userId).updateEntry.execute(id, await readJson(req, updateEntryBody.parse));
 });
 
-export const DELETE = api<Ctx>(async (_req, { params }) => {
-  await container().deleteEntry.execute((await params).id);
+export const DELETE = api<Ctx>(async (_req, { params }, me) => {
+  await container().forUser(me.userId).deleteEntry.execute((await params).id);
 });

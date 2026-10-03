@@ -156,6 +156,23 @@ describe("ParseReceipt", () => {
   });
 });
 
+describe("scan limit per account", () => {
+  it("perDay null: every scan is counted under the account's key but none is blocked", async () => {
+    const f = createFakeRepos();
+    const keys: string[] = [];
+    const b = budget();
+    const counting = { ...b, record: async (k: string, at: Date) => { keys.push(k); await b.record(k, at); } };
+    const uc = new ParseReceipt(
+      { parse: async () => RECEIPT }, f.repos.ownerMemory,
+      { list: async () => cats, create: async () => cats[0], update: async () => null },
+      f.repos.people, counting, new FixedClock(NOON), { key: "receipt-parse:u1", perDay: null },
+    );
+    for (let i = 0; i < MAX_PARSES_PER_DAY + 5; i++) await uc.execute(img);
+    expect(keys).toHaveLength(MAX_PARSES_PER_DAY + 5);
+    expect(new Set(keys)).toEqual(new Set(["receipt-parse:u1"]));
+  });
+});
+
 describe("SaveReceiptEntry", () => {
   const lines = RECEIPT.lines.map((l) => ({
     rawName: l.rawName, canonicalName: l.canonicalName, qty: l.qty, price: l.price, owners: l.owners,

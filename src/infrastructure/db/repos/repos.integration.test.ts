@@ -12,6 +12,10 @@ import { createSequelize } from "../sequelize";
 import { createRepos, createTransactionRunner } from "./index";
 import { createLoginAttemptRepo } from "./login-attempt-repo";
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "./read-repos";
+import { createDbCredentialVerifier, createUser } from "./user-repo";
+import { hashPassword } from "../../security/password";
+
+const FAST = { N: 2 ** 10, r: 8, p: 1 }; // test-only scrypt cost
 
 let container: StartedPostgreSqlContainer;
 let sequelize: Sequelize;
@@ -20,6 +24,7 @@ beforeAll(async () => {
   container = await new PostgreSqlContainer(process.env.TEST_PG_IMAGE ?? "postgres:17-alpine").start();
   sequelize = createSequelize(container.getConnectionUri());
   await createMigrator(sequelize).up();
+  USER = await createUser(sequelize, "me@example.com", await hashPassword("correct horse battery", FAST));
 }, 120_000);
 
 afterAll(async () => {
@@ -27,12 +32,13 @@ afterAll(async () => {
   await container?.stop();
 });
 
+let USER: string;
 let FAN: string;
 let A: string;
 
 beforeEach(async () => {
   await sequelize.query("TRUNCATE entries, logged_days, xp_events, owner_memory, people RESTART IDENTITY CASCADE");
-  const people = createRepos(sequelize).people;
+  const people = createRepos(sequelize, USER).people;
   FAN = (await people.create({ name: "แฟน", note: "ชอบนมเปรี้ยว", sort: 0 })).id;
   A = (await people.create({ name: "A", note: "", sort: 1 })).id;
 });
@@ -43,14 +49,14 @@ const ME = { me: true, people: [] as string[] };
 const NOON = new Date("2026-10-03T05:00:00Z"); // 12:00 Bangkok
 
 function useCases(now = NOON) {
-  const tx = createTransactionRunner(sequelize);
+  const tx = createTransactionRunner(sequelize, USER);
   const clock = new FixedClock(now);
   return {
     clock,
     recordEntry: new RecordEntry(tx, clock),
     recordRepayment: new RecordRepayment(tx, clock),
     markNoSpend: new MarkNoSpendDay(tx, clock),
-    repos: createRepos(sequelize),
+    repos: createRepos(sequelize, USER),
   };
 }
 
@@ -108,7 +114,7 @@ describe("Sequelize repos against real Postgres", () => {
   });
 
   it("rolls the whole use case back when a later step fails", async () => {
-    const tx = createTransactionRunner(sequelize);
+    const tx = createTransactionRunner(sequelize, USER);
     await expect(
       tx.run(async (repos) => {
         await repos.entries.insert({
@@ -126,7 +132,7 @@ describe("Sequelize repos against real Postgres", () => {
         await repos.xp.add("first_log", 0, NOON); // violates CHECK (amount > 0)
       }),
     ).rejects.toThrow();
-    expect(await createRepos(sequelize).entries.recent(10)).toHaveLength(0);
+    expect(await createRepos(sequelize, USER).entries.recent(10)).toHaveLength(0);
   });
 
   it("database refuses others' share above the total, and a repayment without a person", async () => {
@@ -167,7 +173,7 @@ describe("login attempt repo", () => {
 
 describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
   const mk = (kind: "expense" | "income", at: string, total: number, fanShare = 0) =>
-    createRepos(sequelize).entries.insert({
+    createRepos(sequelize, USER).entries.insert({
       kind,
       occurredAt: new Date(at),
       createdAt: new Date(at),
@@ -184,11 +190,11 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
     await mk("expense", "2026-10-03T16:59:00Z", 10000, 5000); // Oct 3 23:59 BKK
     await mk("expense", "2026-10-03T17:00:00Z", 2000); //        Oct 4 00:00 BKK
     await mk("income", "2026-10-04T05:00:00Z", 1500000);
-    await createRepos(sequelize).entries.insert({
+    await createRepos(sequelize, USER).entries.insert({
       kind: "repayment", occurredAt: new Date("2026-10-04T06:00:00Z"), createdAt: new Date("2026-10-04T06:00:00Z"),
       total: 500, shares: [], personId: FAN, categoryId: null, note: null, merchant: null, source: "wheel",
     });
-    const out = await createStatsRepo(sequelize).dailyTotals("2026-10-03", "2026-10-05");
+    const out = await createStatsRepo(sequelize, USER).dailyTotals("2026-10-03", "2026-10-05");
     expect(out).toEqual([
       { day: "2026-10-03", spent: 5000, earned: 0 },
       { day: "2026-10-04", spent: 2000, earned: 1500000 },
@@ -196,10 +202,10 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
   });
 
   it("returns logged days with how they were logged", async () => {
-    const repos = createRepos(sequelize);
+    const repos = createRepos(sequelize, USER);
     await repos.loggedDays.add("2026-10-03", "entry", NOON);
     await repos.loggedDays.add("2026-10-04", "no_spend", NOON);
-    expect(await createStatsRepo(sequelize).loggedKinds("2026-10-01", "2026-11-01")).toEqual([
+    expect(await createStatsRepo(sequelize, USER).loggedKinds("2026-10-01", "2026-11-01")).toEqual([
       { day: "2026-10-03", kind: "entry" },
       { day: "2026-10-04", kind: "no_spend" },
     ]);
@@ -208,12 +214,12 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
 
 describe("categories, presets, settings", () => {
   it("has the seeded default categories with Material Symbols icons", async () => {
-    const list = await createCategoryRepo(sequelize).list();
+    const list = await createCategoryRepo(sequelize, USER).list();
     expect(list.filter((c) => c.kind === "expense").map((c) => c.icon)).toContain("restaurant");
     expect(list.filter((c) => c.kind === "income")).toHaveLength(2);
   });
   it("creates, updates and removes presets", async () => {
-    const repo = createPresetRepo(sequelize);
+    const repo = createPresetRepo(sequelize, USER);
     const p = await repo.create({ label: "BTS", icon: "train", amount: 4700, categoryId: null, personId: null, splitKind: null, sort: 0 });
     expect((await repo.update(p.id, { amount: 5000 }))?.amount).toBe(5000);
     const fronted = await repo.create({ label: "ข้าว", icon: "restaurant", amount: 6000, categoryId: null, personId: FAN, splitKind: "equal", sort: 1 });
@@ -223,14 +229,14 @@ describe("categories, presets, settings", () => {
     expect(await repo.remove(p.id)).toBe(false);
   });
   it("settings: defaults to a normalised layout and persists changes", async () => {
-    const repo = createSettingsRepo(sequelize);
+    const repo = createSettingsRepo(sequelize, USER);
     const first = await repo.get();
     expect(first.dashboardLayout.map((i) => i.id)).toContain("calendar");
     await repo.update({ dashboardLayout: [{ id: "calendar", enabled: true }] });
     expect((await repo.get()).dashboardLayout[0]).toEqual({ id: "calendar", enabled: true });
   });
   it("people: listed in order, edited and archived", async () => {
-    const repo = createRepos(sequelize).people;
+    const repo = createRepos(sequelize, USER).people;
     expect((await repo.list()).map((p) => p.name)).toEqual(["แฟน", "A"]);
     expect(await repo.update(A, { name: "แม่", archived: true })).toMatchObject({ name: "แม่", archived: true });
     expect(await repo.update("00000000-0000-4000-8000-000000000000", { name: "x" })).toBeNull();
@@ -245,7 +251,7 @@ describe("receipt save against real Postgres", () => {
   ];
 
   it("stores one entry with allocated lines and each person's share", async () => {
-    const tx = createTransactionRunner(sequelize);
+    const tx = createTransactionRunner(sequelize, USER);
     const out = await new SaveReceiptEntry(tx, new FixedClock(NOON)).execute({ merchant: "7-Eleven", total: 13000, lines: lines() });
     const [[{ n, sum }]] = (await sequelize.query(
       `SELECT count(*)::int AS n, sum(price)::int AS sum FROM receipt_lines WHERE entry_id = '${out.entry.id}'`,
@@ -253,23 +259,23 @@ describe("receipt save against real Postgres", () => {
     expect(n).toBe(3);
     expect(sum).toBe(13000); // 13900 printed, 13000 paid: lines were scaled to the paid total
     expect(out.entry).toMatchObject({ kind: "expense", source: "receipt", merchant: "7-Eleven" });
-    const stored = await createRepos(sequelize).entries.findById(out.entry.id);
+    const stored = await createRepos(sequelize, USER).entries.findById(out.entry.id);
     expect(stored?.shares.map((s) => s.personId).sort()).toEqual([A, FAN].sort());
     expect(stored?.othersShare).toBe(out.entry.othersShare);
   });
 
   it("upserts owner memory and a later choice overwrites the earlier one", async () => {
-    const tx = createTransactionRunner(sequelize);
+    const tx = createTransactionRunner(sequelize, USER);
     const uc = new SaveReceiptEntry(tx, new FixedClock(NOON));
     await uc.execute({ total: 13900, lines: lines() });
     await uc.execute({ total: 1500, people: [FAN], lines: [{ rawName: "DUTCHMILL", canonicalName: "นมเปรี้ยว", qty: 1, price: 1500, owners: ME }] });
-    const mem = await createRepos(sequelize).ownerMemory.all();
+    const mem = await createRepos(sequelize, USER).ownerMemory.all();
     expect(mem.get("นมเปรี้ยว")).toEqual(ME);
     expect(mem.get("แชมพู")).toEqual({ me: true, people: [FAN, A] });
   });
 
   it("deleting the entry removes its lines and shares", async () => {
-    const tx = createTransactionRunner(sequelize);
+    const tx = createTransactionRunner(sequelize, USER);
     const out = await new SaveReceiptEntry(tx, new FixedClock(NOON)).execute({ total: 13900, lines: lines() });
     await sequelize.query(`DELETE FROM entries WHERE id = '${out.entry.id}'`);
     const [rows] = await sequelize.query(`SELECT 1 FROM receipt_lines WHERE entry_id = '${out.entry.id}'`);
@@ -279,10 +285,10 @@ describe("receipt save against real Postgres", () => {
   });
 
   it("rolls back the entry when a line violates a constraint", async () => {
-    const tx = createTransactionRunner(sequelize);
+    const tx = createTransactionRunner(sequelize, USER);
     const bad = new SaveReceiptEntry(tx, new FixedClock(NOON));
     await expect(bad.execute({ total: 100, lines: [{ ...lines()[0], qty: 1.5 }] })).rejects.toThrow();
-    expect(await createRepos(sequelize).entries.recent(5)).toHaveLength(0);
+    expect(await createRepos(sequelize, USER).entries.recent(5)).toHaveLength(0);
   });
 });
 
@@ -291,7 +297,7 @@ describe("changing entries rolls back for real", () => {
     const u = useCases();
     const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: equalWith(FAN) });
     await u.recordRepayment.execute({ personId: FAN, amount: 5000 });
-    await expect(new DeleteEntry(createTransactionRunner(sequelize)).execute(entry.id)).rejects.toMatchObject({
+    await expect(new DeleteEntry(createTransactionRunner(sequelize, USER)).execute(entry.id)).rejects.toMatchObject({
       code: "BALANCE_WOULD_GO_NEGATIVE",
     });
     expect(await u.repos.entries.findById(entry.id)).not.toBeNull();
@@ -302,7 +308,7 @@ describe("changing entries rolls back for real", () => {
     const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: equalWith(FAN) });
     await u.recordRepayment.execute({ personId: FAN, amount: 4000 });
     await expect(
-      new UpdateEntry(createTransactionRunner(sequelize)).execute(entry.id, { split: { kind: "none" } }),
+      new UpdateEntry(createTransactionRunner(sequelize, USER)).execute(entry.id, { split: { kind: "none" } }),
     ).rejects.toMatchObject({ code: "BALANCE_WOULD_GO_NEGATIVE" });
     const kept = await u.repos.entries.findById(entry.id);
     expect(kept?.othersShare).toBe(5000);
@@ -312,7 +318,7 @@ describe("changing entries rolls back for real", () => {
   it("re-splitting replaces the shares", async () => {
     const u = useCases();
     const { entry } = await u.recordEntry.execute({ kind: "expense", total: 9000, split: equalWith(FAN) });
-    const out = await new UpdateEntry(createTransactionRunner(sequelize)).execute(entry.id, { split: equalWith(FAN, A) });
+    const out = await new UpdateEntry(createTransactionRunner(sequelize, USER)).execute(entry.id, { split: equalWith(FAN, A) });
     expect(out.othersShare).toBe(6000);
     const stored = await u.repos.entries.findById(entry.id);
     expect(stored?.shares.map((s) => s.amount)).toEqual([3000, 3000]);
@@ -339,7 +345,7 @@ describe("model registration is minifier-proof", () => {
 describe("itemized groups", () => {
   it("the database accepts the itemized source", async () => {
     const u = useCases();
-    const out = await new SaveReceiptEntry(createTransactionRunner(sequelize), u.clock).execute({
+    const out = await new SaveReceiptEntry(createTransactionRunner(sequelize, USER), u.clock).execute({
       source: "itemized",
       total: 3000,
       lines: [{ rawName: "ไข่", canonicalName: "ไข่", qty: 1, price: 3000, owners: { me: true, people: [FAN] } }],
@@ -352,8 +358,8 @@ describe("itemized groups", () => {
 describe("category totals", () => {
   it("counts our share per category, groups by their lines (once), and ignores income and repayments", async () => {
     const u = useCases();
-    const tx = createTransactionRunner(sequelize);
-    const [food, ride] = (await createCategoryRepo(sequelize).list()).filter((c) => c.kind === "expense");
+    const tx = createTransactionRunner(sequelize, USER);
+    const [food, ride] = (await createCategoryRepo(sequelize, USER).list()).filter((c) => c.kind === "expense");
     await u.recordEntry.execute({ kind: "expense", total: 10000, categoryId: food.id, split: equalWith(FAN) }); // ours 5000
     await u.recordEntry.execute({ kind: "expense", total: 3000, categoryId: ride.id });
     await u.recordEntry.execute({ kind: "income", total: 99999 });
@@ -369,7 +375,7 @@ describe("category totals", () => {
       total: 1000,
       lines: [{ rawName: "c", canonicalName: "c", qty: 1, price: 1000, owners: { me: true, people: [FAN, A] }, categoryId: ride.id }], // ours 334
     });
-    const totals = await createStatsRepo(sequelize).categoryTotals("2026-10-01", "2026-11-01");
+    const totals = await createStatsRepo(sequelize, USER).categoryTotals("2026-10-01", "2026-11-01");
     expect(totals).toEqual([
       { categoryId: food.id, spent: 5501 },
       { categoryId: ride.id, spent: 3334 },
@@ -377,13 +383,22 @@ describe("category totals", () => {
   });
 });
 
-describe("migration 004: the old single partner becomes a person", () => {
-  it("moves shares, repayments, lines, memory, presets and the note to a person called แฟน", async () => {
+describe("migrations 004 + 005 on data recorded before people and accounts existed", () => {
+  async function legacyDb() {
     await sequelize.query("DROP DATABASE IF EXISTS legacy");
     await sequelize.query("CREATE DATABASE legacy");
-    const legacy = createSequelize(container.getConnectionUri().replace(/\/[^/]+$/, "/legacy"));
+    return createSequelize(container.getConnectionUri().replace(/\/[^/]+$/, "/legacy"));
+  }
+  const dropLegacy = () => sequelize.query("DROP DATABASE IF EXISTS legacy");
+
+  it("the partner becomes a person called แฟน, and everything goes to the owner account", async () => {
+    const legacy = await legacyDb();
     try {
-      const migrator = createMigrator(legacy);
+      const ownerHash = await hashPassword("owner password 123", FAST);
+      const friendHash = await hashPassword("friend password 123", FAST);
+      const migrator = createMigrator(legacy, {
+        accounts: { owner: { email: "Owner@x.com", passwordHash: ownerHash }, extras: [{ email: "friend@x.com", passwordHash: friendHash }] },
+      });
       await migrator.up({ to: "003-itemized-source" });
       await legacy.query(`
         UPDATE settings SET partner_note = 'ชอบนมเปรี้ยว',
@@ -398,16 +413,26 @@ describe("migration 004: the old single partner becomes a person", () => {
           ('11111111-1111-4111-8111-111111111111', 'c', 'c', 4000, 'me');
         INSERT INTO owner_memory (canonical_name, owner) VALUES ('a', 'partner'), ('b', 'split'), ('c', 'me');
         INSERT INTO presets (label, icon, amount, partner_mode) VALUES ('ข้าว', 'restaurant', 6000, 'split'), ('BTS', 'train', 4700, NULL);
+        INSERT INTO logged_days (day, kind) VALUES ('2026-10-01', 'entry');
+        INSERT INTO xp_events (reason, amount) VALUES ('first_log', 10);
       `);
       await migrator.up();
 
-      const repos = createRepos(legacy);
+      const verify = createDbCredentialVerifier(legacy);
+      const owner = (await verify.verify("owner@x.com", "owner password 123"))!;
+      const friend = (await verify.verify("friend@x.com", "friend password 123"))!;
+      expect(owner).toMatch(/^[0-9a-f-]{36}$/);
+      expect(friend).toMatch(/^[0-9a-f-]{36}$/);
+
+      const repos = createRepos(legacy, owner);
       const [fan] = await repos.people.list();
       expect(fan).toMatchObject({ name: "แฟน", note: "ชอบนมเปรี้ยว" });
       const ledger = await repos.entries.ledger();
       expect(ledger.shares.map((s) => [s.personId, s.amount])).toEqual([[fan.id, 5000]]);
       expect(ledger.repayments).toEqual([{ personId: fan.id, total: 2000 }]);
       expect((await repos.entries.findById("11111111-1111-4111-8111-111111111111"))?.othersShare).toBe(5000);
+      expect(await repos.loggedDays.allDays()).toEqual(["2026-10-01"]);
+      expect(await repos.xp.total()).toBe(10);
 
       const [lines] = (await legacy.query(
         "SELECT canonical_name, includes_me, people FROM receipt_lines ORDER BY canonical_name",
@@ -422,24 +447,91 @@ describe("migration 004: the old single partner becomes a person", () => {
       expect(mem.get("b")).toEqual({ me: true, people: [fan.id] });
       expect(mem.get("c")).toEqual({ me: true, people: [] });
 
-      const presets = await createPresetRepo(legacy).list();
+      const presets = await createPresetRepo(legacy, owner).list();
       expect(presets.map((p) => [p.label, p.personId, p.splitKind])).toEqual([
         ["BTS", null, null],
         ["ข้าว", fan.id, "equal"],
       ]);
-      expect((await createSettingsRepo(legacy).get()).dashboardLayout.slice(0, 2)).toEqual([
+      expect((await createSettingsRepo(legacy, owner).get()).dashboardLayout.slice(0, 2)).toEqual([
         { id: "streak", enabled: true },
         { id: "people", enabled: false },
       ]);
+      expect((await createCategoryRepo(legacy, owner).list()).length).toBe(9);
 
-      await migrator.down({ to: "004-people" }); // and back: still one partner with the same balance
+      // the extra account starts empty, with its own default categories
+      const theirs = createRepos(legacy, friend);
+      expect(await theirs.entries.recent(10)).toEqual([]);
+      expect(await theirs.people.list()).toEqual([]);
+      expect(await theirs.xp.total()).toBe(0);
+      const theirCats = await createCategoryRepo(legacy, friend).list();
+      expect(theirCats.length).toBe(9);
+      expect(theirCats.map((c) => c.id)).not.toContain((await createCategoryRepo(legacy, owner).list())[0].id);
+
+      await migrator.down({ to: "004-people" }); // and back: one shared data set, one partner, same balance
       const [[back]] = (await legacy.query(
         "SELECT partner_share FROM entries WHERE id = '11111111-1111-4111-8111-111111111111'",
       )) as [{ partner_share: number }[], unknown];
       expect(back.partner_share).toBe(5000);
     } finally {
       await legacy.close();
-      await sequelize.query("DROP DATABASE IF EXISTS legacy");
+      await dropLegacy();
     }
+  });
+
+  it("refuses to give recorded data to nobody", async () => {
+    const legacy = await legacyDb();
+    try {
+      const migrator = createMigrator(legacy);
+      await migrator.up({ to: "004-people" });
+      await legacy.query("INSERT INTO entries (kind, occurred_at, total) VALUES ('expense', now(), 100)");
+      await expect(migrator.up()).rejects.toThrow(/AUTH_EMAIL/);
+    } finally {
+      await legacy.close();
+      await dropLegacy();
+    }
+  });
+});
+
+describe("accounts", () => {
+  it("login returns the account id; a wrong password or unknown email returns null", async () => {
+    const verify = createDbCredentialVerifier(sequelize);
+    expect(await verify.verify(" ME@example.com ", "correct horse battery")).toBe(USER);
+    expect(await verify.verify("me@example.com", "wrong")).toBeNull();
+    expect(await verify.verify("nobody@example.com", "correct horse battery")).toBeNull();
+  });
+
+  it("refuses a second account with the same email", async () => {
+    await expect(createUser(sequelize, "Me@Example.com", await hashPassword("x".repeat(12), FAST))).rejects.toThrow(/already exists/);
+  });
+
+  it("one account never sees or changes another's data", async () => {
+    const other = await createUser(sequelize, `other-${Date.now()}@example.com`, await hashPassword("y".repeat(12), FAST));
+    const mine = createRepos(sequelize, USER);
+    const theirs = createRepos(sequelize, other);
+    const tx = createTransactionRunner(sequelize, other);
+
+    const { entry } = await new RecordEntry(createTransactionRunner(sequelize, USER), new FixedClock(NOON)).execute({
+      kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] },
+    });
+    // their side: nothing of ours, and our person / entry don't exist for them
+    expect(await theirs.entries.recent(10)).toEqual([]);
+    expect(await theirs.entries.findById(entry.id)).toBeNull();
+    expect(await theirs.people.list()).toEqual([]);
+    expect(await theirs.loggedDays.allDays()).toEqual([]);
+    await expect(new RecordRepayment(tx, new FixedClock(NOON)).execute({ personId: FAN, amount: 100 })).rejects.toMatchObject({
+      code: "UNKNOWN_PERSON",
+    });
+    await expect(new DeleteEntry(tx).execute(entry.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(await theirs.people.update(FAN, { name: "hacked" })).toBeNull();
+    expect(await createStatsRepo(sequelize, other).dailyTotals("2026-10-01", "2026-11-01")).toEqual([]);
+    const ourCats = await createCategoryRepo(sequelize, USER).list();
+    expect(await createCategoryRepo(sequelize, other).update(ourCats[0].id, { name: "x" })).toBeNull();
+
+    // our side is untouched
+    expect(await mine.entries.findById(entry.id)).not.toBeNull();
+    expect((await mine.people.list()).map((p) => p.name)).toContain("แฟน");
+    expect(await createStatsRepo(sequelize, USER).dailyTotals("2026-10-01", "2026-11-01")).toEqual([
+      { day: "2026-10-03", spent: 5000, earned: 0 },
+    ]);
   });
 });

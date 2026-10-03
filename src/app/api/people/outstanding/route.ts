@@ -3,4 +3,4 @@ import { container } from "@/lib/container";
 
 export const runtime = "nodejs";
 
-export const GET = api(async () => container().getOutstanding.execute());
+export const GET = api(async (_req, _ctx, me) => container().forUser(me.userId).getOutstanding.execute());

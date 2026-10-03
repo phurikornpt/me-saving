@@ -1,16 +1,16 @@
 # me-budget
 
-เว็บแอปบันทึกรายรับ-รายจ่ายส่วนตัวสำหรับคนไทย (ใช้คนเดียว, เงินบาทอย่างเดียว, mobile-first ติดตั้งเป็น PWA ได้) เน้น **จดให้เร็วที่สุด** และรองรับกรณี "ออกก่อน" (จ่ายแทนแฟน ครอบครัว หรือเพื่อนไปก่อนแล้วตามเก็บทีหลัง แยกยอดรายคน) พร้อม gamification เล็กๆ ให้กลับมาจดทุกวัน
+เว็บแอปบันทึกรายรับ-รายจ่ายส่วนตัวสำหรับคนไทย (หลายบัญชีได้ แต่ละบัญชีข้อมูลแยกกัน, เงินบาทอย่างเดียว, mobile-first ติดตั้งเป็น PWA ได้) เน้น **จดให้เร็วที่สุด** และรองรับกรณี "ออกก่อน" (จ่ายแทนแฟน ครอบครัว หรือเพื่อนไปก่อนแล้วตามเก็บทีหลัง แยกยอดรายคน) พร้อม gamification เล็กๆ ให้กลับมาจดทุกวัน
 
 ## ฟีเจอร์ที่ใช้ได้แล้ว
 - **จดเร็ว:** dashboard + ปุ่ม [+] ลอย แตะสั้น = จดรายจ่าย, กดค้าง = วงล้อเลือกโหมด 6 ช่อง (รายจ่าย, รายรับ, ออกก่อน, รับเงินคืน, ไม่ได้ใช้เงิน, สแกนใบเสร็จ) แล้วแตะหมวดเพื่อบันทึกเลย
 - **ปุ่มลัด (Preset):** แตะครั้งเดียวจดเลย ตั้งเป็นออกก่อนให้ใครสักคนได้ มีแถบ "ย้อนกลับ" 5 วินาทีหลังจด
 - **คนที่ออกให้ก่อน:** ตั้งคนได้เองหลายคน (ชื่อ + โน้ตพฤติกรรม) · หารเท่ากัน / ของเขาทั้งหมด / กรอกเองต่อคน · ยอดติดแยกรายคน · รับเงินคืนต่อคน (หักยอดรวมของคนนั้น) · ดูยอดค้างตามรายการแบบ FIFO
 - **หมวดหมู่:** หมวดตั้งต้น เพิ่ม/ซ่อนหมวดเองได้ icon เป็น Material Symbols
-- **สแกนใบเสร็จด้วย AI (Gemini):** ไม่เลือกใคร = แกะรายการอย่างเดียว (ของเราทั้งหมด) · เลือกคนที่หารด้วยก่อน = **สแกนหารกัน** เดาว่าแต่ละบรรทัดของใคร (เลือกได้หลายคนต่อบรรทัด) จากความจำเจ้าของ ชื่อ และโน้ตพฤติกรรม มีหน้าตรวจ/แก้ก่อนบันทึก ไม่เก็บรูป จำกัด 20 ครั้งต่อ 24 ชั่วโมง
+- **สแกนใบเสร็จด้วย AI (Gemini):** ไม่เลือกใคร = แกะรายการอย่างเดียว (ของเราทั้งหมด) · เลือกคนที่หารด้วยก่อน = **สแกนหารกัน** เดาว่าแต่ละบรรทัดของใคร (เลือกได้หลายคนต่อบรรทัด) จากความจำเจ้าของ ชื่อ และโน้ตพฤติกรรม มีหน้าตรวจ/แก้ก่อนบันทึก ไม่เก็บรูป นับจำนวนสแกนต่อบัญชี (จำกัดได้ด้วย `RECEIPT_SCAN_DAILY_LIMIT` ค่าเริ่มต้นไม่จำกัด)
 - **Dashboard widget ปรับแต่งได้:** streak, คนที่ติดเรา, ปุ่มลัด, วันนี้, ปฏิทิน (heatmap + sheet รายการรายวัน), รายการล่าสุด เปิด/ปิดและลากเรียงได้ เก็บไว้บน DB
 - **Gamification:** streak รายวัน, วันไม่ได้ใช้เงิน, XP/Level, แถบเตือน streak จะหลุด, เอฟเฟกต์ +XP และหน้าฉลองตอนเลเวลอัป/streak ครบ 7, 30, 100 วัน
-- **Login:** email + password ผู้ใช้เดียว (Auth.js Credentials), session 90 วัน, จำกัดล็อกอินผิด 5 ครั้งต่อ 15 นาที (ต่ออีเมลและต่อ IP)
+- **บัญชี:** email + password (Auth.js Credentials) เก็บในตาราง `users` แต่ละบัญชีเห็นแค่ข้อมูลของตัวเอง เพิ่มบัญชีด้วย `pnpm user:add` (ไม่มีหน้าสมัครสาธารณะ) session 90 วัน จำกัดล็อกอินผิด 5 ครั้งต่อ 15 นาที (ต่ออีเมลและต่อ IP)
 
 ยังไม่ทำ: งบประมาณ (FR-5), notification, badges, streak freeze, export CSV, มาสคอต, ระบบเสนอปุ่มลัดอัตโนมัติ, คิวจด offline, สรุปรายสัปดาห์/กราฟ/ตัวกรอง ดูสถานะละเอียดใน [docs/TOR.md](docs/TOR.md)
 
@@ -24,8 +24,8 @@ Next.js 16 (App Router) + TypeScript · Tailwind CSS v4 · TanStack Query (persi
 docker compose up -d            # Postgres 17 ที่ localhost:5432 (user/pass/db = mebudget)
 cp .env.example .env.local      # แล้วแก้ค่าตามด้านล่าง
 pnpm install
-pnpm db:migrate                 # สร้างตาราง + seed หมวดตั้งต้น
-pnpm auth:hash                  # ถามรหัสผ่านแบบซ่อน (อย่างน้อย 12 ตัวอักษร) แล้วพิมพ์ AUTH_PASSWORD_HASH=...
+pnpm db:migrate                 # สร้างตาราง
+pnpm user:add                   # สร้างบัญชี (ถามอีเมล + รหัสผ่านแบบซ่อน อย่างน้อย 12 ตัวอักษร) พร้อมหมวดตั้งต้น
 pnpm dev                        # http://localhost:3000
 ```
 
@@ -35,9 +35,8 @@ pnpm dev                        # http://localhost:3000
 |---|---|
 | `DATABASE_URL` | connection string ของ Postgres (ค่าใน `.env.example` ใช้กับ docker compose ได้เลย) |
 | `AUTH_SECRET` | secret ของ Auth.js สร้างด้วย `openssl rand -base64 32` |
-| `AUTH_EMAIL` | อีเมลของผู้ใช้คนเดียว |
-| `AUTH_PASSWORD_HASH` | ผลลัพธ์จาก `pnpm auth:hash` (รูปแบบ `scrypt:...` ไม่มีตัว `$`) |
-| `AUTH_EXTRA_USERS` | (ไม่บังคับ) บัญชีอื่นที่ล็อกอินได้ รูปแบบ `อีเมล\|hash;อีเมล2\|hash2` ทุกบัญชีเห็นข้อมูลชุดเดียวกัน |
+| `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, `AUTH_EXTRA_USERS` | ใช้ครั้งเดียวตอน migration `005-users` กับ DB ที่มีข้อมูลจากก่อนมีระบบบัญชี: ข้อมูลเดิมทั้งหมดเป็นของ `AUTH_EMAIL` และแต่ละคนใน `AUTH_EXTRA_USERS` (`อีเมล\|hash;...`) กลายเป็นบัญชีใหม่ที่ว่างเปล่า ติดตั้งใหม่ไม่ต้องตั้ง |
+| `RECEIPT_SCAN_DAILY_LIMIT` | (ไม่บังคับ) จำกัดจำนวนสแกนใบเสร็จต่อบัญชีต่อ 24 ชม. ไม่ตั้ง = นับไว้แต่ไม่บล็อก |
 | `GEMINI_API_KEY` | key ของ Gemini ใช้เฉพาะตอนสแกนใบเสร็จ (ฝั่ง server เท่านั้น) |
 | `GEMINI_MODEL` | (ไม่บังคับ) เปลี่ยนรุ่นโมเดล ค่าเริ่มต้น `gemini-3.5-flash-lite` |
 
@@ -50,7 +49,7 @@ pnpm dev                        # http://localhost:3000
 | `pnpm test` / `pnpm test:watch` | Vitest (ต้องเปิด Docker เพราะมี integration test) |
 | `pnpm db:migrate` / `pnpm db:rollback` | รัน / ย้อน migration กับ DB ใน `.env.local` |
 | `pnpm db:migrate:prod` | รัน migration กับ `DATABASE_URL` ที่ตั้งใน environment (ไม่อ่านไฟล์ `.env*`) ใช้กับ production |
-| `pnpm auth:hash` | สร้าง hash รหัสผ่านสำหรับ `AUTH_PASSWORD_HASH` |
+| `pnpm user:add` / `pnpm user:add:prod` | เพิ่มบัญชีใหม่ (ข้อมูลว่าง + หมวดตั้งต้น) กับ DB ใน `.env.local` / กับ `DATABASE_URL` ใน environment |
 
 ใช้ **pnpm เท่านั้น** (ไม่ใช้ npm/yarn) · `pnpm-workspace.yaml` ปิด build script ของ dependency ทั้งหมดผ่าน `allowBuilds: false`
 
@@ -84,6 +83,7 @@ src/components, src/client   (UI; แตะได้เฉพาะ domain เ�
 ## Deploy
 - push ขึ้น branch **`develop`** → Vercel deploy ให้ (ตั้ง env ทุกตัวข้างบนใน Vercel)
 - **Vercel ไม่รัน migration ให้** ต้องรันเองด้วย `DATABASE_URL=<neon direct url> pnpm db:migrate:prod` ทุกครั้งที่มี migration ใหม่ ควรใช้ connection string แบบ direct (ไม่ใช่ `-pooler`) ของ Neon ส่วนตัวแอปใช้แบบ pooled
+- เพิ่มบัญชีบน production: `DATABASE_URL=<neon direct url> pnpm user:add:prod`
 - ตั้ง region ของ Vercel function ให้ตรงกับ region ของ Neon
 
 ## เอกสาร

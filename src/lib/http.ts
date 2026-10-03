@@ -1,6 +1,12 @@
 import { ZodError } from "zod";
 import { DomainError, type DomainErrorCode } from "@/domain/errors";
 import { auth } from "./auth";
+import { accountIdOf } from "./auth.config";
+
+export interface SignedIn {
+  /** The account every query in this request is scoped to. */
+  userId: string;
+}
 
 const STATUS: Record<DomainErrorCode, number> = {
   INVALID_AMOUNT: 422,
@@ -25,13 +31,14 @@ export const errorBody = (code: string, message: string) => ({ error: { code, me
  * Controller wrapper: session check first, then the handler, then one place that turns
  * errors into HTTP. Clients get a stable `code`; unexpected errors never leak details.
  */
-export function api<Ctx = unknown>(handler: (req: Request, ctx: Ctx) => Promise<unknown>) {
+export function api<Ctx = unknown>(handler: (req: Request, ctx: Ctx, me: SignedIn) => Promise<unknown>) {
   return async (req: Request, ctx: Ctx): Promise<Response> => {
     const t0 = performance.now();
-    if (!(await auth())) return json(errorBody("UNAUTHORIZED", "login required"), 401);
+    const userId = accountIdOf(await auth());
+    if (!userId) return json(errorBody("UNAUTHORIZED", "login required"), 401);
     const t1 = performance.now();
     try {
-      const out = await handler(req, ctx);
+      const out = await handler(req, ctx, { userId });
       const res = out instanceof Response ? out : out === undefined ? new Response(null, { status: 204 }) : json(out);
       // Visible in DevTools > Network > Timing: where a slow request spent its time
       res.headers.set("Server-Timing", `auth;dur=${(t1 - t0).toFixed(0)}, handler;dur=${(performance.now() - t1).toFixed(0)}`);

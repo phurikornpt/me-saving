@@ -12,8 +12,9 @@
     "typecheck": "tsc --noEmit",
     "db:migrate": "tsx --env-file=.env.local scripts/migrate.ts up",
     "db:rollback": "tsx --env-file=.env.local scripts/migrate.ts down",
-    "auth:hash": "tsx scripts/hash-password.ts",
-    "db:migrate:prod": "tsx scripts/migrate.ts up"
+    "user:add": "tsx --env-file=.env.local scripts/add-user.ts",
+    "db:migrate:prod": "tsx scripts/migrate.ts up",
+    "user:add:prod": "tsx scripts/add-user.ts"
   },
   "dependencies": {
     "@google/genai": "^2.26.0",

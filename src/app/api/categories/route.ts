@@ -4,7 +4,7 @@ import { categoryCreateBody } from "@/lib/schemas";
 
 export const runtime = "nodejs";
 
-export const GET = api(async () => container().manageCategories.list());
-export const POST = api(async (req) =>
-  Response.json(await container().manageCategories.create(await readJson(req, categoryCreateBody.parse)), { status: 201 }),
+export const GET = api(async (_req, _ctx, me) => container().forUser(me.userId).manageCategories.list());
+export const POST = api(async (req, _ctx, me) =>
+  Response.json(await container().forUser(me.userId).manageCategories.create(await readJson(req, categoryCreateBody.parse)), { status: 201 }),
 );

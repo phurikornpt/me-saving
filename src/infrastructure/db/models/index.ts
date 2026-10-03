@@ -13,8 +13,16 @@ import type { LayoutItem } from "@/domain/dashboard-layout";
 // so these definitions deliberately mirror them (column names via `underscored`).
 // Money columns are integer satang. Never call sync().
 
+export class User extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
+  declare id: CreationOptional<string>;
+  declare email: string;
+  declare passwordHash: string;
+  declare createdAt: CreationOptional<Date>;
+}
+
 export class Category extends Model<InferAttributes<Category>, InferCreationAttributes<Category>> {
   declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
   declare name: string;
   declare icon: string; // Material Symbols name
   declare kind: "expense" | "income";
@@ -24,6 +32,7 @@ export class Category extends Model<InferAttributes<Category>, InferCreationAttr
 
 export class Person extends Model<InferAttributes<Person>, InferCreationAttributes<Person>> {
   declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
   declare name: string;
   declare note: CreationOptional<string>;
   declare sort: CreationOptional<number>;
@@ -32,6 +41,7 @@ export class Person extends Model<InferAttributes<Person>, InferCreationAttribut
 
 export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes<Entry>> {
   declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
   declare kind: "expense" | "income" | "repayment";
   declare occurredAt: Date;
   declare createdAt: CreationOptional<Date>;
@@ -73,6 +83,7 @@ export class OwnerMemory extends Model<
   InferAttributes<OwnerMemory>,
   InferCreationAttributes<OwnerMemory>
 > {
+  declare userId: ForeignKey<User["id"]>;
   declare canonicalName: string;
   declare includesMe: boolean;
   declare people: string[];
@@ -81,6 +92,7 @@ export class OwnerMemory extends Model<
 
 export class Preset extends Model<InferAttributes<Preset>, InferCreationAttributes<Preset>> {
   declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
   declare label: string;
   declare icon: string;
   declare amount: number;
@@ -91,6 +103,7 @@ export class Preset extends Model<InferAttributes<Preset>, InferCreationAttribut
 }
 
 export class LoggedDay extends Model<InferAttributes<LoggedDay>, InferCreationAttributes<LoggedDay>> {
+  declare userId: ForeignKey<User["id"]>;
   declare day: string; // 'YYYY-MM-DD' (Asia/Bangkok day of the press)
   declare kind: "entry" | "no_spend";
   declare firstLoggedAt: CreationOptional<Date>;
@@ -98,13 +111,14 @@ export class LoggedDay extends Model<InferAttributes<LoggedDay>, InferCreationAt
 
 export class XpEvent extends Model<InferAttributes<XpEvent>, InferCreationAttributes<XpEvent>> {
   declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
   declare createdAt: CreationOptional<Date>;
   declare reason: string;
   declare amount: number;
 }
 
 export class Setting extends Model<InferAttributes<Setting>, InferCreationAttributes<Setting>> {
-  declare id: CreationOptional<number>;
+  declare userId: ForeignKey<User["id"]>;
   declare dashboardLayout: CreationOptional<LayoutItem[]>;
 }
 
@@ -118,6 +132,7 @@ export class LoginAttempt extends Model<
 }
 
 export interface Models {
+  User: typeof User;
   Category: typeof Category;
   Person: typeof Person;
   Entry: typeof Entry;
@@ -131,12 +146,17 @@ export interface Models {
   LoginAttempt: typeof LoginAttempt;
 }
 
-const initialised = new WeakSet<Sequelize>();
+// The model classes are module-level singletons, so they can only be bound to one Sequelize at a time.
+let boundTo: Sequelize | undefined;
 
-/** Idempotent per Sequelize instance (serverless hot paths call this repeatedly). */
+/**
+ * Cheap when called again with the same instance (serverless hot paths call this repeatedly). A different
+ * instance (tests that open a second database) re-binds the classes to it.
+ */
 export function initModels(sequelize: Sequelize): Models {
-  if (!initialised.has(sequelize)) {
+  if (boundTo !== sequelize) {
     const uuid = { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true };
+    const userId = { type: DataTypes.UUID, allowNull: false };
     // modelName MUST be explicit: Sequelize otherwise uses the class name, which the production minifier
     // mangles. The association accessors (setEntry, getEntry...) are built from that name, and a mangled
     // one makes them overwrite Model#set and recurse until the process dies with "Maximum call stack".
@@ -148,9 +168,19 @@ export function initModels(sequelize: Sequelize): Models {
       underscored: true,
     });
 
+    User.init(
+      {
+        id: uuid,
+        email: { type: DataTypes.TEXT, allowNull: false },
+        passwordHash: { type: DataTypes.TEXT, allowNull: false },
+        createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+      },
+      opts("User", "users"),
+    );
     Category.init(
       {
         id: uuid,
+        userId,
         name: { type: DataTypes.TEXT, allowNull: false },
         icon: { type: DataTypes.TEXT, allowNull: false },
         kind: { type: DataTypes.TEXT, allowNull: false },
@@ -162,6 +192,7 @@ export function initModels(sequelize: Sequelize): Models {
     Person.init(
       {
         id: uuid,
+        userId,
         name: { type: DataTypes.TEXT, allowNull: false },
         note: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
         sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
@@ -172,6 +203,7 @@ export function initModels(sequelize: Sequelize): Models {
     Entry.init(
       {
         id: uuid,
+        userId,
         kind: { type: DataTypes.TEXT, allowNull: false },
         occurredAt: { type: DataTypes.DATE, allowNull: false },
         createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
@@ -211,6 +243,7 @@ export function initModels(sequelize: Sequelize): Models {
     );
     OwnerMemory.init(
       {
+        userId: { ...userId, primaryKey: true },
         canonicalName: { type: DataTypes.TEXT, primaryKey: true },
         includesMe: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
         people: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [] },
@@ -221,6 +254,7 @@ export function initModels(sequelize: Sequelize): Models {
     Preset.init(
       {
         id: uuid,
+        userId,
         label: { type: DataTypes.TEXT, allowNull: false },
         icon: { type: DataTypes.TEXT, allowNull: false },
         amount: { type: DataTypes.INTEGER, allowNull: false },
@@ -233,6 +267,7 @@ export function initModels(sequelize: Sequelize): Models {
     );
     LoggedDay.init(
       {
+        userId: { ...userId, primaryKey: true },
         day: { type: DataTypes.DATEONLY, primaryKey: true },
         kind: { type: DataTypes.TEXT, allowNull: false },
         firstLoggedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
@@ -242,6 +277,7 @@ export function initModels(sequelize: Sequelize): Models {
     XpEvent.init(
       {
         id: uuid,
+        userId,
         createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
         reason: { type: DataTypes.TEXT, allowNull: false },
         amount: { type: DataTypes.INTEGER, allowNull: false },
@@ -250,7 +286,7 @@ export function initModels(sequelize: Sequelize): Models {
     );
     Setting.init(
       {
-        id: { type: DataTypes.SMALLINT, primaryKey: true, defaultValue: 1 },
+        userId: { ...userId, primaryKey: true },
         dashboardLayout: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       },
       opts("Setting", "settings"),
@@ -277,7 +313,7 @@ export function initModels(sequelize: Sequelize): Models {
     Category.hasMany(Preset, { foreignKey: "categoryId" });
     Preset.belongsTo(Category, { foreignKey: "categoryId" });
 
-    initialised.add(sequelize);
+    boundTo = sequelize;
   }
-  return { Category, Person, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
+  return { User, Category, Person, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
 }

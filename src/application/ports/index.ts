@@ -208,7 +208,8 @@ export interface LoginAttemptRepo {
   clear(key: string): Promise<void>;
 }
 
-/** Checks the single configured account. Must take the same time for a wrong email as for a wrong password. */
+/** Checks an account's password. Must take the same time for a wrong email as for a wrong password. */
 export interface CredentialVerifier {
-  verify(email: string, password: string): Promise<boolean>;
+  /** The account id, or null when the email or password is wrong. */
+  verify(email: string, password: string): Promise<string | null>;
 }

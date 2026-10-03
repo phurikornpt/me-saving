@@ -18,7 +18,7 @@ function setup() {
   };
   const verifier: CredentialVerifier = {
     async verify(email, password) {
-      return email === "me@example.com" && password === "right-password";
+      return email === "me@example.com" && password === "right-password" ? "user-1" : null;
     },
   };
   const clock = new FixedClock(new Date("2026-10-03T05:00:00Z"));
@@ -30,12 +30,12 @@ const bad = { ...ok, password: "nope" };
 
 describe("AuthenticateUser", () => {
   it("accepts the right credentials", async () => {
-    expect(await setup().auth.execute(ok)).toBe(true);
+    expect(await setup().auth.execute(ok)).toBe("user-1");
   });
   it("rejects wrong credentials without revealing which part", async () => {
     const { auth } = setup();
-    expect(await auth.execute(bad)).toBe(false);
-    expect(await auth.execute({ ...ok, email: "other@example.com" })).toBe(false);
+    expect(await auth.execute(bad)).toBeNull();
+    expect(await auth.execute({ ...ok, email: "other@example.com" })).toBeNull();
   });
   it("locks out after 5 failures, even for the right password", async () => {
     const { auth } = setup();
@@ -51,14 +51,14 @@ describe("AuthenticateUser", () => {
     const { auth, clock } = setup();
     for (let i = 0; i < 5; i++) await auth.execute(bad);
     clock.current = new Date(clock.current.getTime() + ATTEMPT_WINDOW_MS + 1000);
-    expect(await auth.execute(ok)).toBe(true);
+    expect(await auth.execute(ok)).toBe("user-1");
   });
   it("a successful login resets the failure count", async () => {
     const { auth } = setup();
     for (let i = 0; i < 4; i++) await auth.execute(bad);
-    expect(await auth.execute(ok)).toBe(true);
+    expect(await auth.execute(ok)).toBe("user-1");
     for (let i = 0; i < 4; i++) await auth.execute(bad);
-    expect(await auth.execute(ok)).toBe(true);
+    expect(await auth.execute(ok)).toBe("user-1");
   });
   it("email matching is case-insensitive for throttling", async () => {
     const { auth } = setup();

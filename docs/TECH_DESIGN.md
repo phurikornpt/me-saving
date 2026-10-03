@@ -11,7 +11,7 @@
 | Framework | Next.js (App Router) + TypeScript | ✅ (D5) |
 | Hosting | Vercel | ✅ (D5) |
 | Database | Postgres (Neon ผ่าน Vercel Marketplace) + **Sequelize** | ✅ T1 |
-| Auth | **Auth.js** (Credentials: email + password) + **JWT session 90 วัน** ผู้ใช้เดียวเก็บใน env ไม่มีตาราง auth ใน DB | ✅ T2 (แก้ไข: Google → email/password) |
+| Auth | **Auth.js** (Credentials: email + password) + **JWT session 90 วัน** บัญชีอยู่ในตาราง `users` (ข้อมูลแยกต่อบัญชีด้วย `user_id`) | ✅ T2 (แก้ไข: Google → email/password) |
 | AI | Google Gemini ผ่าน `@google/genai` รุ่นเริ่มต้น **`gemini-3.5-flash-lite`** (เปลี่ยนได้ด้วย env `GEMINI_MODEL`) ใช้ structured output โดย zod schema เป็น response contract (`responseJsonSchema`) แบบ **free tier** | ✅ T5 |
 | Data layer (client) | **TanStack Query** + Next.js Route Handlers (`/api/*`) ใช้ optimistic update ทุกครั้งที่เขียน | ✅ T3 |
 | UI | Tailwind CSS v4 + component ทำเองเกือบทั้งหมด (ปุ่ม 3D, ชิป, แป้นตัวเลข, วงล้อ, ปฏิทิน, toast, สวิตช์) + `@radix-ui/react-dialog` สำหรับ bottom sheet เพียงตัวเดียว + Motion (`motion/react`: วงล้อ, `Reorder` ของ widget) | ✅ T6 |
@@ -163,7 +163,9 @@ schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน mi
 - ยอดติดของคน X = Σ `entry_shares.amount` ของ X (expense) − Σ `total` ของ repayment ที่ `person_id = X` และระบบต้องตรวจว่ายอดของทุกคน ≥ 0 ก่อนบันทึก/แก้/ลบ
 - migration `004-people` ย้ายข้อมูลของ "แฟน" แบบเดิม (`partner_share`, owner `partner|split`, `partner_mode`, `partner_note`) ไปเป็นคนชื่อ "แฟน" ยอดทุกอย่างเท่าเดิม มี down migration ที่รวมทุกคนกลับเป็นแฟนคนเดียว
 - `logged_days` บันทึกตอน**กดจดครั้งแรกของวัน** (ใช้ `created_at` ตามเวลาไทย) ส่วน streak คำนวณจากวันที่ต่อเนื่องในตารางนี้
-- ไม่มีตาราง `users` หรือตาราง auth ใดๆ เพราะมีผู้ใช้คนเดียว และ Auth.js ใช้ JWT session เก็บใน cookie
+- **บัญชี:** ตาราง `users (id, email unique lower-case, password_hash, created_at)` ตารางระดับบนทุกตาราง (`categories`, `entries`, `people`, `presets`, `xp_events`, `logged_days`, `owner_memory`, `settings`) มี `user_id` (ON DELETE CASCADE) ตารางลูก (`receipt_lines`, `entry_shares`) เป็นของบัญชีผ่าน entry · `logged_days` PK = (user_id, day), `owner_memory` PK = (user_id, canonical_name), `settings` PK = user_id
+- repo ทุกตัวสร้างต่อบัญชี (`createRepos(sequelize, userId)`, `createStatsRepo(sequelize, userId)` ...) ทุก query กรอง `user_id` และทุกการเขียนใส่ `user_id` เอง use case ไม่รู้จัก user_id เลย ส่วน `container().forUser(userId)` ประกอบ use case ของบัญชีนั้นต่อ request
+- migration `005-users` สร้างบัญชีแรกจาก `AUTH_EMAIL`/`AUTH_PASSWORD_HASH` แล้วยกข้อมูลเดิมทั้งหมดให้ บัญชีใน `AUTH_EXTRA_USERS` กลายเป็นบัญชีว่าง ถ้ามีข้อมูลแต่ไม่ได้ตั้ง env จะ throw · Auth.js ยังใช้ JWT session ใน cookie โดย `sub` = id ของบัญชี
 
 ## 4. Flow สำคัญ
 ### สแกนใบเสร็จ
@@ -180,8 +182,8 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 ```
 
 ### Auth guard
-- **ผู้ใช้เดียวอยู่ใน env:** `AUTH_EMAIL` + `AUTH_PASSWORD_HASH` ตรวจใน `authorize()` ของ Credentials provider ถ้าอีเมลหรือรหัสไม่ตรงให้ตอบข้อความเดียวกันเสมอ (ไม่บอกว่าผิดที่ไหน)
-- **Hash รหัสผ่านด้วย `scrypt` ของ `node:crypto`** (ไม่ต้องลง dependency เพิ่ม) เทียบด้วย `timingSafeEqual` รูปแบบ `scrypt:<N>:<r>:<p>:<salt>:<hash>` (base64url) ค่าเริ่มต้น N=2^15, r=8, p=3 ซึ่ง **ไม่มีตัว `$` ตั้งใจให้ไม่โดน dotenv/Next ขยาย `$name` ใน `.env`** เวลาตรวจจะ hash รหัสผ่านทุกครั้งแม้อีเมลผิด เพื่อให้เวลาตอบเท่ากัน สร้าง hash ด้วย `pnpm auth:hash` (ถามรหัสผ่านแบบซ่อน ขั้นต่ำ 12 ตัวอักษร)
+- **บัญชีอยู่ในตาราง `users`:** `authorize()` ของ Credentials provider เรียก `AuthenticateUser` ซึ่งคืน id ของบัญชี (`createDbCredentialVerifier`) แล้ว id นั้นไปอยู่ใน JWT (`sub`) และ `session.user.id` · `api()` ใน `lib/http.ts` อ่าน id นี้ส่งให้ handler ทุกตัว session เก่าที่ id ไม่ใช่ uuid (`"me"` จากก่อนมีบัญชี) ถือว่ายังไม่ login · ถ้าอีเมลหรือรหัสไม่ตรงให้ตอบข้อความเดียวกันเสมอ (ไม่บอกว่าผิดที่ไหน) อีเมลที่ไม่มีอยู่จะเทียบกับ hash หลอกเพื่อให้เวลาตอบเท่ากัน
+- **Hash รหัสผ่านด้วย `scrypt` ของ `node:crypto`** (ไม่ต้องลง dependency เพิ่ม) เทียบด้วย `timingSafeEqual` รูปแบบ `scrypt:<N>:<r>:<p>:<salt>:<hash>` (base64url) ค่าเริ่มต้น N=2^15, r=8, p=3 ซึ่ง **ไม่มีตัว `$` ตั้งใจให้ไม่โดน dotenv/Next ขยาย `$name` ใน `.env`** เวลาตรวจจะ hash รหัสผ่านทุกครั้งแม้อีเมลผิด เพื่อให้เวลาตอบเท่ากัน สร้างบัญชีด้วย `pnpm user:add` (ถามรหัสผ่านแบบซ่อน ขั้นต่ำ 12 ตัวอักษร)
 - **กัน brute force:** ล็อกอินผิดได้ **5 ครั้งต่อ 15 นาที** นับแยกทั้ง **ต่ออีเมล (`email:<..>`) และต่อ IP (`ip:<..>`)** เก็บในตาราง `login_attempts` (key + เวลา) ถ้าล็อกอินสำเร็จจะล้างตัวนับของทั้งสอง key เกินโควตาจะได้ error `RATE_LIMITED` (หน้า login แสดงข้อความแยกจากรหัสผิด) ตารางเดียวกันถูกใช้เป็นงบสแกน AI รายวันด้วย (key `receipt-parse`)
 - Auth.js แบบ Credentials ใช้ได้เฉพาะ JWT session (ตรงกับที่ตั้งไว้) และให้ cookie เป็น `httpOnly` + `secure` + `sameSite=lax`
 - รหัสผ่านต้องยาวและเดายาก เพราะแอปนี้เปิดสู่อินเทอร์เน็ตและมีข้อมูลการเงิน (แนะนำ ≥ 16 ตัวอักษร หรือ passphrase)
@@ -264,9 +266,8 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 |---|---|---|
 | `DATABASE_URL` | ✅ | connection string ของ Postgres (dev: `postgres://mebudget:mebudget@localhost:5432/mebudget`) |
 | `AUTH_SECRET` | ✅ | secret ของ Auth.js (สร้างด้วย `openssl rand -base64 32`) |
-| `AUTH_EMAIL` | ✅ | อีเมลของผู้ใช้คนเดียว (`container()` จะ throw ถ้าไม่ตั้ง) |
-| `AUTH_PASSWORD_HASH` | ✅ | hash จาก `pnpm auth:hash` |
-| `AUTH_EXTRA_USERS` | ไม่จำเป็น | บัญชีเพิ่มที่ล็อกอินได้ รูปแบบ `อีเมล\|hash;อีเมล2\|hash2` ทุกบัญชีเห็นข้อมูลชุดเดียวกัน (ไม่มี user_id ในตาราง) |
+| `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, `AUTH_EXTRA_USERS` | เฉพาะตอน migrate | อ่านแค่ใน migration `005-users` (ดู data model) แอปไม่อ่านแล้ว |
+| `RECEIPT_SCAN_DAILY_LIMIT` | ไม่จำเป็น | จำกัดสแกนต่อบัญชีต่อ 24 ชม. ไม่ตั้ง = นับใน `login_attempts` (key `receipt-parse:<userId>`) แต่ไม่บล็อก |
 | `GEMINI_API_KEY` | สำหรับสแกนใบเสร็จ | key ของ Gemini (ฝั่ง server เท่านั้น) |
 | `GEMINI_MODEL` | ไม่จำเป็น | override รุ่นโมเดล (ค่าเริ่มต้น `gemini-3.5-flash-lite`) — ยังไม่อยู่ใน `.env.example` |
 
@@ -278,7 +279,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 
 ### Tooling
 - **package manager: pnpm** (ห้ามใช้ npm/yarn; `packageManager: pnpm@11.17.0`, Node ≥ 22)
-- scripts ใน `package.json`: `dev`, `build`, `start`, `lint`, `test` (`vitest run`), `test:watch`, `typecheck` (`tsc --noEmit`), `db:migrate` / `db:rollback` (อ่าน `.env.local`), `db:migrate:prod` (อ่าน `DATABASE_URL` จาก environment), `auth:hash`
+- scripts ใน `package.json`: `dev`, `build`, `start`, `lint`, `test` (`vitest run`), `test:watch`, `typecheck` (`tsc --noEmit`), `db:migrate` / `db:rollback` (อ่าน `.env.local`), `db:migrate:prod` (อ่าน `DATABASE_URL` จาก environment), `user:add` / `user:add:prod`
 - `pnpm-workspace.yaml` ตั้ง `allowBuilds` เป็น `false` ทั้งหมด (ไม่อนุญาตให้ build script ของ dependency รัน): `@google/genai`, `cpu-features`, `esbuild`, `protobufjs`, `ssh2`, `unrs-resolver` — ถ้าเครื่องมือไหนต้องการ native build ค่อยเปลี่ยนรายตัวโดยตั้งใจ
 - เทส: **Vitest** (`include: src/**/*.test.ts`, alias `@` → `src`) รวม integration test ที่ใช้ Testcontainers
 - `scripts/smoke/api.py`, `scripts/smoke/receipt.py` เป็นสคริปต์ตรวจ end-to-end **ทำเอง (manual)** ยิงไปที่ dev server `http://localhost:3111` ด้วย session จริง (ต้องมีบัญชีทดสอบ; receipt.py อ่านรหัสผ่านจากตัวแปร `T_PW`) ไม่ได้รันใน `pnpm test` · `scripts/try-receipt.ts` ลองให้ Gemini อ่านรูปใบเสร็จจากไฟล์
@@ -293,7 +294,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | # | เรื่อง | ตัดสินใจ | ใครเลือก |
 |---|---|---|---|
 | T1 | Database / ORM | Neon Postgres + Sequelize v6 (เคยพิจารณา Supabase แต่ตัดสินใจกลับมาใช้ Neon) repo ใช้ model เป็นหลัก raw SQL เฉพาะ aggregate | เพื่อน |
-| T2 | Auth | Auth.js Credentials (email + password) ผู้ใช้เดียวจาก env (`AUTH_EMAIL`, `AUTH_PASSWORD_HASH`) + JWT `maxAge` 90 วัน เดิมเลือก Google แต่เปลี่ยนเป็น email/password "ไปก่อน" | เพื่อน |
+| T2 | Auth | Auth.js Credentials (email + password) บัญชีในตาราง `users` (เดิมผู้ใช้เดียวจาก env) + JWT `maxAge` 90 วัน เดิมเลือก Google แต่เปลี่ยนเป็น email/password "ไปก่อน" | เพื่อน |
 | T3 | Data flow | Client-side: TanStack Query + API routes | เพื่อน |
 | T4 | Cold start | ปลุกตามจังหวะการใช้งาน (เปิดแอป / กลับมาที่แอป / แตะ [+]) ไม่ใช้ cron | เพื่อน |
 | T5 | Gemini tier | Free tier (ยอมรับว่า Google อาจนำข้อมูลไปใช้ปรับปรุงผลิตภัณฑ์) | เพื่อน |

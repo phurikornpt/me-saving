@@ -5,8 +5,9 @@ export const MAX_FAILED_ATTEMPTS = 5;
 export const ATTEMPT_WINDOW_MS = 15 * 60 * 1000;
 
 /**
- * Single-user login. Failed attempts are throttled per email AND per IP, so a
+ * Login for any account. Failed attempts are throttled per email AND per IP, so a
  * spray from one IP or a grind on one account both stop after 5 misses / 15 min.
+ * Returns the account id, or null for wrong credentials.
  */
 export class AuthenticateUser {
   constructor(
@@ -15,7 +16,7 @@ export class AuthenticateUser {
     private readonly clock: Clock,
   ) {}
 
-  async execute(input: { email: string; password: string; ip: string }): Promise<boolean> {
+  async execute(input: { email: string; password: string; ip: string }): Promise<string | null> {
     const now = this.clock.now();
     const since = new Date(now.getTime() - ATTEMPT_WINDOW_MS);
     const keys = [`email:${input.email.trim().toLowerCase()}`, `ip:${input.ip}`];
@@ -26,11 +27,12 @@ export class AuthenticateUser {
       }
     }
 
-    if (await this.verifier.verify(input.email, input.password)) {
+    const userId = await this.verifier.verify(input.email, input.password);
+    if (userId) {
       for (const key of keys) await this.attempts.clear(key);
-      return true;
+      return userId;
     }
     for (const key of keys) await this.attempts.record(key, now);
-    return false;
+    return null;
   }
 }

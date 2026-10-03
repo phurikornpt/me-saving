@@ -22,8 +22,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           request.headers.get("x-real-ip") ??
           "unknown";
         try {
-          const ok = await container().authenticateUser.execute({ email, password, ip });
-          return ok ? { id: "me", email: email.trim().toLowerCase() } : null;
+          const userId = await container().authenticateUser.execute({ email, password, ip });
+          return userId ? { id: userId, email: email.trim().toLowerCase() } : null;
         } catch (e) {
           if (e instanceof DomainError && e.code === "RATE_LIMITED") throw new RateLimitedSignin();
           throw e;

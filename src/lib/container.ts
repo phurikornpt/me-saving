@@ -1,4 +1,3 @@
-import { cleanEnv } from "./env";
 import { AuthenticateUser } from "@/application/use-cases/authenticate-user";
 import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { GetCalendarMonth } from "@/application/use-cases/get-calendar-month";
@@ -16,59 +15,65 @@ import { systemClock } from "@/infrastructure/clock/SystemClock";
 import { createLoginAttemptRepo } from "@/infrastructure/db/repos/login-attempt-repo";
 import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos";
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "@/infrastructure/db/repos/read-repos";
+import { createDbCredentialVerifier } from "@/infrastructure/db/repos/user-repo";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
 import { getSequelize } from "@/infrastructure/db/sequelize";
-import { createEnvCredentialVerifier, parseExtraAccounts } from "@/infrastructure/security/env-credential-verifier";
+import { cleanEnv } from "./env";
+
+/** Optional daily receipt-scan limit per account. Unset = scans are counted but never blocked. */
+function scanLimitPerDay(): number | null {
+  const n = Number(cleanEnv(process.env.RECEIPT_SCAN_DAILY_LIMIT));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
 
 /** Composition root: the only place that knows which implementation backs each port. */
 function build() {
   const sequelize = getSequelize();
-  const tx = createTransactionRunner(sequelize);
-  const repos = createRepos(sequelize);
   const attempts = createLoginAttemptRepo(sequelize);
-  const stats = createStatsRepo(sequelize);
-  const categories = createCategoryRepo(sequelize);
-  const presets = createPresetRepo(sequelize);
-  const settings = createSettingsRepo(sequelize);
-  const email = cleanEnv(process.env.AUTH_EMAIL);
-  const hash = cleanEnv(process.env.AUTH_PASSWORD_HASH);
-  if (!email || !hash) throw new Error("AUTH_EMAIL and AUTH_PASSWORD_HASH must be set");
+  // Lazily built: the key only matters once someone scans a receipt.
+  let parser: ReturnType<typeof createGeminiReceiptParser> | undefined;
+  const receiptParser = () =>
+    (parser ??= createGeminiReceiptParser({
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      model: process.env.GEMINI_MODEL || undefined,
+    }));
+
+  /** Every use case for one signed-in account. Its repos only ever see that account's rows. */
+  const forUser = (userId: string) => {
+    const tx = createTransactionRunner(sequelize, userId);
+    const repos = createRepos(sequelize, userId);
+    const stats = createStatsRepo(sequelize, userId);
+    const categories = createCategoryRepo(sequelize, userId);
+    const presets = createPresetRepo(sequelize, userId);
+    const settings = createSettingsRepo(sequelize, userId);
+    return {
+      getDashboard: new GetDashboard(repos, stats, presets, settings, systemClock),
+      getCalendarMonth: new GetCalendarMonth(stats),
+      getCategoryBreakdown: new GetCategoryBreakdown(stats, categories),
+      getOutstanding: new GetOutstanding(repos),
+      listEntries: new ListEntries(repos),
+      updateEntry: new UpdateEntry(tx),
+      deleteEntry: new DeleteEntry(tx),
+      manageCategories: new ManageCategories(categories),
+      managePresets: new ManagePresets(presets),
+      manageSettings: new ManageSettings(settings),
+      managePeople: new ManagePeople(repos.people),
+      saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
+      parseReceipt: () =>
+        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, attempts, systemClock, {
+          key: `receipt-parse:${userId}`,
+          perDay: scanLimitPerDay(),
+        }),
+      recordEntry: new RecordEntry(tx, systemClock),
+      recordRepayment: new RecordRepayment(tx, systemClock),
+      markNoSpendDay: new MarkNoSpendDay(tx, systemClock),
+    };
+  };
 
   return {
     sequelize,
-    authenticateUser: new AuthenticateUser(
-      createLoginAttemptRepo(sequelize),
-      createEnvCredentialVerifier(email, hash, parseExtraAccounts(cleanEnv(process.env.AUTH_EXTRA_USERS))),
-      systemClock,
-    ),
-    getDashboard: new GetDashboard(repos, stats, presets, settings, systemClock),
-    getCalendarMonth: new GetCalendarMonth(stats),
-    getCategoryBreakdown: new GetCategoryBreakdown(stats, categories),
-    getOutstanding: new GetOutstanding(repos),
-    listEntries: new ListEntries(repos),
-    updateEntry: new UpdateEntry(tx),
-    deleteEntry: new DeleteEntry(tx),
-    manageCategories: new ManageCategories(categories),
-    managePresets: new ManagePresets(presets),
-    manageSettings: new ManageSettings(settings),
-    managePeople: new ManagePeople(repos.people),
-    saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
-    // Lazily built: the key only matters once someone scans a receipt.
-    parseReceipt: () =>
-      new ParseReceipt(
-        createGeminiReceiptParser({
-          apiKey: process.env.GEMINI_API_KEY ?? "",
-          model: process.env.GEMINI_MODEL || undefined,
-        }),
-        repos.ownerMemory,
-        categories,
-        repos.people,
-        attempts,
-        systemClock,
-      ),
-    recordEntry: new RecordEntry(tx, systemClock),
-    recordRepayment: new RecordRepayment(tx, systemClock),
-    markNoSpendDay: new MarkNoSpendDay(tx, systemClock),
+    authenticateUser: new AuthenticateUser(attempts, createDbCredentialVerifier(sequelize), systemClock),
+    forUser,
   };
 }
 
