@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, ApiError } from "@/client/api";
+import { applyOptimisticEntry } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
@@ -30,6 +31,7 @@ export function RepayScreen() {
 
   const save = useMutation({
     mutationFn: () => api.repay(total),
+    onMutate: () => applyOptimisticEntry(qc, { kind: "repayment", total }),
     onSuccess: (out) => {
       afterLog(out);
       void qc.invalidateQueries({ queryKey: ["entries"] });
@@ -37,10 +39,15 @@ export function RepayScreen() {
         message: out.balanceAfter === 0 ? "เคลียร์ยอดแฟนครบแล้ว!" : `เหลือที่แฟนติด ฿${formatBaht(out.balanceAfter)}`,
         action: { label: "ย้อนกลับ", run: () => void api.deleteEntry(out.entry.id).then(() => qc.invalidateQueries()) },
       });
-      router.replace("/");
     },
-    onError: (e) =>
-      fb.toast({ tone: "error", message: (e as ApiError).code === "REPAYMENT_EXCEEDS_BALANCE" ? "เกินยอดที่แฟนติดอยู่" : "บันทึกไม่สำเร็จ" }),
+    onError: (e, _v, rollback) => {
+      rollback?.();
+      fb.toast({
+        tone: "error",
+        message: (e as ApiError).code === "REPAYMENT_EXCEEDS_BALANCE" ? "เกินยอดที่แฟนติดอยู่" : "บันทึกไม่สำเร็จ",
+        action: { label: "ลองใหม่", run: () => save.mutate() },
+      });
+    },
   });
 
   return (
@@ -68,7 +75,10 @@ export function RepayScreen() {
       <div className="safe-bottom mt-auto space-y-4 pt-4">
         <Keypad value={amount} onChange={setAmount} />
         <div className="px-4">
-          <button className="btn3d w-full py-4 text-lg" disabled={total === 0 || over || save.isPending} onClick={() => save.mutate()}>
+          <button className="btn3d w-full py-4 text-lg" disabled={total === 0 || over || save.isPending} onClick={() => {
+              save.mutate();
+              router.replace("/");
+            }}>
             บันทึก
           </button>
         </div>

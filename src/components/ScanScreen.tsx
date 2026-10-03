@@ -13,6 +13,7 @@ import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { ReadingReceipt, Spinner } from "./Loading";
 import { Sheet } from "./Sheet";
 
 const OWNER_LABEL: Record<Owner, string> = { me: "เรา", partner: "แฟน", split: "หาร" };
@@ -140,8 +141,7 @@ export function ScanScreen() {
 
       {phase === "reading" && (
         <Center>
-          <div className="h-10 w-10 animate-spin rounded-full border-4 border-line border-t-primary" />
-          <p className="mt-4 text-ink-2">กำลังอ่านใบเสร็จ…</p>
+          <ReadingReceipt />
         </Center>
       )}
 
@@ -234,7 +234,7 @@ export function ScanScreen() {
               <span>รวม <b>฿{formatBaht(total)}</b></span>
             </div>
             <button className="btn3d w-full py-4 text-lg" disabled={!sum.valid || save.isPending} onClick={() => save.mutate()}>
-              บันทึก
+              {save.isPending ? <><Spinner /> กำลังบันทึก…</> : "บันทึก"}
             </button>
             {!sum.valid && (
               <p className="mt-1 text-center text-xs text-expense" role="status">

@@ -6,6 +6,7 @@ import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persist
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { AUTH_EXPIRED_EVENT } from "./api";
+import { TopProgress } from "@/components/Loading";
 import { wake } from "./wake";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -39,6 +40,9 @@ export function Providers({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    <QueryClientProvider client={client}>
+      <TopProgress />
+      {children}
+    </QueryClientProvider>
   );
 }

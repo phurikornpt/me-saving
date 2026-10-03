@@ -4,11 +4,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
+import { applyOptimisticEntry } from "@/client/optimistic";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { useCategories } from "@/client/queries";
 import type { SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
+import { partnerShareFor } from "@/domain/split";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Keypad } from "./Keypad";
@@ -72,6 +74,14 @@ export function NewEntryScreen() {
         occurredAt: day ? new Date(`${day}T12:00:00+07:00`).toISOString() : undefined,
         source: "manual",
       }),
+    onMutate: async (categoryId) => {
+      // Skip the preview for backdated entries: they may not land in today's numbers
+      if (day) return undefined;
+      return applyOptimisticEntry(qc, {
+        kind, total, categoryId, note: note.trim() || null,
+        partnerShare: partnerShareFor(total, split() ?? { kind: "none" }),
+      });
+    },
     onSuccess: (out, categoryId) => {
       bumpCategory(categoryId);
       afterLog(out);
@@ -86,9 +96,16 @@ export function NewEntryScreen() {
             }),
         },
       });
-      router.replace("/");
     },
-    onError: (e) => fb.toast({ tone: "error", message: MESSAGES[(e as ApiError).code] ?? describeFailure("บันทึกไม่สำเร็จ", e) }),
+    onError: (e, categoryId, rollback) => {
+      rollback?.();
+      fb.toast({
+        tone: "error",
+        ms: 9000,
+        message: MESSAGES[(e as ApiError).code] ?? describeFailure("บันทึกไม่สำเร็จ", e),
+        action: { label: "ลองใหม่", run: () => save.mutate(categoryId) },
+      });
+    },
   });
 
   const canSave = total > 0 && !save.isPending;
@@ -166,7 +183,11 @@ export function NewEntryScreen() {
             <button
               key={c.id}
               disabled={!canSave}
-              onClick={() => save.mutate(c.id)}
+              onClick={() => {
+                // leave right away: the dashboard already shows the new entry as pending
+                save.mutate(c.id);
+                router.replace("/");
+              }}
               className="flex flex-col items-center gap-1 rounded-2xl bg-card px-1 py-3 text-xs shadow-[0_3px_0_var(--line)] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
             >
               <Icon name={c.icon} size={28} className={kind === "income" ? "text-income" : "text-ink"} />

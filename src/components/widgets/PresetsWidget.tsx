@@ -3,11 +3,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "@/client/api";
+import { applyOptimisticEntry } from "@/client/optimistic";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht } from "@/domain/money";
+import { partnerShareFor } from "@/domain/split";
 import { useFeedback } from "../Feedback";
 import { Icon } from "../Icon";
+import { Spinner } from "../Loading";
 import { WidgetCard } from "./WidgetCard";
 
 export function PresetsWidget({ data }: { data: DashboardDTO }) {
@@ -25,6 +28,11 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         source: "preset",
         split: p.partnerMode ? { kind: p.partnerMode } : undefined,
       }),
+    onMutate: (p) =>
+      applyOptimisticEntry(qc, {
+        kind: "expense", total: p.amount, categoryId: p.categoryId, note: p.label, source: "preset",
+        partnerShare: p.partnerMode ? partnerShareFor(p.amount, { kind: p.partnerMode }) : 0,
+      }),
     onSuccess: (out) => {
       afterLog(out);
       fb.toast({
@@ -32,7 +40,10 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         action: { label: "ย้อนกลับ", run: () => void api.deleteEntry(out.entry.id).then(() => qc.invalidateQueries()) },
       });
     },
-    onError: () => fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ ลองอีกครั้ง" }),
+    onError: (_e, p, rollback) => {
+      rollback?.();
+      fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ", action: { label: "ลองใหม่", run: () => tap.mutate(p) } });
+    },
   });
 
   return (
@@ -53,6 +64,7 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
               <Icon name={p.icon} size={20} />
               {p.label} <span className="text-ink-3">฿{formatBaht(p.amount)}</span>
               {p.partnerMode && <Icon name="group" size={16} className="text-partner" />}
+              {tap.isPending && tap.variables?.id === p.id && <Spinner size={14} />}
             </button>
           ))}
         </div>

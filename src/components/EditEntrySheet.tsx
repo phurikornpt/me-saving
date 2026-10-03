@@ -8,6 +8,7 @@ import type { EntryDTO, SplitMode } from "@/client/types";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { Spinner } from "./Loading";
 import { Sheet } from "./Sheet";
 
 const ERRORS: Record<string, string> = {
@@ -129,7 +130,7 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
             <Icon name="delete" size={20} /> {confirmDelete ? "กดอีกครั้งเพื่อลบ" : "ลบ"}
           </button>
           <button className="btn3d flex-1" disabled={save.isPending} onClick={() => save.mutate()}>
-            บันทึก
+            {save.isPending ? <Spinner /> : "บันทึก"}
           </button>
         </div>
       </div>

@@ -26,11 +26,15 @@ export const errorBody = (code: string, message: string) => ({ error: { code, me
  */
 export function api<Ctx = unknown>(handler: (req: Request, ctx: Ctx) => Promise<unknown>) {
   return async (req: Request, ctx: Ctx): Promise<Response> => {
+    const t0 = performance.now();
     if (!(await auth())) return json(errorBody("UNAUTHORIZED", "login required"), 401);
+    const t1 = performance.now();
     try {
       const out = await handler(req, ctx);
-      if (out instanceof Response) return out;
-      return out === undefined ? new Response(null, { status: 204 }) : json(out);
+      const res = out instanceof Response ? out : out === undefined ? new Response(null, { status: 204 }) : json(out);
+      // Visible in DevTools > Network > Timing: where a slow request spent its time
+      res.headers.set("Server-Timing", `auth;dur=${(t1 - t0).toFixed(0)}, handler;dur=${(performance.now() - t1).toFixed(0)}`);
+      return res;
     } catch (e) {
       if (e instanceof DomainError) return json(errorBody(e.code, e.message), STATUS[e.code] ?? 422);
       if (e instanceof ZodError) return json(errorBody("BAD_REQUEST", e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ")), 400);

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCategories } from "@/client/queries";
+import { isPendingEntry } from "@/client/optimistic";
 import type { DashboardDTO, EntryDTO } from "@/client/types";
 import { EditEntrySheet } from "../EditEntrySheet";
 import { EntryRow } from "../EntryRow";
@@ -18,7 +19,7 @@ export function RecentWidget({ data }: { data: DashboardDTO }) {
         <ul className="divide-y divide-line">
           {data.recent.map((e) => (
             <li key={e.id}>
-              <EntryRow entry={e} categories={categories} onClick={() => setEditing(e)} />
+              <EntryRow entry={e} categories={categories} onClick={isPendingEntry(e) ? undefined : () => setEditing(e)} />
             </li>
           ))}
         </ul>

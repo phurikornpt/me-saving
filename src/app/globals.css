@@ -163,3 +163,17 @@ body {
 
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 .safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }
+
+/* Loading states */
+.skeleton {
+  border-radius: 0.75rem;
+  background: linear-gradient(90deg, var(--line) 25%, color-mix(in srgb, var(--line) 40%, var(--card)) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@keyframes top-progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+@keyframes scan-line { 0%, 100% { top: 6%; } 50% { top: 90%; } }
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .top-progress-bar, .scan-line { animation: none; }
+}

@@ -1,10 +1,11 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/client/api";
+import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -13,6 +14,7 @@ import type { WidgetId } from "@/domain/dashboard-layout";
 import { EditLayoutSheet } from "./EditLayoutSheet";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
 import { CalendarWidget } from "./widgets/CalendarWidget";
 import { PartnerWidget } from "./widgets/PartnerWidget";
@@ -37,15 +39,20 @@ export function Dashboard() {
   const router = useRouter();
   const fb = useFeedback();
   const afterLog = useAfterLog();
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
+    onMutate: () => applyOptimisticNoSpend(qc),
     onSuccess: (out) => {
       afterLog(out);
       fb.toast({ message: "วันนี้ไม่ได้ใช้เงิน นับเป็นวันที่จดแล้ว" });
     },
-    onError: () => fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ ลองอีกครั้ง" }),
+    onError: (_e, _v, rollback) => {
+      rollback?.();
+      fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ", action: { label: "ลองใหม่", run: () => noSpend.mutate() } });
+    },
   });
 
   const slots: WheelSlot[] = [
@@ -87,7 +94,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {isLoading && <p className="py-20 text-center text-ink-3">กำลังโหลด…</p>}
+      {isLoading && <DashboardSkeleton />}
       {isError && !data && (
         <div className="py-20 text-center">
           <p className="mb-3 text-ink-2">โหลดข้อมูลไม่สำเร็จ</p>

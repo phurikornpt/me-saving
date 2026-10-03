@@ -4,7 +4,7 @@ import { Sequelize } from "sequelize";
 const globalForDb = globalThis as unknown as { __sequelize?: Sequelize };
 
 /**
- * One Sequelize instance per function instance (cached on globalThis) with a tiny
+ * One Sequelize instance per function instance (cached on globalThis) with a small
  * pool, so serverless invocations don't exhaust Neon connections. Use the pooled
  * (-pooler) connection string in production. Node runtime only.
  */
@@ -16,7 +16,7 @@ export function createSequelize(url: string, opts: { ssl?: boolean } = {}): Sequ
     dialectModule: pg,
     logging: false,
     timezone: "+00:00",
-    pool: { max: 2, min: 0, idle: 10_000, acquire: 15_000 },
+    pool: { max: 5, min: 0, idle: 10_000, acquire: 15_000 },
     dialectOptions: opts.ssl ? { ssl: { require: true, rejectUnauthorized: true } } : {},
   });
 }
