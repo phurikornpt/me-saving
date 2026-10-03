@@ -4,7 +4,9 @@ export type DomainErrorCode =
   | "REPAYMENT_EXCEEDS_BALANCE"
   | "NO_SPEND_ALREADY_LOGGED"
   | "RECEIPT_TOTAL_MISMATCH"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "AI_UNAVAILABLE"
+  | "INVALID_RECEIPT";
 
 export class DomainError extends Error {
   constructor(

@@ -1,9 +1,11 @@
 import { bangkokDay, type DayKey } from "@/domain/day";
 import type { PartnerExpense, Repayment } from "@/domain/partner";
+import type { Owner } from "@/domain/split";
 import type {
   Clock,
   EntryRecord,
   NewEntry,
+  NewReceiptLine,
   Repos,
   TransactionRunner,
 } from "../ports";
@@ -19,9 +21,13 @@ export function createFakeRepos() {
   const entries: EntryRecord[] = [];
   const days = new Map<DayKey, "entry" | "no_spend">();
   const xp: { reason: string; amount: number; at: Date }[] = [];
+  const lines: (NewReceiptLine & { entryId: string })[] = [];
+  const memory = new Map<string, Owner>();
   let seq = 0;
 
   const repos: Repos = {
+    receiptLines: undefined as never,
+    ownerMemory: undefined as never,
     entries: {
       async insert(e: NewEntry) {
         const rec = { ...e, id: `e${++seq}` };
@@ -67,6 +73,20 @@ export function createFakeRepos() {
     },
   };
 
+  repos.receiptLines = {
+    async insertMany(entryId, items) {
+      items.forEach((l) => lines.push({ ...l, entryId }));
+    },
+  };
+  repos.ownerMemory = {
+    async all() {
+      return new Map(memory);
+    },
+    async upsertMany(items) {
+      items.forEach((i) => memory.set(i.canonicalName, i.owner));
+    },
+  };
+
   const tx: TransactionRunner = { run: (fn) => fn(repos) };
-  return { repos, tx, entries, days, xp };
+  return { repos, tx, entries, days, xp, lines, memory };
 }

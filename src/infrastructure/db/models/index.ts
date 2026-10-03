@@ -7,6 +7,7 @@ import {
   type InferCreationAttributes,
   type Sequelize,
 } from "sequelize";
+import type { LayoutItem } from "@/domain/dashboard-layout";
 
 // Schema of record for queries. The tables themselves are created by the SQL migrations,
 // so these definitions deliberately mirror them (column names via `underscored`).
@@ -85,7 +86,7 @@ export class XpEvent extends Model<InferAttributes<XpEvent>, InferCreationAttrib
 export class Setting extends Model<InferAttributes<Setting>, InferCreationAttributes<Setting>> {
   declare id: CreationOptional<number>;
   declare partnerNote: CreationOptional<string>;
-  declare dashboardLayout: CreationOptional<unknown>;
+  declare dashboardLayout: CreationOptional<LayoutItem[]>;
 }
 
 export class LoginAttempt extends Model<

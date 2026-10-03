@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { allocateToBillTotal } from "./allocate";
+import { DEFAULT_LAYOUT, normalizeLayout, WIDGET_IDS } from "./dashboard-layout";
 import { addDays, bangkokDay, bangkokDayRange } from "./day";
 import { DomainError } from "./errors";
 import { formatBaht, formatCompact, parseBaht } from "./money";
@@ -182,5 +183,30 @@ describe("xp", () => {
     expect(levelFromXp(100)).toEqual({ level: 2, xpIntoLevel: 0, xpForNext: 200 });
     expect(levelFromXp(300)).toEqual({ level: 3, xpIntoLevel: 0, xpForNext: 300 });
     expect(levelFromXp(350)).toEqual({ level: 3, xpIntoLevel: 50, xpForNext: 300 });
+  });
+});
+
+describe("dashboard layout", () => {
+  it("falls back to the defaults for garbage", () => {
+    expect(normalizeLayout(null)).toEqual(DEFAULT_LAYOUT);
+    expect(normalizeLayout([])).toEqual(DEFAULT_LAYOUT);
+    expect(normalizeLayout("x")).toEqual(DEFAULT_LAYOUT);
+  });
+  it("keeps the user's order and toggles, drops unknown/duplicate ids", () => {
+    const out = normalizeLayout([
+      { id: "calendar", enabled: true },
+      { id: "nope", enabled: true },
+      { id: "streak", enabled: false },
+      { id: "calendar", enabled: false },
+    ]);
+    expect(out.slice(0, 2)).toEqual([
+      { id: "calendar", enabled: true },
+      { id: "streak", enabled: false },
+    ]);
+    expect(out.map((i) => i.id).sort()).toEqual([...WIDGET_IDS].sort());
+  });
+  it("appends widgets added in later versions as enabled", () => {
+    const out = normalizeLayout([{ id: "streak", enabled: true }]);
+    expect(out.find((i) => i.id === "calendar")).toEqual({ id: "calendar", enabled: true });
   });
 });

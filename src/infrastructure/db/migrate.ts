@@ -1,8 +1,12 @@
 import { Umzug } from "umzug";
 import type { Sequelize } from "sequelize";
 import { migration as m001 } from "./migrations/001-initial";
+import { migration as m002 } from "./migrations/002-seed-categories";
 
-const migrations = [{ name: "001-initial", ...m001 }];
+const migrations = [
+  { name: "001-initial", ...m001 },
+  { name: "002-seed-categories", ...m002 },
+];
 
 export function createMigrator(sequelize: Sequelize) {
   const qi = sequelize.getQueryInterface();

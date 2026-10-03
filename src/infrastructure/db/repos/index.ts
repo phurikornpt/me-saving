@@ -5,6 +5,8 @@ import type {
   EntryRepo,
   LoggedDayRepo,
   NewEntry,
+  OwnerMemoryRepo,
+  ReceiptLineRepo,
   Repos,
   TransactionRunner,
   XpRepo,
@@ -98,7 +100,32 @@ export function createRepos(sequelize: Sequelize, transaction?: Transaction): Re
     },
   };
 
-  return { entries, loggedDays, xp };
+  const receiptLines: ReceiptLineRepo = {
+    async insertMany(entryId, lines) {
+      await m.ReceiptLine.bulkCreate(
+        lines.map((l, position) => ({ ...l, entryId, position })),
+        t,
+      );
+    },
+  };
+
+  const ownerMemory: OwnerMemoryRepo = {
+    async all() {
+      const rows = await m.OwnerMemory.findAll(t);
+      return new Map(rows.map((r) => [r.canonicalName, r.owner]));
+    },
+    async upsertMany(items, at) {
+      if (items.length === 0) return;
+      // later duplicates within one receipt win, matching what the user saw last
+      const unique = [...new Map(items.map((i) => [i.canonicalName, i])).values()];
+      await m.OwnerMemory.bulkCreate(
+        unique.map((i) => ({ canonicalName: i.canonicalName, owner: i.owner, updatedAt: at })),
+        { ...t, updateOnDuplicate: ["owner", "updatedAt"] },
+      );
+    },
+  };
+
+  return { entries, loggedDays, xp, receiptLines, ownerMemory };
 }
 
 export function createTransactionRunner(sequelize: Sequelize): TransactionRunner {
