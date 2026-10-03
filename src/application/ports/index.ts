@@ -1,8 +1,8 @@
 import type { DayKey } from "@/domain/day";
 import type { Satang } from "@/domain/money";
 import type { LayoutItem } from "@/domain/dashboard-layout";
-import type { PartnerExpense, Repayment } from "@/domain/partner";
-import type { Owner } from "@/domain/split";
+import type { Ledger } from "@/domain/ledger";
+import type { LineOwners, Share } from "@/domain/split";
 
 export interface Clock {
   now(): Date;
@@ -18,7 +18,10 @@ export interface NewEntry {
   occurredAt: Date;
   createdAt: Date;
   total: Satang;
-  partnerShare: Satang;
+  /** What each person owes us for this entry. Expenses only; empty when it's all ours. */
+  shares: Share[];
+  /** Who paid us back. Repayments only. */
+  personId: string | null;
   categoryId: string | null;
   note: string | null;
   merchant: string | null;
@@ -27,18 +30,21 @@ export interface NewEntry {
 
 export interface EntryRecord extends NewEntry {
   id: string;
+  /** Sum of `shares`: the part of the total that isn't ours. */
+  othersShare: Satang;
 }
 
 export interface EntryRepo {
   insert(entry: NewEntry): Promise<EntryRecord>;
-  partnerLedger(): Promise<{ expenses: PartnerExpense[]; repayments: Repayment[] }>;
+  /** Every person's shares and repayments. */
+  ledger(): Promise<Ledger>;
   recent(limit: number): Promise<EntryRecord[]>;
   /** Entries that happened on a Bangkok calendar day, newest first. */
   onDay(day: DayKey): Promise<EntryRecord[]>;
   findById(id: string): Promise<EntryRecord | null>;
   update(
     id: string,
-    patch: Partial<Pick<EntryRecord, "occurredAt" | "total" | "partnerShare" | "categoryId" | "note" | "merchant">>,
+    patch: Partial<Pick<NewEntry, "occurredAt" | "total" | "shares" | "categoryId" | "note" | "merchant">>,
   ): Promise<EntryRecord | null>;
   remove(id: string): Promise<boolean>;
 }
@@ -62,7 +68,7 @@ export interface NewReceiptLine {
   qty: number;
   /** Satang, after bill-level discount / VAT have been allocated onto the line. */
   price: Satang;
-  owner: Owner;
+  owners: LineOwners;
   categoryId: string | null;
   lowConfidence: boolean;
 }
@@ -71,9 +77,24 @@ export interface ReceiptLineRepo {
 }
 
 export interface OwnerMemoryRepo {
-  /** canonicalName -> the owner the user last chose for it. */
-  all(): Promise<Map<string, Owner>>;
-  upsertMany(items: { canonicalName: string; owner: Owner }[], at: Date): Promise<void>;
+  /** canonicalName -> who the user last said the item was for. */
+  all(): Promise<Map<string, LineOwners>>;
+  upsertMany(items: { canonicalName: string; owners: LineOwners }[], at: Date): Promise<void>;
+}
+
+/** Someone we front money for. Not a login: just a name the user sets up, plus a note for the AI. */
+export interface PersonRecord {
+  id: string;
+  name: string;
+  /** Free text about what they like or use; sent to the AI when a bill is split with them. */
+  note: string;
+  sort: number;
+  archived: boolean;
+}
+export interface PersonRepo {
+  list(): Promise<PersonRecord[]>;
+  create(p: Pick<PersonRecord, "name" | "note" | "sort">): Promise<PersonRecord>;
+  update(id: string, patch: Partial<Omit<PersonRecord, "id">>): Promise<PersonRecord | null>;
 }
 
 export interface Repos {
@@ -82,6 +103,7 @@ export interface Repos {
   xp: XpRepo;
   receiptLines: ReceiptLineRepo;
   ownerMemory: OwnerMemoryRepo;
+  people: PersonRepo;
 }
 
 /** What the AI read off a receipt. Amounts are satang; names are kept verbatim as printed. */
@@ -93,7 +115,8 @@ export interface ParsedReceiptLine {
   /** Line total as printed (may still include bill-level discount / VAT effects). */
   price: Satang;
   categoryName: string | null;
-  owner: Owner;
+  /** Person ids are the ones passed in `people`. Always "me" when no one shares the bill. */
+  owners: LineOwners;
   /** false => the guess is weak; the UI highlights the line. */
   confident: boolean;
 }
@@ -108,13 +131,18 @@ export interface ParsedReceipt {
 export interface ReceiptParser {
   parse(
     image: { data: Uint8Array; mimeType: string },
-    context: { partnerNote: string; knownNames: string[]; categoryNames: string[] },
+    context: {
+      /** Who shares this bill. Empty = just read the lines (no guessing who each is for). */
+      people: Pick<PersonRecord, "id" | "name" | "note">[];
+      knownNames: string[];
+      categoryNames: string[];
+    },
   ): Promise<ParsedReceipt>;
 }
 
 export interface DailyTotal {
   day: DayKey;
-  /** Our own spending only: partner's share is excluded. */
+  /** Our own spending only: other people's shares are excluded. */
   spent: Satang;
   earned: Satang;
 }
@@ -149,7 +177,9 @@ export interface PresetRecord {
   icon: string;
   amount: Satang;
   categoryId: string | null;
-  partnerMode: "split" | "partnerAll" | null;
+  /** A fronted preset: who it's for and how it splits. Both null = all ours. */
+  personId: string | null;
+  splitKind: "equal" | "theirs" | null;
   sort: number;
 }
 export interface PresetRepo {
@@ -160,7 +190,6 @@ export interface PresetRepo {
 }
 
 export interface SettingsRecord {
-  partnerNote: string;
   dashboardLayout: LayoutItem[];
 }
 export interface SettingsRepo {

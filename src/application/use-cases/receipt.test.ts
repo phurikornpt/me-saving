@@ -10,6 +10,11 @@ import { MAX_PARSES_PER_DAY, ParseReceipt } from "./parse-receipt";
 import { SaveReceiptEntry } from "./save-receipt-entry";
 
 const NOON = new Date("2026-10-03T05:00:00Z");
+const FAN = "p-fan"; // seeded by createFakeRepos, with the note "ชอบนมเปรี้ยว"
+const A = "p-a";
+const ME = { me: true, people: [] };
+const own = (...people: string[]) => ({ me: false, people });
+const shared = (...people: string[]) => ({ me: true, people });
 const img = { data: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
 
 const cats: CategoryRecord[] = [
@@ -38,16 +43,16 @@ const RECEIPT: ParsedReceipt = {
   date: "2026-10-03",
   total: 16400,
   lines: [
-    { rawName: "ข้าวปั้นแซลมอน", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, categoryName: "อาหาร", owner: "me", confident: true },
-    { rawName: "DUTCHMILL YOG STRAW", canonicalName: "นมเปรี้ยว", qty: 1, price: 1500, categoryName: "อาหาร", owner: "partner", confident: true },
-    { rawName: "แชมพู ซันซิล", canonicalName: "แชมพู", qty: 1, price: 8900, categoryName: null, owner: "split", confident: false },
-    { rawName: "ลูกอม", canonicalName: "ลูกอม", qty: 1, price: 2500, categoryName: "อาหาร", owner: "partner", confident: false },
+    { rawName: "ข้าวปั้นแซลมอน", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, categoryName: "อาหาร", owners: ME, confident: true },
+    { rawName: "DUTCHMILL YOG STRAW", canonicalName: "นมเปรี้ยว", qty: 1, price: 1500, categoryName: "อาหาร", owners: own(FAN), confident: true },
+    { rawName: "แชมพู ซันซิล", canonicalName: "แชมพู", qty: 1, price: 8900, categoryName: null, owners: shared(FAN), confident: false },
+    { rawName: "ลูกอม", canonicalName: "ลูกอม", qty: 1, price: 2500, categoryName: "อาหาร", owners: own(FAN), confident: false },
   ],
 };
 
 function setupParse(parsed: ParsedReceipt = RECEIPT) {
   const f = createFakeRepos();
-  const seen: { partnerNote: string; knownNames: string[]; categoryNames: string[] }[] = [];
+  const seen: Parameters<ReceiptParser["parse"]>[1][] = [];
   const parser: ReceiptParser = {
     async parse(_img, ctx) {
       seen.push(ctx);
@@ -59,7 +64,7 @@ function setupParse(parsed: ParsedReceipt = RECEIPT) {
     parser,
     f.repos.ownerMemory,
     { list: async () => cats, create: async () => cats[0], update: async () => null },
-    { get: async () => ({ partnerNote: "ชอบนมเปรี้ยว", dashboardLayout: [] }), update: async () => ({ partnerNote: "", dashboardLayout: [] }) },
+    f.repos.people,
     b,
     new FixedClock(NOON),
   );
@@ -67,22 +72,55 @@ function setupParse(parsed: ParsedReceipt = RECEIPT) {
 }
 
 describe("ParseReceipt", () => {
-  it("owner order: memory > AI (when confident) > default 'me' flagged low-confidence", async () => {
-    const { f, uc } = setupParse();
-    f.memory.set("นมเปรี้ยว", "split"); // the user once chose split; that beats the AI's "partner"
+  it("a plain scan (nobody picked) only reads the lines: all ours, no guessing, memory unused", async () => {
+    const { f, uc, seen } = setupParse();
+    f.memory.set("นมเปรี้ยว", own(FAN));
     const draft = await uc.execute(img);
-    const by = Object.fromEntries(draft.lines.map((l) => [l.canonicalName, l]));
-    expect(by["นมเปรี้ยว"]).toMatchObject({ owner: "split", ownerSource: "memory", lowConfidence: false });
-    expect(by["ข้าวปั้น"]).toMatchObject({ owner: "me", ownerSource: "ai", lowConfidence: false });
-    expect(by["แชมพู"]).toMatchObject({ owner: "me", ownerSource: "default", lowConfidence: true });
-    expect(by["ลูกอม"]).toMatchObject({ owner: "me", ownerSource: "default", lowConfidence: true });
+    expect(seen[0].people).toEqual([]);
+    expect(draft.lines.every((l) => l.owners.me && l.owners.people.length === 0 && !l.lowConfidence)).toBe(true);
   });
 
-  it("gives the AI the partner note, remembered names and only active expense categories", async () => {
+  it("owner order on a shared bill: memory > AI (when confident) > default 'me' flagged low-confidence", async () => {
+    const { f, uc } = setupParse();
+    f.memory.set("นมเปรี้ยว", shared(FAN)); // the user once chose หาร; that beats the AI's "แฟน"
+    const draft = await uc.execute(img, [FAN]);
+    const by = Object.fromEntries(draft.lines.map((l) => [l.canonicalName, l]));
+    expect(by["นมเปรี้ยว"]).toMatchObject({ owners: shared(FAN), ownerSource: "memory", lowConfidence: false });
+    expect(by["ข้าวปั้น"]).toMatchObject({ owners: ME, ownerSource: "ai", lowConfidence: false });
+    expect(by["แชมพู"]).toMatchObject({ owners: ME, ownerSource: "default", lowConfidence: true });
+    expect(by["ลูกอม"]).toMatchObject({ owners: ME, ownerSource: "default", lowConfidence: true });
+  });
+
+  it("memory is narrowed to who is on this bill, and skipped when none of them are", async () => {
+    const { f, uc } = setupParse();
+    f.memory.set("แชมพู", shared(FAN, A)); // shared by three last time; today A isn't here
+    f.memory.set("นมเปรี้ยว", own(A)); //      A's; A isn't here, so fall back to the AI
+    const by = Object.fromEntries((await uc.execute(img, [FAN])).lines.map((l) => [l.canonicalName, l]));
+    expect(by["แชมพู"]).toMatchObject({ owners: shared(FAN), ownerSource: "memory" });
+    expect(by["นมเปรี้ยว"]).toMatchObject({ owners: own(FAN), ownerSource: "ai" });
+  });
+
+  it("ignores an AI guess that names someone who isn't on the bill", async () => {
+    const { uc } = setupParse();
+    const by = Object.fromEntries((await uc.execute(img, [A])).lines.map((l) => [l.canonicalName, l]));
+    expect(by["นมเปรี้ยว"]).toMatchObject({ owners: ME, ownerSource: "default", lowConfidence: true });
+  });
+
+  it("gives the AI the picked people with their notes, remembered names and only active expense categories", async () => {
     const { f, uc, seen } = setupParse();
-    f.memory.set("นมเปรี้ยว", "partner");
-    await uc.execute(img);
-    expect(seen[0]).toEqual({ partnerNote: "ชอบนมเปรี้ยว", knownNames: ["นมเปรี้ยว"], categoryNames: ["อาหาร"] });
+    f.memory.set("นมเปรี้ยว", own(FAN));
+    await uc.execute(img, [FAN]);
+    expect(seen[0]).toEqual({
+      people: [{ id: FAN, name: "แฟน", note: "ชอบนมเปรี้ยว" }],
+      knownNames: ["นมเปรี้ยว"],
+      categoryNames: ["อาหาร"],
+    });
+  });
+
+  it("refuses an unknown person before spending quota", async () => {
+    const { uc, b } = setupParse();
+    await expect(uc.execute(img, ["ghost"])).rejects.toMatchObject({ code: "UNKNOWN_PERSON" });
+    expect(b.n).toBe(0);
   });
 
   it("flags when printed lines don't add up to the paid total", async () => {
@@ -110,7 +148,7 @@ describe("ParseReceipt", () => {
     const uc = new ParseReceipt(
       failing, f.repos.ownerMemory,
       { list: async () => [], create: async () => cats[0], update: async () => null },
-      { get: async () => ({ partnerNote: "", dashboardLayout: [] }), update: async () => ({ partnerNote: "", dashboardLayout: [] }) },
+      f.repos.people,
       b, new FixedClock(NOON),
     );
     for (let i = 0; i < MAX_PARSES_PER_DAY; i++) await expect(uc.execute(img)).rejects.toThrow("quota");
@@ -120,7 +158,7 @@ describe("ParseReceipt", () => {
 
 describe("SaveReceiptEntry", () => {
   const lines = RECEIPT.lines.map((l) => ({
-    rawName: l.rawName, canonicalName: l.canonicalName, qty: l.qty, price: l.price, owner: l.owner,
+    rawName: l.rawName, canonicalName: l.canonicalName, qty: l.qty, price: l.price, owners: l.owners,
   }));
 
   function setupSave() {
@@ -128,12 +166,29 @@ describe("SaveReceiptEntry", () => {
     return { f, uc: new SaveReceiptEntry(f.tx, new FixedClock(NOON)) };
   }
 
-  it("1 receipt = 1 expense; partner share = partner lines + half of split lines (odd satang ours)", async () => {
+  it("1 receipt = 1 expense; a person owes their lines + their part of shared lines (odd satang ours)", async () => {
     const { f, uc } = setupSave();
     const out = await uc.execute({ merchant: "7-Eleven", total: 16400, lines });
     expect(f.entries).toHaveLength(1);
-    expect(out.entry).toMatchObject({ kind: "expense", source: "receipt", total: 16400, partnerShare: 1500 + 4450 + 2500 });
+    expect(out.entry).toMatchObject({ kind: "expense", source: "receipt", total: 16400, othersShare: 1500 + 4450 + 2500 });
+    expect(out.entry.shares).toEqual([{ personId: FAN, amount: 1500 + 4450 + 2500 }]);
     expect(f.lines).toHaveLength(4);
+  });
+
+  it("splits between several people line by line", async () => {
+    const { uc } = setupSave();
+    const out = await uc.execute({
+      total: 9000,
+      lines: [
+        { rawName: "a", canonicalName: "a", qty: 1, price: 3000, owners: shared(FAN, A) }, // 1000 each
+        { rawName: "b", canonicalName: "b", qty: 1, price: 4000, owners: own(FAN, A) }, //    2000 each
+        { rawName: "c", canonicalName: "c", qty: 1, price: 2000, owners: own(A) },
+      ],
+    });
+    expect(out.entry.shares).toEqual([
+      { personId: FAN, amount: 3000 },
+      { personId: A, amount: 5000 },
+    ]);
   });
 
   it("allocates a bill-level discount so lines sum to the paid total to the satang", async () => {
@@ -142,13 +197,26 @@ describe("SaveReceiptEntry", () => {
     expect(f.lines.reduce((s, l) => s + l.price, 0)).toBe(15000);
   });
 
-  it("remembers every line's owner for next time (and the last choice wins)", async () => {
+  it("remembers every line's owners for next time (and the last choice wins)", async () => {
     const { f, uc } = setupSave();
-    f.memory.set("ลูกอม", "me");
+    f.memory.set("ลูกอม", ME);
     await uc.execute({ total: 16400, lines });
-    expect(f.memory.get("นมเปรี้ยว")).toBe("partner");
-    expect(f.memory.get("แชมพู")).toBe("split");
-    expect(f.memory.get("ลูกอม")).toBe("partner");
+    expect(f.memory.get("นมเปรี้ยว")).toEqual(own(FAN));
+    expect(f.memory.get("แชมพู")).toEqual(shared(FAN));
+    expect(f.memory.get("ลูกอม")).toEqual(own(FAN));
+  });
+
+  it("a plain scan teaches nothing, and a bill without someone doesn't overwrite what we know about them", async () => {
+    const { f, uc } = setupSave();
+    f.memory.set("นมเปรี้ยว", own(FAN));
+    const mine = lines.map((l) => ({ ...l, owners: ME }));
+    await uc.execute({ total: 16400, lines: mine, people: [] });
+    expect(f.memory.get("นมเปรี้ยว")).toEqual(own(FAN));
+    expect(f.memory.has("ข้าวปั้น")).toBe(false);
+
+    await uc.execute({ total: 16400, lines: mine, people: [A] }); // shared with A only: แฟน's milk isn't touched
+    expect(f.memory.get("นมเปรี้ยว")).toEqual(own(FAN));
+    expect(f.memory.get("ข้าวปั้น")).toEqual(ME);
   });
 
   it("counts as logging today (+10 XP, streak 1)", async () => {
@@ -161,6 +229,11 @@ describe("SaveReceiptEntry", () => {
     await expect(uc.execute({ total: 0, lines })).rejects.toMatchObject({ code: "INVALID_AMOUNT" });
     await expect(uc.execute({ total: 100, lines: [] })).rejects.toMatchObject({ code: "INVALID_RECEIPT" });
     await expect(uc.execute({ total: 100, lines: [{ ...lines[0], qty: 0 }] })).rejects.toMatchObject({ code: "INVALID_RECEIPT" });
+    await expect(uc.execute({ total: 100, lines: [{ ...lines[0], owners: own() }] })).rejects.toMatchObject({ code: "INVALID_SPLIT" });
+    await expect(uc.execute({ total: 1500, lines: [lines[1]], people: [A] })).rejects.toMatchObject({ code: "INVALID_SPLIT" });
+    await expect(uc.execute({ total: 1500, lines: [{ ...lines[1], owners: own("ghost") }] })).rejects.toMatchObject({
+      code: "UNKNOWN_PERSON",
+    });
     expect(f.entries).toHaveLength(0);
   });
 });

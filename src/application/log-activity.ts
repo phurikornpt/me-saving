@@ -40,7 +40,7 @@ export async function logActivity(
 
   if (extraXp > 0) {
     xpGained += extraXp;
-    await repos.xp.add("partner_cleared", extraXp, now);
+    await repos.xp.add("balance_cleared", extraXp, now);
   }
 
   const streak = computeStreak(days ?? (await repos.loggedDays.allDays()), today).current;

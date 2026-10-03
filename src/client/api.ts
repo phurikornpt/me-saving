@@ -1,6 +1,6 @@
 import type {
-  ActivityDTO, CalendarDTO, CategoryBreakdownDTO, CategoryDTO, DashboardDTO, EntryDTO, OutstandingDTO, PresetDTO,
-  ReceiptDraftDTO, SettingsDTO, SplitMode,
+  ActivityDTO, CalendarDTO, CategoryBreakdownDTO, CategoryDTO, DashboardDTO, EntryDTO, LineOwners, OutstandingDTO, PersonDTO,
+  PresetDTO, ReceiptDraftDTO, SettingsDTO, SplitMode,
 } from "./types";
 
 export const AUTH_EXPIRED_EVENT = "me-budget:auth-expired";
@@ -37,7 +37,8 @@ export const api = {
   calendar: (month: string) => request<CalendarDTO>("GET", `/api/calendar${q({ month })}`),
   categoryBreakdown: (month: string) => request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
-  outstanding: () => request<OutstandingDTO>("GET", "/api/partner/outstanding"),
+  outstanding: () => request<OutstandingDTO>("GET", "/api/people/outstanding"),
+  people: () => request<PersonDTO[]>("GET", "/api/people"),
   categories: () => request<CategoryDTO[]>("GET", "/api/categories"),
   settings: () => request<SettingsDTO>("GET", "/api/settings"),
 
@@ -48,23 +49,29 @@ export const api = {
   updateEntry: (id: string, b: Partial<{ total: number; categoryId: string | null; note: string | null; occurredAt: string; split: SplitMode }>) =>
     request<EntryDTO>("PATCH", `/api/entries/${id}`, b),
   deleteEntry: (id: string) => request<void>("DELETE", `/api/entries/${id}`),
-  repay: (amount: number, note?: string) => request<ActivityDTO & { entry: EntryDTO; balanceAfter: number }>("POST", "/api/repayments", { amount, note }),
+  repay: (personId: string, amount: number, note?: string) =>
+    request<ActivityDTO & { entry: EntryDTO; balanceAfter: number }>("POST", "/api/repayments", { personId, amount, note }),
   noSpend: () => request<ActivityDTO>("POST", "/api/no-spend"),
 
-  parseReceipt: (image: Blob) => {
+  /** `people`: who shares the bill. None = just read the lines. */
+  parseReceipt: (image: Blob, people: string[] = []) => {
     const f = new FormData();
     f.set("image", image, "receipt.jpg");
+    if (people.length) f.set("people", people.join(","));
     return request<ReceiptDraftDTO>("POST", "/api/receipt/parse", f);
   },
   saveReceipt: (b: {
-    source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number;
-    lines: { rawName: string; canonicalName: string; qty: number; price: number; owner: "me" | "partner" | "split"; categoryId?: string | null; lowConfidence?: boolean }[];
+    source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number; people?: string[];
+    lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null; lowConfidence?: boolean }[];
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/receipts", b),
 
   createPreset: (b: Omit<PresetDTO, "id" | "sort"> & { sort?: number }) => request<PresetDTO>("POST", "/api/presets", b),
   deletePreset: (id: string) => request<void>("DELETE", `/api/presets/${id}`),
   createCategory: (b: { name: string; icon: string; kind: "expense" | "income" }) => request<CategoryDTO>("POST", "/api/categories", b),
   archiveCategory: (id: string) => request<void>("DELETE", `/api/categories/${id}`),
+  createPerson: (b: { name: string; note?: string }) => request<PersonDTO>("POST", "/api/people", b),
+  updatePerson: (id: string, b: Partial<Pick<PersonDTO, "name" | "note" | "archived" | "sort">>) =>
+    request<PersonDTO>("PATCH", `/api/people/${id}`, b),
   updateSettings: (b: Partial<SettingsDTO>) => request<SettingsDTO>("PATCH", "/api/settings", b),
   wake: () => fetch("/api/wake", { cache: "no-store" }).catch(() => undefined),
 };

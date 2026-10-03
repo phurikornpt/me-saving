@@ -6,19 +6,22 @@ import { useMemo, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
-import { useCategories } from "@/client/queries";
-import type { SplitMode } from "@/client/types";
+import { activePeople, describeShares } from "@/client/people";
+import { useCategories, usePeople } from "@/client/queries";
+import type { Share, SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
-import { partnerShareFor } from "@/domain/split";
+import { sharesFor, sumShares } from "@/domain/split";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Keypad } from "./Keypad";
+import { PeoplePicker, PersonDot } from "./People";
 
-type PartnerChoice = "split" | "partnerAll" | "custom";
+type SplitChoice = "equal" | "theirs" | "custom";
 const MESSAGES: Record<string, string> = {
-  INVALID_SPLIT: "ส่วนของแฟนต้องไม่เกินยอดรวม",
+  INVALID_SPLIT: "ส่วนของคนอื่นรวมกันต้องไม่เกินยอดรวม",
+  UNKNOWN_PERSON: "ไม่พบคนที่เลือก ลองโหลดหน้าใหม่",
   INVALID_AMOUNT: "ใส่จำนวนเงินก่อนนะ",
   RATE_LIMITED: "ช้าลงหน่อย ลองใหม่อีกที",
 };
@@ -31,12 +34,17 @@ export function NewEntryScreen() {
   const fb = useFeedback();
   const afterLog = useAfterLog();
   const { data: categories = [] } = useCategories();
+  const { data: people = [] } = usePeople();
 
   const [kind, setKind] = useState<"expense" | "income">(mode === "income" ? "income" : "expense");
   const [amount, setAmount] = useState("");
   const [fronting, setFronting] = useState(mode === "front");
-  const [choice, setChoice] = useState<PartnerChoice>("split");
-  const [customShare, setCustomShare] = useState("");
+  const [choice, setChoice] = useState<SplitChoice>("equal");
+  // null = untouched: with only one person set up, they are picked for you
+  const [picked, setPicked] = useState<string[] | null>(null);
+  const active = activePeople(people);
+  const withWho = picked ?? (active.length === 1 ? [active[0].id] : []);
+  const [custom, setCustom] = useState<Record<string, string>>({});
   const [note, setNote] = useState("");
   // ?day=YYYY-MM-DD comes from "add to this day" on the calendar; only past days count as backdated (today is a normal entry)
   const dayParam = params.get("day");
@@ -58,10 +66,30 @@ export function NewEntryScreen() {
   }, [amount]);
 
   const split = (): SplitMode | undefined => {
-    if (kind !== "expense" || !fronting) return undefined;
-    if (choice === "custom") return { kind: "custom", partnerShare: customShare ? parseBaht(customShare) : 0 };
-    return { kind: choice };
+    if (kind !== "expense" || !fronting || withWho.length === 0) return undefined;
+    if (choice === "custom") {
+      const shares: Share[] = withWho.map((personId) => {
+        try {
+          return { personId, amount: custom[personId] ? parseBaht(custom[personId]) : 0 };
+        } catch {
+          return { personId, amount: 0 };
+        }
+      });
+      return { kind: "custom", shares };
+    }
+    return { kind: choice, people: withWho };
   };
+
+  // What the preview line shows; null when the split can't be worked out yet (e.g. custom over the total)
+  const preview = ((): Share[] | null => {
+    const m = split();
+    if (!m) return null;
+    try {
+      return sharesFor(total, m);
+    } catch {
+      return null;
+    }
+  })();
 
   const save = useMutation({
     mutationFn: (categoryId: string) =>
@@ -80,7 +108,7 @@ export function NewEntryScreen() {
       if (day) return undefined;
       return applyOptimisticEntry(qc, {
         kind, total, categoryId, note: note.trim() || null,
-        partnerShare: partnerShareFor(total, split() ?? { kind: "none" }),
+        shares: preview ?? [],
       });
     },
     onSuccess: (out, categoryId) => {
@@ -109,8 +137,9 @@ export function NewEntryScreen() {
     },
   });
 
-  const canSave = total > 0 && !save.isPending;
-  const share = fronting && choice !== "custom" ? (choice === "split" ? Math.floor(total / 2) : total) : null;
+  // Fronting with nobody picked, or a custom split that doesn't fit, can't be saved
+  const splitOk = !fronting || kind !== "expense" || (withWho.length > 0 && preview !== null);
+  const canSave = total > 0 && splitOk && !save.isPending;
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
@@ -141,8 +170,11 @@ export function NewEntryScreen() {
           {amount || "0"}
         </div>
         {/* always occupies its line so the keypad below never jumps while typing */}
-        <p className="mt-1 h-5 text-sm text-partner">
-          {share !== null && total > 0 && `ของเรา ฿${formatBaht(total - share)} · แฟนติด ฿${formatBaht(share)}`}
+        <p className="mt-1 h-5 truncate text-sm text-partner">
+          {preview && preview.length > 0 && total > 0 && `ของเรา ฿${formatBaht(total - sumShares(preview))} · ${describeShares(people, preview)}`}
+          {fronting && kind === "expense" && total > 0 && preview === null && withWho.length > 0 && (
+            <span className="text-expense">ส่วนของคนอื่นรวมกันเกินยอด</span>
+          )}
         </p>
       </section>
 
@@ -150,13 +182,13 @@ export function NewEntryScreen() {
         <section className="px-4 pt-3">
           <div className="flex flex-wrap items-center gap-2">
             <button className={`pill flex items-center gap-1 ${fronting ? "on" : ""}`} aria-pressed={fronting} onClick={() => setFronting((v) => !v)}>
-              <Icon name="group" size={18} /> ออกก่อนแฟน
+              <Icon name="group" size={18} /> ออกก่อน
             </button>
             {fronting &&
               (
                 [
-                  ["split", "หาร"],
-                  ["partnerAll", "ของแฟนทั้งหมด"],
+                  ["equal", "หารเท่ากัน"],
+                  ["theirs", "ของเขาทั้งหมด"],
                   ["custom", "กรอกเอง"],
                 ] as const
               ).map(([k, label]) => (
@@ -165,14 +197,27 @@ export function NewEntryScreen() {
                 </button>
               ))}
           </div>
+          {fronting && (
+            <div className="mt-2">
+              <PeoplePicker people={people} selected={withWho} onChange={setPicked} label="ออกก่อนให้ใคร" />
+            </div>
+          )}
           {fronting && choice === "custom" && (
-            <input
-              inputMode="decimal"
-              placeholder="ส่วนของแฟน (บาท)"
-              value={customShare}
-              onChange={(e) => setCustomShare(e.target.value.replace(/[^\d.]/g, ""))}
-              className="mt-2 w-full rounded-full border-2 border-line bg-card px-4 py-2 outline-none focus:border-partner"
-            />
+            <div className="mt-2 flex flex-col gap-2">
+              {withWho.map((id) => (
+                <label key={id} className="flex items-center gap-2 text-sm">
+                  <PersonDot people={people} id={id} />
+                  <span className="w-20 truncate">{people.find((p) => p.id === id)?.name}</span>
+                  <input
+                    inputMode="decimal"
+                    placeholder="บาท"
+                    value={custom[id] ?? ""}
+                    onChange={(e) => setCustom((c) => ({ ...c, [id]: e.target.value.replace(/[^\d.]/g, "") }))}
+                    className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 outline-none focus:border-partner"
+                  />
+                </label>
+              ))}
+            </div>
           )}
         </section>
       )}

@@ -45,9 +45,9 @@
 src/
   domain/               pure TS (ไม่มี I/O) ใช้ร่วมกับ client ได้
     money.ts            Money (สตางค์) + จัดรูปแบบ/parse ข้อความ
-    split.ts            Owner, SplitMode, partnerShareFor, สรุปเจ้าของจากบรรทัดใบเสร็จ
+    split.ts            Share, SplitMode, sharesFor, LineOwners, รวมส่วนของแต่ละคนจากบรรทัดใบเสร็จ
     allocate.ts         เฉลี่ยส่วนลด/VAT ลงบรรทัดใบเสร็จ
-    partner.ts          ยอดแฟนติด + ยอดค้างตามรายการ (FIFO) + กฎ repayment
+    ledger.ts           ยอดติดของแต่ละคน + ยอดค้างตามรายการ (FIFO ต่อคน) + กฎ repayment
     day.ts              timestamp → วันตามเวลาไทย, ช่วงของวัน/เดือน
     streak.ts xp.ts     streak และ XP/Level
     dashboard-layout.ts WIDGET_IDS, DEFAULT_LAYOUT, normalizeLayout
@@ -82,16 +82,17 @@ scripts/                migrate.ts, hash-password.ts, try-receipt.ts, smoke/*.py
 | Use case | ทำอะไร |
 |---|---|
 | `AuthenticateUser` | ตรวจ email + password เทียบกับ env พร้อมนับครั้งที่ล็อกอินผิด (ต่ออีเมลและต่อ IP) |
-| `RecordEntry` | จดรายจ่าย/รายรับ (รวมถึงออกก่อนแฟนและปุ่มลัด) → บันทึก logged_day ถ้าเป็นรายการแรกของวัน → ให้ XP → คืน `{entry, xpGained, streak, leveledUp}` |
-| `RecordRepayment` | แฟนจ่ายคืน → ตรวจว่าไม่เกินยอดแฟนติด → ให้โบนัส +20 ถ้ายอดเหลือ 0 |
+| `RecordEntry` | จดรายจ่าย/รายรับ (รวมถึงออกก่อนให้คนอื่นและปุ่มลัด) → บันทึก logged_day ถ้าเป็นรายการแรกของวัน → ให้ XP → คืน `{entry, xpGained, streak, leveledUp}` |
+| `RecordRepayment` | คนหนึ่งจ่ายคืน → ตรวจว่าไม่เกินยอดติดของคนนั้น → ให้โบนัส +20 ถ้ายอดของเขาเหลือ 0 |
 | `MarkNoSpendDay` | ไม่ได้ใช้เงินวันนี้ (ใช้ได้ถ้าวันนี้ยังไม่ได้จด) |
 | `ParseReceipt` | รูป → `ReceiptParser` → ใช้ OwnerMemory ทับค่าที่ AI เดา → คืนร่าง (ไม่บันทึก) ตรวจ mime/ขนาดรูป และงบ 20 ครั้ง/24 ชม. |
 | `SaveReceiptEntry` | บันทึกรายการ + บรรทัดใบเสร็จ (เฉลี่ยส่วนลด) → upsert OwnerMemory → ให้ XP เหมือน `RecordEntry` |
-| `UpdateEntry` / `DeleteEntry` | แก้/ลบ (ไม่ดึง XP หรือ streak คืน) รายการจากใบเสร็จแก้ยอด/ส่วนแบ่งไม่ได้ (`ENTRY_LOCKED`) และห้ามทำให้ยอดแฟนติดติดลบ |
+| `UpdateEntry` / `DeleteEntry` | แก้/ลบ (ไม่ดึง XP หรือ streak คืน) รายการจากใบเสร็จแก้ยอด/ส่วนแบ่งไม่ได้ (`ENTRY_LOCKED`) และห้ามทำให้ยอดติดของใครติดลบ |
 | `ListEntries` | รายการล่าสุด หรือรายการของวันที่ระบุ (`day`, `limit` ไม่เกิน 100) |
-| `GetDashboard` | ข้อมูลทุก widget (streak, level, ยอดแฟนติด, ยอดวันนี้, 5 รายการล่าสุด, ปุ่มลัด, layout, partnerNote) |
+| `GetDashboard` | ข้อมูลทุก widget (streak, level, คนทั้งหมด + ยอดติดของแต่ละคน, ยอดวันนี้, 5 รายการล่าสุด, ปุ่มลัด, layout) |
 | `GetCalendarMonth` | ยอดรายวัน + วิธีที่จดของแต่ละวัน + ยอดรวมเดือน + `maxSpent` สำหรับ heatmap |
-| `GetPartnerOutstanding` | ยอดค้างตามรายการ (FIFO) |
+| `GetOutstanding` | ทุกคนที่ยังติดเรา พร้อมยอดค้างตามรายการ (FIFO ต่อคน) |
+| `ManagePeople` | เพิ่ม / แก้ชื่อและโน้ตพฤติกรรม / ซ่อน คน (ไม่มีลบ) |
 | `ManageCategories` / `ManagePresets` / `ManageSettings` | CRUD การตั้งค่า (หมวดใช้ archive ไม่ลบจริง) |
 
 ไม่มี use case `Wake` และไม่มี `dto/` แยก: route `/api/wake` รัน `SELECT 1` ผ่าน `container().sequelize` ตรงๆ และ use case คืนค่าเป็น type ของตัวเอง
@@ -131,7 +132,7 @@ scripts/                migrate.ts, hash-password.ts, try-receipt.ts, smoke/*.py
 ## 2. หลักการข้อมูล (ไม่ขึ้นกับ DB ที่เลือก)
 - **เงินเก็บเป็นจำนวนเต็มหน่วยสตางค์** (`integer`) ห้ามใช้ float เด็ดขาด เช่น ฿84.50 → `8450`
 - **เวลาเก็บเป็น UTC** แล้วคิด "วัน" ด้วย timezone `Asia/Bangkok` ทุกครั้ง ทั้ง streak, ปฏิทิน และสรุป
-- **ค่าที่คำนวณได้จะไม่เก็บซ้ำ** ได้แก่ ยอดแฟนติด, ยอดค้างตามรายการ (FIFO), Level และยอดของแต่ละวันในปฏิทิน ทั้งหมดคิดจากตารางหลักทุกครั้ง (ข้อมูลของคนคนเดียวมีไม่เยอะ query สดได้สบาย)
+- **ค่าที่คำนวณได้จะไม่เก็บซ้ำ** ได้แก่ ยอดติดของแต่ละคน, ยอดค้างตามรายการ (FIFO), Level และยอดของแต่ละวันในปฏิทิน ทั้งหมดคิดจากตารางหลักทุกครั้ง (ข้อมูลของคนคนเดียวมีไม่เยอะ query สดได้สบาย)
 - **XP เก็บเป็น ledger** (`xp_events`) แบบบันทึกเพิ่มอย่างเดียว ไม่ลบ ตรงกับกฎ "XP ไม่มีวันลดลง"
 
 ## 3. Data model (ตาม migration `001-initial`)
@@ -140,23 +141,27 @@ categories     id, name, icon, kind(expense|income), sort, archived
 entries        id, kind(expense|income|repayment),
                occurred_at, created_at,
                total            -- สตางค์ เงินที่ออก/เข้ากระเป๋าจริง
-               partner_share    -- สตางค์ (เฉพาะ expense, ค่าเริ่มต้น 0)
+               others_share     -- สตางค์ = Σ entry_shares.amount ของรายการนี้ (เก็บซ้ำไว้ให้ query สรุปเร็ว)
+               person_id?       -- ใครจ่ายคืน (มีเฉพาะ repayment และต้องมีเสมอ)
                category_id?     -- null ถ้ามาจากใบเสร็จที่มีหลายหมวด
-               note?, merchant?, source(manual|preset|receipt|wheel)
+               note?, merchant?, source(manual|preset|receipt|itemized|wheel)
+people         id, name, note (โน้ตพฤติกรรม), sort, archived
+entry_shares   entry_id (ON DELETE CASCADE), person_id, amount > 0   -- PK (entry_id, person_id)
 receipt_lines  id, entry_id (ON DELETE CASCADE), position, raw_name, canonical_name, qty,
                price            -- สตางค์ หลังเฉลี่ยส่วนลดและ VAT แล้ว
-               owner(me|partner|split), category_id, low_confidence
-owner_memory   canonical_name (PK), owner, updated_at
-presets        id, label, icon, amount, category_id?, partner_mode?(split|partnerAll), sort
+               includes_me, people uuid[], category_id, low_confidence
+owner_memory   canonical_name (PK), includes_me, people uuid[], updated_at
+presets        id, label, icon, amount, category_id?, person_id? + split_kind?(equal|theirs), sort
 logged_days    day (date, PK), kind(entry|no_spend), first_logged_at
 xp_events      id, created_at, reason, amount
-settings       (1 แถว, id=1) partner_note, dashboard_layout (jsonb: [{id, enabled}] ตามลำดับ)
+settings       (1 แถว, id=1) dashboard_layout (jsonb: [{id, enabled}] ตามลำดับ)
 login_attempts id, key (`email:..`/`ip:..`/`receipt-parse`), attempted_at
 schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน migrate.ts
 ```
-- ข้อจำกัดในฐานข้อมูล: `total > 0`, `0 ≤ partner_share ≤ total`, `partner_share = 0` ถ้าไม่ใช่ expense, `kind`/`owner`/`source` เป็นค่าใน CHECK, `xp_events.amount > 0`
-- `myShare = total - partner_share` เป็นค่าคำนวณ ไม่ได้เก็บไว้
-- ยอดแฟนติด = Σ `partner_share` (expense) − Σ `total` (repayment) และระบบต้องตรวจว่ายอดนี้ ≥ 0 ก่อนบันทึก repayment
+- ข้อจำกัดในฐานข้อมูล: `total > 0`, `0 ≤ others_share ≤ total`, `others_share = 0` ถ้าไม่ใช่ expense, repayment ต้องมี `person_id` (และอย่างอื่นห้ามมี), บรรทัด/ความจำต้องมีเจ้าของอย่างน้อย 1 (`includes_me OR cardinality(people) > 0`), `kind`/`source` เป็นค่าใน CHECK, `xp_events.amount > 0`
+- `myShare = total - others_share` เป็นค่าคำนวณ ไม่ได้เก็บไว้ · use case เป็นคนดูแลให้ `others_share` ตรงกับ `entry_shares` เสมอ (repo เขียนทั้งสองที่ใน transaction เดียว)
+- ยอดติดของคน X = Σ `entry_shares.amount` ของ X (expense) − Σ `total` ของ repayment ที่ `person_id = X` และระบบต้องตรวจว่ายอดของทุกคน ≥ 0 ก่อนบันทึก/แก้/ลบ
+- migration `004-people` ย้ายข้อมูลของ "แฟน" แบบเดิม (`partner_share`, owner `partner|split`, `partner_mode`, `partner_note`) ไปเป็นคนชื่อ "แฟน" ยอดทุกอย่างเท่าเดิม มี down migration ที่รวมทุกคนกลับเป็นแฟนคนเดียว
 - `logged_days` บันทึกตอน**กดจดครั้งแรกของวัน** (ใช้ `created_at` ตามเวลาไทย) ส่วน streak คำนวณจากวันที่ต่อเนื่องในตารางนี้
 - ไม่มีตาราง `users` หรือตาราง auth ใดๆ เพราะมีผู้ใช้คนเดียว และ Auth.js ใช้ JWT session เก็บใน cookie
 
@@ -164,12 +169,14 @@ schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน mi
 ### สแกนใบเสร็จ
 ```
 มือถือ: ถ่ายรูป → ย่อรูปฝั่ง client (ด้านยาวประมาณ 1600px, JPEG) ให้ไฟล์ < 4.5MB ตามลิมิตของ Vercel
-  → POST /api/receipt/parse (multipart field `image`, ต้อง login แล้ว + งบ 20 ครั้ง/24 ชม.)
-server: ส่งรูป + partner_note + รายการ canonical_name ที่มีใน owner_memory → Gemini
-  → ได้ JSON ตาม schema → ใช้ owner_memory ทับค่าที่ AI เดา → ส่งกลับให้ client
-  (ไม่เก็บรูปไว้ที่ไหนเลย)
-client: หน้าตรวจ/แก้ → กดบันทึก → POST /api/receipts (พร้อม lines) สร้าง entry + receipt_lines
-  และ upsert owner_memory ของทุกบรรทัดที่ผู้ใช้แก้เจ้าของ
+  → POST /api/receipt/parse (multipart field `image` + `people` = id คั่นด้วย comma ถ้าหารกัน,
+    ต้อง login แล้ว + งบ 20 ครั้ง/24 ชม.)
+server: ไม่มี people → prompt/schema แบบอ่านอย่างเดียว ทุกบรรทัดเป็นของเรา
+        มี people → ส่งรูป + ชื่อและโน้ตของคนที่เลือก (ใช้ key สั้น p1, p2 แทน id) + canonical_name ใน owner_memory
+  → ได้ JSON ตาม schema (owners เป็น enum ของ key) → แปลง key กลับเป็น id
+  → ใช้ owner_memory (ตัดเหลือคนในบิล) ทับค่าที่ AI เดา → ส่งกลับให้ client (ไม่เก็บรูปไว้ที่ไหนเลย)
+client: หน้าตรวจ/แก้ → กดบันทึก → POST /api/receipts (พร้อม people + lines) สร้าง entry + entry_shares + receipt_lines
+  และ upsert owner_memory เฉพาะบิลที่หารกับใครสักคน และไม่ทับความจำที่พูดถึงคนที่ไม่ได้อยู่ในบิล
 ```
 
 ### Auth guard
@@ -200,25 +207,27 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | GET | `/api/dashboard` | ข้อมูลทุก widget ใน request เดียว |
 | GET | `/api/calendar?month=2026-10` | ยอดจ่าย/รับรายวัน + วิธีจดของแต่ละวัน + ยอดรวมเดือน |
 | GET | `/api/entries?day=YYYY-MM-DD&limit=N` | รายการล่าสุด หรือของวันที่ระบุ |
-| POST | `/api/entries` | จดรายจ่าย/รายรับ (รวมออกก่อนแฟน, ปุ่มลัด, จดย้อนหลังด้วย `occurredAt`) → `{ entry, xpGained, streak, leveledUp }` |
+| POST | `/api/entries` | จดรายจ่าย/รายรับ (รวมออกก่อน, ปุ่มลัด, จดย้อนหลังด้วย `occurredAt`) → `{ entry, xpGained, streak, leveledUp }` |
 | PATCH / DELETE | `/api/entries/[id]` | แก้ / ลบรายการ |
-| POST | `/api/repayments` | แฟนจ่ายคืน → `{ entry, balanceAfter, xpGained, streak, leveledUp }` |
-| GET | `/api/partner/outstanding` | ยอดค้างตามรายการ (FIFO) |
+| POST | `/api/repayments` | `{ personId, amount }` คนหนึ่งจ่ายคืน → `{ entry, balanceAfter, xpGained, streak, leveledUp }` |
+| GET / POST | `/api/people` | รายการคน (รวมที่ซ่อน) / เพิ่มคน `{ name, note }` |
+| PATCH | `/api/people/[id]` | แก้ชื่อ / โน้ต / ลำดับ / ซ่อน (ไม่มี DELETE) |
+| GET | `/api/people/outstanding` | ทุกคนที่ยังติดเรา + ยอดค้างตามรายการ (FIFO ต่อคน) |
 | POST | `/api/no-spend` | วันนี้ไม่ได้ใช้เงิน |
-| POST | `/api/receipt/parse` | รูป (multipart field `image`) → ร่างใบเสร็จ JSON ไม่บันทึกอะไร (`maxDuration = 30`) |
+| POST | `/api/receipt/parse` | รูป (multipart field `image`, `people` ถ้าหารกัน) → ร่างใบเสร็จ JSON ไม่บันทึกอะไร (`maxDuration = 30`) |
 | POST | `/api/receipts` | บันทึกใบเสร็จที่ตรวจแล้ว (1 entry + lines + อัปเดตความจำเจ้าของ) |
 | GET / POST | `/api/categories` | รายการหมวด / เพิ่มหมวด |
 | PATCH / DELETE | `/api/categories/[id]` | แก้หมวด / ซ่อน (archive) หมวด |
 | GET / POST | `/api/presets` | รายการปุ่มลัด / เพิ่มปุ่มลัด |
 | PATCH / DELETE | `/api/presets/[id]` | แก้ / ลบปุ่มลัด |
-| GET / PATCH | `/api/settings` | โน้ตเกี่ยวกับแฟน + layout ของ dashboard |
+| GET / PATCH | `/api/settings` | layout ของ dashboard |
 - POST ที่เป็นการจด จะตอบกลับพร้อม `{ entry, xpGained, streak, leveledUp }` → client เอาไปแสดงเอฟเฟกต์ได้เลยโดยไม่ต้อง refetch
 - **การอัปเดต cache หลังจด:** ตอนนี้ client รอ server ตอบแล้ว `invalidateQueries` (dashboard, calendar, outstanding) พร้อมโชว์ +XP จากค่าที่ server ส่งกลับ (`useAfterLog`) — **ยังไม่ได้ทำ optimistic update (`onMutate`) ตามที่ออกแบบไว้เดิม** ส่วน error จะขึ้น toast
 - **เปิดแอปแล้วเห็นข้อมูลทันที:** เก็บ cache ของ TanStack Query ไว้ใน localStorage (key `me-budget-cache`, อายุ 1 วัน, `buster: "v1"`) → เปิดแอปมาเห็นข้อมูลล่าสุดก่อน แล้วค่อย refetch อยู่เบื้องหลัง
 - **บทเรียน hydration:** ต้อง **restore cache จาก localStorage หลัง hydrate เสร็จ** (ใน `useEffect` ของ `src/client/Providers.tsx`) ห้าม restore ก่อน render แรก เพราะ client render แรกจะมีข้อมูลต่างจาก HTML ที่ server ส่งมา → hydration mismatch
 
 ### Gemini (free tier) ✅ T5
-- **รับรู้ความเสี่ยงแล้ว:** บน free tier Google อาจนำรูปใบเสร็จและ prompt (รวมถึงโน้ตเกี่ยวกับแฟน) ไปใช้ปรับปรุงผลิตภัณฑ์ → **ห้ามใส่ข้อมูลอ่อนไหวลงในโน้ตเกี่ยวกับแฟน** เช่น ชื่อจริงหรือเรื่องสุขภาพ และให้ขึ้นคำเตือนเล็กๆ ใต้ช่องโน้ตในหน้าตั้งค่า
+- **รับรู้ความเสี่ยงแล้ว:** บน free tier Google อาจนำรูปใบเสร็จและ prompt (รวมถึงชื่อและโน้ตพฤติกรรมของคนที่เลือกตอนสแกนหารกัน) ไปใช้ปรับปรุงผลิตภัณฑ์ → **ห้ามใส่ข้อมูลอ่อนไหวลงในชื่อหรือโน้ตของคน** เช่น ชื่อจริงหรือเรื่องสุขภาพ และให้ขึ้นคำเตือนเล็กๆ ในหน้าตั้งค่าส่วนคน ส่วนสแกนแบบไม่เลือกใครจะไม่ส่งข้อมูลคนไปเลย
 - **ถ้าโดน 429/quota หมด:** ขึ้นข้อความ "AI พักก่อน ลองใหม่อีกที หรือกรอกยอดรวมเองไปก่อน" แล้วเข้า flow จดมือ (ตาม Fallback ใน FR-10)
 - rate limit ในแอปเองไว้ที่ **20 ใบต่อ 24 ชั่วโมง** (`MAX_PARSES_PER_DAY`, นับจากตาราง `login_attempts` key `receipt-parse` และนับครั้งที่ล้มเหลวด้วย) จะได้ไม่ไปชน quota ของ free tier ตอนที่มีบั๊กยิงวนลูป เกินแล้วตอบ 429 `RATE_LIMITED`
 - ถ้าวันหนึ่งอยากเปลี่ยนเป็น paid → แค่เปลี่ยน API key (ผูก billing) ไม่ต้องแก้โค้ด
@@ -232,9 +241,9 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 ### Domain logic (T7)
 อยู่ใน `src/domain/` เป็น pure function ทั้งหมด ไม่ import Sequelize หรือ React ฝั่ง API กับฝั่ง client (ตอน optimistic) ใช้โค้ดชุดเดียวกัน:
 - `money.ts`: แปลงสตางค์ ↔ ข้อความ และย่อเป็น `k` สำหรับปฏิทิน
-- `split.ts`: คิด partner_share จากโหมดหาร/แฟนทั้งหมด/กรอกเอง และสรุปเจ้าของจากบรรทัดใบเสร็จ (หาร = แบ่งครึ่ง สตางค์ที่เศษให้นับเป็นของเรา)
+- `split.ts`: คิดส่วนของแต่ละคนจากโหมดหารเท่ากัน/ของเขาทั้งหมด/กรอกเอง และรวมจากบรรทัดใบเสร็จ (เจ้าของหลายคน = หารเท่ากัน แต่ละคนปัดลง สตางค์ที่เศษนับเป็นของเรา)
 - `allocate.ts`: เฉลี่ยส่วนลด/VAT ระดับบิลตามสัดส่วนราคา (ผลรวมต้องตรงกับยอดบิลทุกสตางค์ เศษไปลงบรรทัดที่ราคาสูงที่สุด)
-- `partner.ts`: ยอดแฟนติด ยอดค้างตามรายการแบบ FIFO และกฎ repayment ต้องไม่เกินยอดค้าง
+- `ledger.ts`: ยอดติดของแต่ละคน ยอดค้างตามรายการแบบ FIFO ต่อคน และกฎ repayment ต้องไม่เกินยอดค้างของคนนั้น
 - `day.ts`: แปลง timestamp → วันตามเวลาไทย (`DayKey`) และช่วงของวัน/เดือน
 - `dashboard-layout.ts`: id ของ widget, layout เริ่มต้น และ `normalizeLayout` (ตัด id แปลก/ซ้ำ รักษาลำดับของผู้ใช้ เติม widget ใหม่ต่อท้ายแบบเปิด)
 - `streak.ts`: คำนวณ streak จาก logged_days

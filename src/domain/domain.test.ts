@@ -5,12 +5,14 @@ import { addDays, bangkokDay, bangkokDayRange } from "./day";
 import { DomainError } from "./errors";
 import { formatBaht, formatCompact, parseBaht } from "./money";
 import {
+  assertNoNegativeBalance,
   assertRepaymentAllowed,
+  balances,
   outstandingByEntry,
-  partnerBalance,
-  type PartnerExpense,
-} from "./partner";
-import { partnerShareFor, partnerShareOfLines } from "./split";
+  type Ledger,
+  type OwedShare,
+} from "./ledger";
+import { lineShares, sharesFor, sharesOfLines } from "./split";
 import { computeStreak } from "./streak";
 import { levelFromXp, xpForExtraEntry, xpForFirstLogOfDay } from "./xp";
 
@@ -38,64 +40,98 @@ describe("money", () => {
   });
 });
 
-describe("fronting for partner (FR-3)", () => {
-  it("rice 100 split -> partner owes 50", () => {
-    expect(partnerShareFor(10000, { kind: "split" })).toBe(5000);
+describe("fronting (FR-3): splitting an expense between us and people", () => {
+  it("rice 100 split equally with แฟน -> แฟน owes 50", () => {
+    expect(sharesFor(10000, { kind: "equal", people: ["fan"] })).toEqual([{ personId: "fan", amount: 5000 }]);
   });
-  it("odd satang stays with us", () => {
-    expect(partnerShareFor(10001, { kind: "split" })).toBe(5000);
+  it("split 3 ways (us + 2): each person owes a third, the odd satang stays with us", () => {
+    expect(sharesFor(10000, { kind: "equal", people: ["fan", "a"] })).toEqual([
+      { personId: "fan", amount: 3333 },
+      { personId: "a", amount: 3333 },
+    ]);
   });
-  it("partner all / none / custom", () => {
-    expect(partnerShareFor(10000, { kind: "partnerAll" })).toBe(10000);
-    expect(partnerShareFor(10000, { kind: "none" })).toBe(0);
-    expect(partnerShareFor(10000, { kind: "custom", partnerShare: 3000 })).toBe(3000);
+  it("all theirs: one person pays it all; two people halve it (odd satang ours)", () => {
+    expect(sharesFor(10000, { kind: "theirs", people: ["fan"] })).toEqual([{ personId: "fan", amount: 10000 }]);
+    expect(sharesFor(10001, { kind: "theirs", people: ["fan", "a"] })).toEqual([
+      { personId: "fan", amount: 5000 },
+      { personId: "a", amount: 5000 },
+    ]);
   });
-  it("custom share cannot exceed total", () => {
-    expect(() => partnerShareFor(10000, { kind: "custom", partnerShare: 10001 })).toThrow(
-      DomainError,
-    );
-  });
-  it("rolls receipt lines up by owner", () => {
+  it("none and custom", () => {
+    expect(sharesFor(10000, { kind: "none" })).toEqual([]);
     expect(
-      partnerShareOfLines([
-        { price: 3500, owner: "me" },
-        { price: 1500, owner: "partner" },
-        { price: 8900, owner: "split" },
-        { price: 2500, owner: "partner" },
+      sharesFor(10000, { kind: "custom", shares: [{ personId: "fan", amount: 3000 }, { personId: "a", amount: 0 }] }),
+    ).toEqual([{ personId: "fan", amount: 3000 }]);
+  });
+  it("rejects shares above the total, nobody picked, or a person twice", () => {
+    expect(() =>
+      sharesFor(10000, { kind: "custom", shares: [{ personId: "fan", amount: 6000 }, { personId: "a", amount: 4001 }] }),
+    ).toThrow(DomainError);
+    expect(() => sharesFor(10000, { kind: "equal", people: [] })).toThrow(DomainError);
+    expect(() => sharesFor(10000, { kind: "theirs", people: ["a", "a"] })).toThrow(DomainError);
+  });
+  it("a line splits equally between its owners", () => {
+    expect(lineShares(8901, { me: true, people: ["fan"] })).toEqual([{ personId: "fan", amount: 4450 }]);
+    expect(lineShares(1500, { me: false, people: ["fan"] })).toEqual([{ personId: "fan", amount: 1500 }]);
+    expect(lineShares(1000, { me: false, people: ["fan", "a"] })).toEqual([
+      { personId: "fan", amount: 500 },
+      { personId: "a", amount: 500 },
+    ]);
+    expect(lineShares(3500, { me: true, people: [] })).toEqual([]);
+    expect(() => lineShares(100, { me: false, people: [] })).toThrow(DomainError);
+  });
+  it("rolls receipt lines up into one share per person", () => {
+    expect(
+      sharesOfLines([
+        { price: 3500, owners: { me: true, people: [] } },
+        { price: 1500, owners: { me: false, people: ["fan"] } },
+        { price: 8900, owners: { me: true, people: ["fan"] } },
+        { price: 3000, owners: { me: true, people: ["fan", "a"] } },
       ]),
-    ).toBe(1500 + 4450 + 2500);
+    ).toEqual([
+      { personId: "fan", amount: 1500 + 4450 + 1000 },
+      { personId: "a", amount: 1000 },
+    ]);
   });
 });
 
-describe("partner balance + FIFO", () => {
-  const e = (id: string, day: number, share: number): PartnerExpense => ({
-    id,
+describe("balances per person + FIFO", () => {
+  const s = (entryId: string, personId: string, day: number, amount: number): OwedShare => ({
+    entryId,
+    personId,
     occurredAt: new Date(Date.UTC(2026, 9, day)),
-    partnerShare: share,
+    amount,
   });
-  const expenses = [e("c", 3, 20000), e("a", 1, 5000), e("b", 2, 8450)];
+  const ledger = (repayments: Ledger["repayments"] = []): Ledger => ({
+    shares: [s("c", "fan", 3, 20000), s("a", "fan", 1, 5000), s("b", "fan", 2, 8450), s("b", "a", 2, 1000)],
+    repayments,
+  });
 
-  it("sums fronted shares minus repayments", () => {
-    expect(partnerBalance(expenses, [])).toBe(33450);
-    expect(partnerBalance(expenses, [{ total: 10000 }])).toBe(23450);
+  it("sums each person's shares minus their own repayments", () => {
+    expect(balances(ledger())).toEqual(new Map([["fan", 33450], ["a", 1000]]));
+    const after = balances(ledger([{ personId: "fan", total: 10000 }]));
+    expect(after.get("fan")).toBe(23450);
+    expect(after.get("a")).toBe(1000); // someone else's repayment never touches A
   });
-  it("repayment of 30 against 50 leaves 20", () => {
-    expect(partnerBalance([e("x", 1, 5000)], [{ total: 3000 }])).toBe(2000);
-  });
-  it("applies repayments to the oldest first", () => {
-    const out = outstandingByEntry(expenses, [{ total: 10000 }]);
-    expect(out.map((o) => [o.id, o.outstanding])).toEqual([
+  it("applies a person's repayments to their oldest shares first", () => {
+    const out = outstandingByEntry(ledger([{ personId: "fan", total: 10000 }]), "fan");
+    expect(out.map((o) => [o.entryId, o.outstanding])).toEqual([
       ["b", 3450],
       ["c", 20000],
     ]);
+    expect(outstandingByEntry(ledger([{ personId: "fan", total: 10000 }]), "a")).toEqual([
+      { entryId: "b", occurredAt: new Date(Date.UTC(2026, 9, 2)), amount: 1000, outstanding: 1000 },
+    ]);
   });
   it("fully repaid -> nothing outstanding", () => {
-    expect(outstandingByEntry(expenses, [{ total: 33450 }])).toEqual([]);
+    expect(outstandingByEntry(ledger([{ personId: "fan", total: 33450 }]), "fan")).toEqual([]);
   });
   it("blocks repayment above the balance (balance never negative)", () => {
     expect(() => assertRepaymentAllowed(2000, 2001)).toThrow(DomainError);
     expect(() => assertRepaymentAllowed(2000, 2000)).not.toThrow();
     expect(() => assertRepaymentAllowed(2000, 0)).toThrow(DomainError);
+    expect(() => assertNoNegativeBalance(ledger([{ personId: "a", total: 1001 }]))).toThrow(DomainError);
+    expect(() => assertNoNegativeBalance(ledger([{ personId: "a", total: 1000 }]))).not.toThrow();
   });
 });
 

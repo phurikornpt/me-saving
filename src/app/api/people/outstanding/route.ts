@@ -3,4 +3,4 @@ import { container } from "@/lib/container";
 
 export const runtime = "nodejs";
 
-export const GET = api(async () => container().getPartnerOutstanding.execute());
+export const GET = api(async () => container().getOutstanding.execute());

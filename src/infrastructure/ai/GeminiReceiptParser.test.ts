@@ -25,7 +25,7 @@ describe("transient Gemini failures", () => {
             generateContent: async () => {
               calls.push(1);
               if (calls.length === 1) throw new real.ApiError({ message: "overloaded", status: 503 });
-              return { text: JSON.stringify({ merchant: null, date: "2569-10-03", total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null, owner: "me", confident: true }] }) };
+              return { text: JSON.stringify({ merchant: null, date: "2569-10-03", total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
             },
           };
         },
@@ -34,7 +34,7 @@ describe("transient Gemini failures", () => {
     const { createGeminiReceiptParser } = await import("./GeminiReceiptParser");
     const out = await createGeminiReceiptParser({ apiKey: "k", retryDelayMs: 0 }).parse(
       { data: new Uint8Array([1]), mimeType: "image/jpeg" },
-      { partnerNote: "", knownNames: [], categoryNames: [] },
+      { people: [], knownNames: [], categoryNames: [] },
     );
     expect(calls).toHaveLength(2);
     expect(out).toMatchObject({ date: "2026-10-03", total: 3500 }); // Buddhist year converted
@@ -57,10 +57,87 @@ describe("transient Gemini failures", () => {
     await expect(
       createGeminiReceiptParser({ apiKey: "k", retryDelayMs: 0 }).parse(
         { data: new Uint8Array([1]), mimeType: "image/jpeg" },
-        { partnerNote: "", knownNames: [], categoryNames: [] },
+        { people: [], knownNames: [], categoryNames: [] },
       ),
     ).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
     expect(n).toBe(1);
+    vi.doUnmock("@google/genai");
+  });
+});
+
+describe("bills shared with people", () => {
+  it("asks for owners as short keys, sends names and notes, and maps the keys back to person ids", async () => {
+    vi.resetModules();
+    const requests: { contents: { parts: { text?: string }[] }[]; config: { responseJsonSchema: unknown } }[] = [];
+    vi.doMock("@google/genai", async (orig) => {
+      const real = await orig<typeof import("@google/genai")>();
+      return {
+        ...real,
+        GoogleGenAI: class {
+          models = {
+            generateContent: async (req: (typeof requests)[number]) => {
+              requests.push(req);
+              return {
+                text: JSON.stringify({
+                  merchant: "7-Eleven", date: null, total_paid: 50,
+                  lines: [
+                    { raw_name: "นมเปรี้ยว", canonical_name: "นมเปรี้ยว", quantity: 1, line_total: 15, category: null, owners: ["p1"], confident: true },
+                    { raw_name: "แชมพู", canonical_name: "แชมพู", quantity: 1, line_total: 35, category: null, owners: ["me", "p1", "p2"], confident: false },
+                  ],
+                }),
+              };
+            },
+          };
+        },
+      };
+    });
+    const { createGeminiReceiptParser } = await import("./GeminiReceiptParser");
+    const out = await createGeminiReceiptParser({ apiKey: "k" }).parse(
+      { data: new Uint8Array([1]), mimeType: "image/jpeg" },
+      {
+        people: [
+          { id: "uuid-fan", name: "แฟน", note: "ชอบนมเปรี้ยว" },
+          { id: "uuid-mom", name: "แม่", note: "" },
+        ],
+        knownNames: [],
+        categoryNames: [],
+      },
+    );
+    expect(out.lines.map((l) => [l.canonicalName, l.owners, l.confident])).toEqual([
+      ["นมเปรี้ยว", { me: false, people: ["uuid-fan"] }, true],
+      ["แชมพู", { me: true, people: ["uuid-fan", "uuid-mom"] }, false],
+    ]);
+    const prompt = requests[0].contents[0].parts.map((p) => p.text ?? "").join("");
+    expect(prompt).toContain('p1: name "แฟน", note "ชอบนมเปรี้ยว"');
+    expect(prompt).not.toContain("uuid-fan"); // ids never reach the model
+    expect(JSON.stringify(requests[0].config.responseJsonSchema)).toContain('"p2"');
+    vi.doUnmock("@google/genai");
+  });
+
+  it("a plain scan asks for no owners at all", async () => {
+    vi.resetModules();
+    let schema = "";
+    vi.doMock("@google/genai", async (orig) => {
+      const real = await orig<typeof import("@google/genai")>();
+      return {
+        ...real,
+        GoogleGenAI: class {
+          models = {
+            generateContent: async (req: { config: { responseJsonSchema: unknown } }) => {
+              schema = JSON.stringify(req.config.responseJsonSchema);
+              return { text: JSON.stringify({ merchant: null, date: null, total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
+            },
+          };
+        },
+      };
+    });
+    const { createGeminiReceiptParser } = await import("./GeminiReceiptParser");
+    const out = await createGeminiReceiptParser({ apiKey: "k" }).parse(
+      { data: new Uint8Array([1]), mimeType: "image/jpeg" },
+      { people: [], knownNames: [], categoryNames: [] },
+    );
+    expect(schema).not.toContain("owners");
+    expect(out.lines[0]).toMatchObject({ owners: { me: true, people: [] }, confident: true });
     vi.doUnmock("@google/genai");
   });
 });

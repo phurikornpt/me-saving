@@ -4,9 +4,9 @@ import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { GetCalendarMonth } from "@/application/use-cases/get-calendar-month";
 import { GetCategoryBreakdown } from "@/application/use-cases/get-category-breakdown";
 import { GetDashboard } from "@/application/use-cases/get-dashboard";
-import { GetPartnerOutstanding } from "@/application/use-cases/get-partner-outstanding";
+import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
-import { ManageCategories, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
+import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
@@ -44,13 +44,14 @@ function build() {
     getDashboard: new GetDashboard(repos, stats, presets, settings, systemClock),
     getCalendarMonth: new GetCalendarMonth(stats),
     getCategoryBreakdown: new GetCategoryBreakdown(stats, categories),
-    getPartnerOutstanding: new GetPartnerOutstanding(repos),
+    getOutstanding: new GetOutstanding(repos),
     listEntries: new ListEntries(repos),
     updateEntry: new UpdateEntry(tx),
     deleteEntry: new DeleteEntry(tx),
     manageCategories: new ManageCategories(categories),
     managePresets: new ManagePresets(presets),
     manageSettings: new ManageSettings(settings),
+    managePeople: new ManagePeople(repos.people),
     saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
     // Lazily built: the key only matters once someone scans a receipt.
     parseReceipt: () =>
@@ -61,7 +62,7 @@ function build() {
         }),
         repos.ownerMemory,
         categories,
-        settings,
+        repos.people,
         attempts,
         systemClock,
       ),

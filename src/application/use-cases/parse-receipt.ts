@@ -1,13 +1,13 @@
 import { DomainError } from "@/domain/errors";
 import type { Satang } from "@/domain/money";
-import type { Owner } from "@/domain/split";
+import { ME_ONLY, type LineOwners } from "@/domain/split";
 import type {
   CategoryRepo,
   Clock,
   LoginAttemptRepo,
   OwnerMemoryRepo,
+  PersonRepo,
   ReceiptParser,
-  SettingsRepo,
 } from "../ports";
 
 export const MAX_PARSES_PER_DAY = 20;
@@ -21,8 +21,8 @@ export interface ReceiptDraftLine {
   qty: number;
   price: Satang;
   categoryName: string | null;
-  owner: Owner;
-  /** Where the owner came from: the user's own history beats the AI, which beats the default. */
+  owners: LineOwners;
+  /** Where the owners came from: the user's own history beats the AI, which beats the default (us). */
   ownerSource: "memory" | "ai" | "default";
   lowConfidence: boolean;
 }
@@ -36,34 +36,45 @@ export interface ReceiptDraft {
   sumMismatch: boolean;
 }
 
-/** Reads a receipt image into an editable draft. Nothing is saved and the image is not kept. */
+/** A remembered choice, narrowed to who is on this bill. Null when nobody it names is here. */
+function rememberedFor(owners: LineOwners | undefined, onBill: Set<string>): LineOwners | null {
+  if (!owners) return null;
+  const narrowed = { me: owners.me, people: owners.people.filter((id) => onBill.has(id)) };
+  return narrowed.me || narrowed.people.length > 0 ? narrowed : null;
+}
+
+/**
+ * Reads a receipt image into an editable draft. Nothing is saved and the image is not kept.
+ * With no `people` it only reads the lines (all ours); with people it also guesses who each line is for.
+ */
 export class ParseReceipt {
   constructor(
     private readonly parser: ReceiptParser,
     private readonly memory: OwnerMemoryRepo,
     private readonly categories: CategoryRepo,
-    private readonly settings: SettingsRepo,
+    private readonly people: PersonRepo,
     /** Reuses the generic attempt log (key `receipt-parse`) as a daily AI budget. */
     private readonly budget: LoginAttemptRepo,
     private readonly clock: Clock,
   ) {}
 
-  async execute(image: { data: Uint8Array; mimeType: string }): Promise<ReceiptDraft> {
+  async execute(image: { data: Uint8Array; mimeType: string }, peopleIds: string[] = []): Promise<ReceiptDraft> {
     if (!ALLOWED_MIME.has(image.mimeType) || image.data.byteLength === 0 || image.data.byteLength > MAX_IMAGE_BYTES) {
       throw new DomainError("INVALID_RECEIPT", "unsupported or oversized image");
     }
+    const everyone = await this.people.list();
+    const onBill = new Set(peopleIds);
+    const people = everyone.filter((p) => onBill.has(p.id));
+    if (people.length !== onBill.size) throw new DomainError("UNKNOWN_PERSON", "unknown person on the bill");
+
     const now = this.clock.now();
     const used = await this.budget.countSince("receipt-parse", new Date(now.getTime() - DAY_MS));
     if (used >= MAX_PARSES_PER_DAY) throw new DomainError("RATE_LIMITED", "daily receipt scan limit reached");
     await this.budget.record("receipt-parse", now); // failed calls count too: they still cost quota
 
-    const [known, categories, settings] = await Promise.all([
-      this.memory.all(),
-      this.categories.list(),
-      this.settings.get(),
-    ]);
+    const [known, categories] = await Promise.all([this.memory.all(), this.categories.list()]);
     const parsed = await this.parser.parse(image, {
-      partnerNote: settings.partnerNote,
+      people: people.map(({ id, name, note }) => ({ id, name, note })),
       knownNames: [...known.keys()],
       categoryNames: categories.filter((c) => c.kind === "expense" && !c.archived).map((c) => c.name),
     });
@@ -76,10 +87,12 @@ export class ParseReceipt {
         price: l.price,
         categoryName: l.categoryName,
       };
-      const remembered = known.get(l.canonicalName);
-      if (remembered) return { ...base, owner: remembered, ownerSource: "memory", lowConfidence: false };
-      if (l.confident) return { ...base, owner: l.owner, ownerSource: "ai", lowConfidence: false };
-      return { ...base, owner: "me", ownerSource: "default", lowConfidence: true };
+      if (people.length === 0) return { ...base, owners: ME_ONLY, ownerSource: "default", lowConfidence: false };
+      const remembered = rememberedFor(known.get(l.canonicalName), onBill);
+      if (remembered) return { ...base, owners: remembered, ownerSource: "memory", lowConfidence: false };
+      const ai = rememberedFor(l.owners, onBill); // never trust the model with an id we didn't give it
+      if (l.confident && ai) return { ...base, owners: ai, ownerSource: "ai", lowConfidence: false };
+      return { ...base, owners: ME_ONLY, ownerSource: "default", lowConfidence: true };
     });
     const sum = lines.reduce((s, l) => s + l.price, 0);
     return {

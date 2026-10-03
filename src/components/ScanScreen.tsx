@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
-import { useCategories } from "@/client/queries";
+import { activePeople, describeShares } from "@/client/people";
+import { useCategories, usePeople } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
@@ -16,15 +17,23 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { ReadingReceipt, Spinner } from "./Loading";
 import { ItemLines } from "./ItemLines";
+import { PeoplePicker, SplitSummary } from "./People";
 
 type Header = { merchant: string | null; date: string | null };
 
+/**
+ * One scan button, two jobs: with nobody picked it just reads the lines off the receipt (all ours);
+ * pick the people sharing the bill first and the AI also guesses who each line is for.
+ */
 export function ScanScreen() {
   const router = useRouter();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
   const { data: categories = [] } = useCategories();
+  const { data: people = [] } = usePeople();
+  const [sharedWith, setSharedWith] = useState<string[]>([]);
+  const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
   const [header, setHeader] = useState<Header | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
@@ -42,7 +51,7 @@ export function ScanScreen() {
         qty: l.qty,
         price: l.price,
         categoryId: catId(l.categoryName),
-        owner: l.owner,
+        owners: l.owners,
         lowConfidence: l.lowConfidence,
       })),
     );
@@ -55,7 +64,7 @@ export function ScanScreen() {
   };
 
   const read = useMutation({
-    mutationFn: async (file: File) => api.parseReceipt(await resizeForUpload(file)),
+    mutationFn: async (file: File) => api.parseReceipt(await resizeForUpload(file), onBill.map((p) => p.id)),
     onSuccess: toLines,
   });
 
@@ -78,12 +87,13 @@ export function ScanScreen() {
         merchant: header?.merchant ?? null,
         occurredAt: date && date <= today ? new Date(`${date}T12:00:00+07:00`).toISOString() : undefined,
         total,
+        people: onBill.map((p) => p.id),
         lines: lines.map((l) => ({
           rawName: l.rawName,
           canonicalName: l.canonicalName,
           qty: l.qty,
           price: l.price,
-          owner: l.owner,
+          owners: l.owners,
           categoryId: l.categoryId,
           lowConfidence: l.lowConfidence,
         })),
@@ -93,7 +103,7 @@ export function ScanScreen() {
       afterLog(out);
       void qc.invalidateQueries({ queryKey: ["entries"] });
       fb.toast({
-        message: `จดแล้ว ฿${formatBaht(out.entry.total)} · แฟนติด ฿${formatBaht(out.entry.partnerShare)}`,
+        message: `จดแล้ว ฿${formatBaht(out.entry.total)}${out.entry.shares.length ? ` · ${describeShares(people, out.entry.shares)}` : ""}`,
         action: { label: "ย้อนกลับ", run: () => void api.deleteEntry(out.entry.id).then(() => qc.invalidateQueries()) },
       });
       router.replace("/");
@@ -108,7 +118,7 @@ export function ScanScreen() {
         <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
           <Icon name="arrow_back" />
         </button>
-        <h1 className="font-display text-xl">สแกนใบเสร็จ</h1>
+        <h1 className="font-display text-xl">{onBill.length ? "สแกนหารกัน" : "สแกนใบเสร็จ"}</h1>
       </header>
 
       {/* Two inputs: `capture` forces the camera on phones, so the album needs its own */}
@@ -119,6 +129,11 @@ export function ScanScreen() {
         <Center>
           <Icon name="receipt_long" size={56} className="text-ink-3" />
           <p className="mt-3 text-ink-2">ถ่ายรูปหรือเลือกรูปใบเสร็จ</p>
+          <div className="mt-5 w-full max-w-xs rounded-2xl bg-card p-4">
+            <p className="mb-2 text-sm text-ink-3">หารกับใคร? (ไม่เลือก = แค่แกะรายการ ของเราทั้งหมด)</p>
+            <PeoplePicker people={people} selected={sharedWith} onChange={setSharedWith} label="หารกับใคร" />
+            {onBill.length > 0 && <p className="mt-2 text-xs text-ink-3">AI จะเดาว่าแต่ละรายการเป็นของใคร จากชื่อและโน้ตของแต่ละคน</p>}
+          </div>
           <div className="mt-5 flex w-full max-w-xs flex-col gap-4">
             <button className="btn3d py-4 text-lg" onClick={() => camera.current?.click()}>
               <Icon name="photo_camera" /> ถ่ายรูป
@@ -159,10 +174,10 @@ export function ScanScreen() {
         <>
           <div className="px-5 pb-2">
             <p className="truncate font-medium">{header?.merchant ?? "ใบเสร็จ"}</p>
-            <p className="text-xs text-ink-3">แตะชิปเพื่อเปลี่ยนเจ้าของ · แตะชื่อเพื่อแก้</p>
+            <p className="text-xs text-ink-3">{onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · " : ""}แตะชื่อเพื่อแก้</p>
           </div>
 
-          <ItemLines lines={lines} onChange={setLines} addLabel="เพิ่มรายการที่ AI อ่านตก" />
+          <ItemLines lines={lines} onChange={setLines} onBill={onBill} addLabel="เพิ่มรายการที่ AI อ่านตก" />
 
           <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg px-5 pt-3">
             {(sum.mismatch || total === 0) && (
@@ -187,11 +202,7 @@ export function ScanScreen() {
                 </label>
               </p>
             )}
-            <div className="mb-3 flex justify-between text-sm">
-              <span>ของเรา <b className="text-expense">฿{formatBaht(sum.mine)}</b></span>
-              <span>ของแฟน <b className="text-partner">฿{formatBaht(sum.partner)}</b></span>
-              <span>รวม <b>฿{formatBaht(total)}</b></span>
-            </div>
+            <SplitSummary people={people} mine={sum.mine} shares={sum.shares} total={total} />
             <button className="btn3d w-full py-4 text-lg" disabled={!sum.valid || save.isPending} onClick={() => save.mutate()}>
               {save.isPending ? <><Spinner /> กำลังบันทึก…</> : "บันทึก"}
             </button>

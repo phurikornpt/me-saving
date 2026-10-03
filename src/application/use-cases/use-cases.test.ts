@@ -6,6 +6,8 @@ import { MarkNoSpendDay } from "./mark-no-spend-day";
 import { RecordEntry } from "./record-entry";
 import { RecordRepayment } from "./record-repayment";
 
+const FAN = "p-fan"; // seeded by createFakeRepos
+
 // 2026-10-03 12:00 Bangkok = 05:00Z
 const NOON = new Date("2026-10-03T05:00:00Z");
 
@@ -46,14 +48,15 @@ describe("RecordEntry", () => {
     expect(out).toMatchObject({ xpGained: 15, streak: 10 });
   });
 
-  it("rice 100 split with partner records partner share 50", async () => {
+  it("rice 100 split with แฟน records แฟน owing 50", async () => {
     const s = setup();
     const out = await s.recordEntry.execute({
       kind: "expense",
       total: 10000,
-      split: { kind: "split" },
+      split: { kind: "equal", people: [FAN] },
     });
-    expect(out.entry.partnerShare).toBe(5000);
+    expect(out.entry.othersShare).toBe(5000);
+    expect(out.entry.shares).toEqual([{ personId: FAN, amount: 5000 }]);
   });
 
   it("back-dated entry saves money but logs only today's press", async () => {
@@ -76,11 +79,19 @@ describe("RecordEntry", () => {
     expect(out).toMatchObject({ streak: 2, xpGained: 10 });
   });
 
-  it("income cannot be fronted for partner", async () => {
+  it("income cannot be fronted", async () => {
     const s = setup();
     await expect(
-      s.recordEntry.execute({ kind: "income", total: 100, split: { kind: "split" } }),
+      s.recordEntry.execute({ kind: "income", total: 100, split: { kind: "equal", people: [FAN] } }),
     ).rejects.toMatchObject({ code: "INVALID_SPLIT" });
+  });
+
+  it("only fronts for people who are set up", async () => {
+    const s = setup();
+    await expect(
+      s.recordEntry.execute({ kind: "expense", total: 100, split: { kind: "theirs", people: ["ghost"] } }),
+    ).rejects.toMatchObject({ code: "UNKNOWN_PERSON" });
+    expect(s.entries).toHaveLength(0);
   });
 
   it("rejects zero amounts", async () => {
@@ -99,27 +110,39 @@ describe("RecordEntry", () => {
 });
 
 describe("RecordRepayment", () => {
-  it("partner repays 30 of 50: 20 left, not income, no bonus", async () => {
+  it("แฟน repays 30 of 50: 20 left, not income, no bonus", async () => {
     const s = setup();
-    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "split" } });
-    const out = await s.recordRepayment.execute({ amount: 3000 });
+    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] } });
+    const out = await s.recordRepayment.execute({ personId: FAN, amount: 3000 });
     expect(out.balanceAfter).toBe(2000);
     expect(out.entry.kind).toBe("repayment");
-    expect(s.xp.some((x) => x.reason === "partner_cleared")).toBe(false);
+    expect(s.xp.some((x) => x.reason === "balance_cleared")).toBe(false);
   });
 
   it("clearing the balance to 0 earns +20 XP", async () => {
     const s = setup();
-    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "split" } });
-    const out = await s.recordRepayment.execute({ amount: 5000 });
+    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] } });
+    const out = await s.recordRepayment.execute({ personId: FAN, amount: 5000 });
     expect(out.balanceAfter).toBe(0);
-    expect(s.xp.find((x) => x.reason === "partner_cleared")?.amount).toBe(20);
+    expect(s.xp.find((x) => x.reason === "balance_cleared")?.amount).toBe(20);
+  });
+
+  it("each person has their own balance: A can't repay what แฟน owes", async () => {
+    const s = setup();
+    await s.recordEntry.execute({ kind: "expense", total: 9000, split: { kind: "equal", people: [FAN, "p-a"] } });
+    const out = await s.recordRepayment.execute({ personId: "p-a", amount: 3000 });
+    expect(out.balanceAfter).toBe(0);
+    expect(out.entry.personId).toBe("p-a");
+    await expect(s.recordRepayment.execute({ personId: "p-a", amount: 1 })).rejects.toMatchObject({
+      code: "REPAYMENT_EXCEEDS_BALANCE",
+    });
+    expect((await s.recordRepayment.execute({ personId: FAN, amount: 1000 })).balanceAfter).toBe(2000);
   });
 
   it("cannot repay more than the balance", async () => {
     const s = setup();
-    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "split" } });
-    await expect(s.recordRepayment.execute({ amount: 5001 })).rejects.toMatchObject({
+    await s.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] } });
+    await expect(s.recordRepayment.execute({ personId: FAN, amount: 5001 })).rejects.toMatchObject({
       code: "REPAYMENT_EXCEEDS_BALANCE",
     });
     expect(s.entries.filter((e) => e.kind === "repayment")).toHaveLength(0);

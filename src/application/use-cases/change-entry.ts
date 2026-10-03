@@ -1,16 +1,9 @@
 import { DomainError } from "@/domain/errors";
+import { assertNoNegativeBalance } from "@/domain/ledger";
 import { assertSatang, type Satang } from "@/domain/money";
-import { partnerBalance } from "@/domain/partner";
-import { partnerShareFor, type SplitMode } from "@/domain/split";
-import { isGroupSource, type EntryRecord, type Repos, type TransactionRunner } from "../ports";
-
-/** A change must never leave the partner balance negative (this app only tracks "partner owes me"). */
-async function assertBalanceStillValid(repos: Repos) {
-  const { expenses, repayments } = await repos.entries.partnerLedger();
-  if (partnerBalance(expenses, repayments) < 0) {
-    throw new DomainError("BALANCE_WOULD_GO_NEGATIVE", "partner repayments would exceed what they owe");
-  }
-}
+import { sharesFor, sumShares, type SplitMode } from "@/domain/split";
+import { assertKnownPeople } from "../known-people";
+import { isGroupSource, type EntryRecord, type TransactionRunner } from "../ports";
 
 export interface UpdateEntryPatch {
   occurredAt?: Date;
@@ -36,26 +29,31 @@ export class UpdateEntry {
         throw new DomainError("ENTRY_LOCKED", "group entries can't change amount or split");
       }
       if (patch.split && current.kind !== "expense") {
-        throw new DomainError("INVALID_SPLIT", "only expenses can be fronted for partner");
+        throw new DomainError("INVALID_SPLIT", "only expenses can be fronted");
       }
 
       const total = patch.total ?? current.total;
       assertSatang(total);
       if (total === 0) throw new DomainError("INVALID_AMOUNT", "amount must be positive");
 
-      let partnerShare = current.partnerShare;
-      if (patch.split) partnerShare = partnerShareFor(total, patch.split);
-      else if (partnerShare > total) throw new DomainError("INVALID_SPLIT", "partner share exceeds the new total");
+      let shares = current.shares;
+      if (patch.split) {
+        shares = sharesFor(total, patch.split);
+        await assertKnownPeople(repos.people, shares.map((s) => s.personId));
+      } else if (sumShares(shares) > total) {
+        throw new DomainError("INVALID_SPLIT", "the shares exceed the new total");
+      }
 
       const updated = await repos.entries.update(id, {
         total,
-        partnerShare,
+        ...(patch.split && { shares }),
         ...(patch.occurredAt !== undefined && { occurredAt: patch.occurredAt }),
         ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
         ...(patch.note !== undefined && { note: patch.note }),
         ...(patch.merchant !== undefined && { merchant: patch.merchant }),
       });
-      await assertBalanceStillValid(repos);
+      // A smaller share (or a bigger repayment) must never leave someone owing less than zero.
+      assertNoNegativeBalance(await repos.entries.ledger());
       return updated!;
     });
   }
@@ -68,7 +66,7 @@ export class DeleteEntry {
   execute(id: string): Promise<void> {
     return this.tx.run(async (repos) => {
       if (!(await repos.entries.remove(id))) throw new DomainError("NOT_FOUND", "entry not found");
-      await assertBalanceStillValid(repos);
+      assertNoNegativeBalance(await repos.entries.ledger());
     });
   }
 }

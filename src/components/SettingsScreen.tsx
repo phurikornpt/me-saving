@@ -5,14 +5,17 @@ import { useRouter } from "next/navigation";
 import { useState, useSyncExternalStore } from "react";
 import { api } from "@/client/api";
 import { ICON_CHOICES } from "@/client/icons";
-import { useCategories, useDashboard, useSettings } from "@/client/queries";
+import { personColor } from "@/client/people";
+import { useCategories, useDashboard, usePeople } from "@/client/queries";
 import { readTheme, setTheme, subscribeTheme, type ThemePref } from "@/client/theme";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { PeoplePicker } from "./People";
+import { PeopleSettings } from "./PeopleSettings";
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="rounded-[24px] bg-card p-4">
+const Section = ({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) => (
+  <section id={id} className="scroll-mt-4 rounded-[24px] bg-card p-4">
     <h2 className="mb-3 text-sm text-ink-3">{title}</h2>
     {children}
   </section>
@@ -35,29 +38,21 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
   const router = useRouter();
   const qc = useQueryClient();
   const fb = useFeedback();
-  const settings = useSettings();
   const dash = useDashboard();
   const { data: categories = [] } = useCategories();
-
-  // Local edit buffer for the note; `null` means "untouched, show the saved value"
-  const [noteDraft, setNoteDraft] = useState<string | null>(null);
-  const note = noteDraft ?? settings.data?.partnerNote ?? "";
-
-  const saveNote = useMutation({
-    mutationFn: () => api.updateSettings({ partnerNote: note }),
-    onSuccess: () => {
-      setNoteDraft(null);
-      void qc.invalidateQueries({ queryKey: ["settings"] });
-      fb.toast({ message: "บันทึกโน้ตแล้ว" });
-    },
-  });
+  const { data: people = [] } = usePeople();
 
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
   const [icon, setIcon] = useState<string>(ICON_CHOICES[0]);
-  const [mode, setMode] = useState<"" | "split" | "partnerAll">("");
+  const [mode, setMode] = useState<"" | "equal" | "theirs">("");
+  const [presetPerson, setPresetPerson] = useState<string | null>(null);
   const addPreset = useMutation({
-    mutationFn: () => api.createPreset({ label: label.trim(), icon, amount: parseBaht(amount), categoryId: null, partnerMode: mode || null }),
+    mutationFn: () =>
+      api.createPreset({
+        label: label.trim(), icon, amount: parseBaht(amount), categoryId: null,
+        personId: mode ? presetPerson : null, splitKind: mode || null,
+      }),
     onSuccess: () => {
       setLabel("");
       setAmount("");
@@ -107,21 +102,8 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
           </div>
         </Section>
 
-        <Section title="โน้ตเกี่ยวกับแฟน (ให้ AI ช่วยเดาว่าของชิ้นไหนเป็นของใคร)">
-          <textarea
-            value={note}
-            maxLength={500}
-            rows={3}
-            onChange={(e) => setNoteDraft(e.target.value)}
-            placeholder="เช่น ชอบนมเปรี้ยว กินขนมหวาน ไม่กินเผ็ด"
-            className="w-full rounded-2xl border-2 border-line bg-card p-3 outline-none focus:border-ink"
-          />
-          <p className="mt-2 text-xs text-ink-3">
-            ⚠︎ ข้อความนี้ถูกส่งให้ Google (Gemini) ทุกครั้งที่สแกนใบเสร็จ อย่าใส่ชื่อจริงหรือข้อมูลอ่อนไหว เช่น เรื่องสุขภาพ
-          </p>
-          <button className="btn3d mt-3 w-full" disabled={noteDraft === null || saveNote.isPending} onClick={() => saveNote.mutate()}>
-            บันทึกโน้ต
-          </button>
+        <Section title="คนที่หารด้วย (ออกก่อนให้ใครบ้าง)" id="people">
+          <PeopleSettings />
         </Section>
 
         <Section title="ปุ่มลัด">
@@ -130,7 +112,11 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
               <li key={p.id} className="flex items-center gap-3 py-2">
                 <Icon name={p.icon} size={22} />
                 <span className="flex-1">{p.label} <span className="text-ink-3">฿{formatBaht(p.amount)}</span></span>
-                {p.partnerMode && <Icon name="group" size={18} className="text-partner" />}
+                {p.personId && (
+                  <span className="text-xs" style={{ color: personColor(people, p.personId) }}>
+                    {p.splitKind === "equal" ? "หารกับ" : "ของ"}{people.find((x) => x.id === p.personId)?.name}
+                  </span>
+                )}
                 <button aria-label={`ลบ ${p.label}`} className="rounded-full p-1 text-ink-3" onClick={() => removePreset.mutate(p.id)}>
                   <Icon name="delete" size={20} />
                 </button>
@@ -145,12 +131,19 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
             <IconPicker value={icon} onChange={setIcon} />
             <div className="flex gap-2">
               {(
-                [["", "ของเรา"], ["split", "หารกับแฟน"], ["partnerAll", "ของแฟน"]] as const
+                [["", "ของเรา"], ["equal", "หารเท่ากัน"], ["theirs", "ของเขาทั้งหมด"]] as const
               ).map(([k, t]) => (
                 <button key={k} className="pill text-sm" aria-pressed={mode === k} onClick={() => setMode(k)}>{t}</button>
               ))}
             </div>
-            <button className="btn3d" disabled={!label.trim() || !amount || addPreset.isPending} onClick={() => addPreset.mutate()}>เพิ่มปุ่มลัด</button>
+            {mode && <PeoplePicker people={people} selected={presetPerson ? [presetPerson] : []} onChange={([id]) => setPresetPerson(id ?? null)} single label="กับใคร" />}
+            <button
+              className="btn3d"
+              disabled={!label.trim() || !amount || (mode !== "" && !presetPerson) || addPreset.isPending}
+              onClick={() => addPreset.mutate()}
+            >
+              เพิ่มปุ่มลัด
+            </button>
           </div>
         </Section>
 

@@ -13,9 +13,10 @@ def call(method,path,raw=None,headers=None):
         t=e.read().decode()
         try: return e.code,json.loads(t)
         except Exception: return e.code,t
-def multipart(name,filename,ctype,data):
+def multipart(name,filename,ctype,data,fields=None):
     b=uuid.uuid4().hex
-    body=(f"--{b}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{filename}\"\r\nContent-Type: {ctype}\r\n\r\n").encode()+data+f"\r\n--{b}--\r\n".encode()
+    extra="".join(f"--{b}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n" for k,v in (fields or {}).items()).encode()
+    body=extra+(f"--{b}\r\nContent-Disposition: form-data; name=\"{name}\"; filename=\"{filename}\"\r\nContent-Type: {ctype}\r\n\r\n").encode()+data+f"\r\n--{b}--\r\n".encode()
     return body,{"Content-Type":f"multipart/form-data; boundary={b}"}
 _,c=call("GET","/api/auth/csrf")
 call("POST","/api/auth/callback/credentials",urllib.parse.urlencode({"csrfToken":c["csrfToken"],"email":"smoke@example.com","password":os.environ["T_PW"]}).encode(),{"Content-Type":"application/x-www-form-urlencoded"})
@@ -25,17 +26,24 @@ ok=True
 def check(n,c,e=""):
     global ok; ok&=bool(c); print(("PASS " if c else "FAIL ")+n+(f"  {e}" if not c else ""))
 
-# remember one owner first, so we can see memory beat the AI
-call("POST","/api/receipts",json.dumps({"total":1500,"lines":[{"rawName":"x","canonicalName":"ขนมปัง","qty":1,"price":1500,"owner":"me"}]}).encode(),{"Content-Type":"application/json"})
+J={"Content-Type":"application/json"}
+_,fan=call("POST","/api/people",json.dumps({"name":"แฟน","note":"ชอบนมเปรี้ยว"}).encode(),J)
+# remember one owner first (on a bill shared with แฟน), so we can see memory beat the AI
+call("POST","/api/receipts",json.dumps({"total":1500,"people":[fan["id"]],"lines":[{"rawName":"x","canonicalName":"ขนมปัง","qty":1,"price":1500,"owners":{"me":True,"people":[]}}]}).encode(),J)
 
-t=time.time(); b,h=multipart("image","r.jpg","image/jpeg",img); s,d=call("POST","/api/receipt/parse",b,h); dt=time.time()-t
-check("parse 200", s==200, (s,d))
+# plain scan: just the lines, all ours
+b,h=multipart("image","r.jpg","image/jpeg",img); s,d=call("POST","/api/receipt/parse",b,h)
+check("plain scan 200, every line ours", s==200 and all(l["owners"]=={"me":True,"people":[]} for l in d["lines"]), (s,d))
+
+# shared scan: the AI guesses who each line is for
+t=time.time(); b,h=multipart("image","r.jpg","image/jpeg",img,{"people":fan["id"]}); s,d=call("POST","/api/receipt/parse",b,h); dt=time.time()-t
+check("shared parse 200", s==200, (s,d))
 if s==200:
     print(f"   {dt:.1f}s  {d['merchant']} {d['date']} total={d['total']} mismatch={d['sumMismatch']}")
-    for l in d["lines"]: print("   ",l["canonicalName"],l["price"],l["owner"],l["ownerSource"],"LOW" if l["lowConfidence"] else "")
+    for l in d["lines"]: print("   ",l["canonicalName"],l["price"],l["owners"],l["ownerSource"],"LOW" if l["lowConfidence"] else "")
     by={l["canonicalName"]:l for l in d["lines"]}
     check("no discount row among the lines", not any("ส่วนลด" in l["rawName"] for l in d["lines"]))
-    check("memory beats AI for the remembered item", by.get("ขนมปัง",{}).get("ownerSource")=="memory" and by["ขนมปัง"]["owner"]=="me", by.get("ขนมปัง"))
+    check("memory beats AI for the remembered item", by.get("ขนมปัง",{}).get("ownerSource")=="memory" and by["ขนมปัง"]["owners"]["people"]==[], by.get("ขนมปัง"))
     check("sumMismatch because of the printed member discount", d["sumMismatch"] is True)
     check("Buddhist-era date converted", d["date"]=="2026-10-03", d["date"])
 

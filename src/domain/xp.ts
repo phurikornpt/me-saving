@@ -1,7 +1,7 @@
 export const XP_FIRST_LOG_OF_DAY = 10;
 export const XP_EXTRA_ENTRY = 1;
 export const XP_EXTRA_ENTRY_DAILY_CAP = 5;
-export const XP_PARTNER_CLEARED = 20;
+export const XP_BALANCE_CLEARED = 20;
 
 /** Streak multiplier applies to the first-log-of-day XP only. `streak` includes today. */
 export function streakMultiplier(streak: number): number {

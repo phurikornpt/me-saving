@@ -1,6 +1,7 @@
 import { DomainError } from "@/domain/errors";
 import { assertSatang, type Satang } from "@/domain/money";
-import { partnerShareFor, type SplitMode } from "@/domain/split";
+import { sharesFor, type SplitMode } from "@/domain/split";
+import { assertKnownPeople } from "../known-people";
 import { logActivity, type ActivityResult } from "../log-activity";
 import type { Clock, EntryRecord, EntrySource, TransactionRunner } from "../ports";
 
@@ -28,18 +29,20 @@ export class RecordEntry {
     assertSatang(input.total);
     if (input.total === 0) throw new DomainError("INVALID_AMOUNT", "amount must be positive");
     if (input.kind === "income" && input.split && input.split.kind !== "none") {
-      throw new DomainError("INVALID_SPLIT", "only expenses can be fronted for partner");
+      throw new DomainError("INVALID_SPLIT", "only expenses can be fronted");
     }
     const now = this.clock.now();
-    const partnerShare = partnerShareFor(input.total, input.split ?? { kind: "none" });
+    const shares = sharesFor(input.total, input.split ?? { kind: "none" });
 
     return this.tx.run(async (repos) => {
+      await assertKnownPeople(repos.people, shares.map((s) => s.personId));
       const entry = await repos.entries.insert({
         kind: input.kind,
         occurredAt: input.occurredAt ?? now,
         createdAt: now,
         total: input.total,
-        partnerShare,
+        shares,
+        personId: null,
         categoryId: input.categoryId ?? null,
         note: input.note ?? null,
         merchant: input.merchant ?? null,

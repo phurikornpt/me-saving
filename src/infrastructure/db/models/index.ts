@@ -22,17 +22,34 @@ export class Category extends Model<InferAttributes<Category>, InferCreationAttr
   declare archived: CreationOptional<boolean>;
 }
 
+export class Person extends Model<InferAttributes<Person>, InferCreationAttributes<Person>> {
+  declare id: CreationOptional<string>;
+  declare name: string;
+  declare note: CreationOptional<string>;
+  declare sort: CreationOptional<number>;
+  declare archived: CreationOptional<boolean>;
+}
+
 export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes<Entry>> {
   declare id: CreationOptional<string>;
   declare kind: "expense" | "income" | "repayment";
   declare occurredAt: Date;
   declare createdAt: CreationOptional<Date>;
   declare total: number;
-  declare partnerShare: CreationOptional<number>;
+  /** Sum of this entry's shares (denormalised for the read paths). */
+  declare othersShare: CreationOptional<number>;
+  declare personId: ForeignKey<Person["id"]> | null;
   declare categoryId: ForeignKey<Category["id"]> | null;
   declare note: string | null;
   declare merchant: string | null;
   declare source: CreationOptional<"manual" | "preset" | "receipt" | "itemized" | "wheel">;
+  declare shares?: EntryShare[];
+}
+
+export class EntryShare extends Model<InferAttributes<EntryShare>, InferCreationAttributes<EntryShare>> {
+  declare entryId: ForeignKey<Entry["id"]>;
+  declare personId: ForeignKey<Person["id"]>;
+  declare amount: number;
 }
 
 export class ReceiptLine extends Model<
@@ -46,7 +63,8 @@ export class ReceiptLine extends Model<
   declare canonicalName: string;
   declare qty: CreationOptional<number>;
   declare price: number;
-  declare owner: "me" | "partner" | "split";
+  declare includesMe: boolean;
+  declare people: string[];
   declare categoryId: ForeignKey<Category["id"]> | null;
   declare lowConfidence: CreationOptional<boolean>;
 }
@@ -56,7 +74,8 @@ export class OwnerMemory extends Model<
   InferCreationAttributes<OwnerMemory>
 > {
   declare canonicalName: string;
-  declare owner: "me" | "partner" | "split";
+  declare includesMe: boolean;
+  declare people: string[];
   declare updatedAt: CreationOptional<Date>;
 }
 
@@ -66,7 +85,8 @@ export class Preset extends Model<InferAttributes<Preset>, InferCreationAttribut
   declare icon: string;
   declare amount: number;
   declare categoryId: ForeignKey<Category["id"]> | null;
-  declare partnerMode: "split" | "partnerAll" | null;
+  declare personId: ForeignKey<Person["id"]> | null;
+  declare splitKind: "equal" | "theirs" | null;
   declare sort: CreationOptional<number>;
 }
 
@@ -85,7 +105,6 @@ export class XpEvent extends Model<InferAttributes<XpEvent>, InferCreationAttrib
 
 export class Setting extends Model<InferAttributes<Setting>, InferCreationAttributes<Setting>> {
   declare id: CreationOptional<number>;
-  declare partnerNote: CreationOptional<string>;
   declare dashboardLayout: CreationOptional<LayoutItem[]>;
 }
 
@@ -100,7 +119,9 @@ export class LoginAttempt extends Model<
 
 export interface Models {
   Category: typeof Category;
+  Person: typeof Person;
   Entry: typeof Entry;
+  EntryShare: typeof EntryShare;
   ReceiptLine: typeof ReceiptLine;
   OwnerMemory: typeof OwnerMemory;
   Preset: typeof Preset;
@@ -138,6 +159,16 @@ export function initModels(sequelize: Sequelize): Models {
       },
       opts("Category", "categories"),
     );
+    Person.init(
+      {
+        id: uuid,
+        name: { type: DataTypes.TEXT, allowNull: false },
+        note: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
+        sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        archived: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      },
+      opts("Person", "people"),
+    );
     Entry.init(
       {
         id: uuid,
@@ -145,13 +176,22 @@ export function initModels(sequelize: Sequelize): Models {
         occurredAt: { type: DataTypes.DATE, allowNull: false },
         createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
         total: { type: DataTypes.INTEGER, allowNull: false },
-        partnerShare: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        othersShare: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        personId: { type: DataTypes.UUID, allowNull: true },
         categoryId: { type: DataTypes.UUID, allowNull: true },
         note: { type: DataTypes.TEXT, allowNull: true },
         merchant: { type: DataTypes.TEXT, allowNull: true },
         source: { type: DataTypes.TEXT, allowNull: false, defaultValue: "manual" },
       },
       opts("Entry", "entries"),
+    );
+    EntryShare.init(
+      {
+        entryId: { type: DataTypes.UUID, primaryKey: true },
+        personId: { type: DataTypes.UUID, primaryKey: true },
+        amount: { type: DataTypes.INTEGER, allowNull: false },
+      },
+      opts("EntryShare", "entry_shares"),
     );
     ReceiptLine.init(
       {
@@ -162,7 +202,8 @@ export function initModels(sequelize: Sequelize): Models {
         canonicalName: { type: DataTypes.TEXT, allowNull: false },
         qty: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
         price: { type: DataTypes.INTEGER, allowNull: false },
-        owner: { type: DataTypes.TEXT, allowNull: false },
+        includesMe: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+        people: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [] },
         categoryId: { type: DataTypes.UUID, allowNull: true },
         lowConfidence: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       },
@@ -171,7 +212,8 @@ export function initModels(sequelize: Sequelize): Models {
     OwnerMemory.init(
       {
         canonicalName: { type: DataTypes.TEXT, primaryKey: true },
-        owner: { type: DataTypes.TEXT, allowNull: false },
+        includesMe: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+        people: { type: DataTypes.ARRAY(DataTypes.UUID), allowNull: false, defaultValue: [] },
         updatedAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       },
       opts("OwnerMemory", "owner_memory"),
@@ -183,7 +225,8 @@ export function initModels(sequelize: Sequelize): Models {
         icon: { type: DataTypes.TEXT, allowNull: false },
         amount: { type: DataTypes.INTEGER, allowNull: false },
         categoryId: { type: DataTypes.UUID, allowNull: true },
-        partnerMode: { type: DataTypes.TEXT, allowNull: true },
+        personId: { type: DataTypes.UUID, allowNull: true },
+        splitKind: { type: DataTypes.TEXT, allowNull: true },
         sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       },
       opts("Preset", "presets"),
@@ -208,7 +251,6 @@ export function initModels(sequelize: Sequelize): Models {
     Setting.init(
       {
         id: { type: DataTypes.SMALLINT, primaryKey: true, defaultValue: 1 },
-        partnerNote: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
         dashboardLayout: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       },
       opts("Setting", "settings"),
@@ -222,6 +264,10 @@ export function initModels(sequelize: Sequelize): Models {
       opts("LoginAttempt", "login_attempts"),
     );
 
+    Entry.hasMany(EntryShare, { foreignKey: "entryId", as: "shares", onDelete: "CASCADE" });
+    EntryShare.belongsTo(Entry, { foreignKey: "entryId" });
+    Person.hasMany(EntryShare, { foreignKey: "personId" });
+    EntryShare.belongsTo(Person, { foreignKey: "personId" });
     Entry.hasMany(ReceiptLine, { foreignKey: "entryId", as: "lines", onDelete: "CASCADE" });
     ReceiptLine.belongsTo(Entry, { foreignKey: "entryId" });
     Category.hasMany(Entry, { foreignKey: "categoryId" });
@@ -233,5 +279,5 @@ export function initModels(sequelize: Sequelize): Models {
 
     initialised.add(sequelize);
   }
-  return { Category, Entry, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
+  return { Category, Person, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
 }

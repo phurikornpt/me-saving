@@ -11,7 +11,7 @@ import { Sheet } from "./Sheet";
 
 const NAMES: Record<WidgetId, string> = {
   streak: "Streak & Level",
-  partner: "ยอดแฟนติด",
+  people: "คนที่ติดเรา",
   presets: "ปุ่มลัด",
   today: "วันนี้",
   calendar: "ปฏิทิน",

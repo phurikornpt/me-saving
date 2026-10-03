@@ -1,11 +1,11 @@
 import { bangkokDay, type DayKey } from "@/domain/day";
-import type { PartnerExpense, Repayment } from "@/domain/partner";
-import type { Owner } from "@/domain/split";
+import { sumShares, type LineOwners } from "@/domain/split";
 import type {
   Clock,
   EntryRecord,
   NewEntry,
   NewReceiptLine,
+  PersonRecord,
   Repos,
   TransactionRunner,
 } from "../ports";
@@ -22,26 +22,33 @@ export function createFakeRepos() {
   const days = new Map<DayKey, "entry" | "no_spend">();
   const xp: { reason: string; amount: number; at: Date }[] = [];
   const lines: (NewReceiptLine & { entryId: string })[] = [];
-  const memory = new Map<string, Owner>();
+  const memory = new Map<string, LineOwners>();
+  // Two people exist from the start so most tests can front money without setting anyone up.
+  const people: PersonRecord[] = [
+    { id: "p-fan", name: "แฟน", note: "ชอบนมเปรี้ยว", sort: 0, archived: false },
+    { id: "p-a", name: "A", note: "", sort: 1, archived: false },
+  ];
   let seq = 0;
 
   const repos: Repos = {
     receiptLines: undefined as never,
     ownerMemory: undefined as never,
+    people: undefined as never,
     entries: {
       async insert(e: NewEntry) {
-        const rec = { ...e, id: `e${++seq}` };
+        const rec = { ...e, id: `e${++seq}`, othersShare: sumShares(e.shares) };
         entries.push(rec);
         return rec;
       },
-      async partnerLedger() {
-        const expenses: PartnerExpense[] = entries
-          .filter((e) => e.kind === "expense" && e.partnerShare > 0)
-          .map((e) => ({ id: e.id, occurredAt: e.occurredAt, partnerShare: e.partnerShare }));
-        const repayments: Repayment[] = entries
-          .filter((e) => e.kind === "repayment")
-          .map((e) => ({ total: e.total }));
-        return { expenses, repayments };
+      async ledger() {
+        return {
+          shares: entries.flatMap((e) =>
+            e.shares.map((s) => ({ entryId: e.id, personId: s.personId, occurredAt: e.occurredAt, amount: s.amount })),
+          ),
+          repayments: entries
+            .filter((e) => e.kind === "repayment")
+            .map((e) => ({ personId: e.personId!, total: e.total })),
+        };
       },
       async recent(limit) {
         return [...entries].reverse().slice(0, limit);
@@ -56,6 +63,7 @@ export function createFakeRepos() {
         const i = entries.findIndex((e) => e.id === id);
         if (i < 0) return null;
         entries[i] = { ...entries[i], ...patch };
+        entries[i].othersShare = sumShares(entries[i].shares);
         return entries[i];
       },
       async remove(id) {
@@ -101,10 +109,26 @@ export function createFakeRepos() {
       return new Map(memory);
     },
     async upsertMany(items) {
-      items.forEach((i) => memory.set(i.canonicalName, i.owner));
+      items.forEach((i) => memory.set(i.canonicalName, i.owners));
+    },
+  };
+  repos.people = {
+    async list() {
+      return [...people];
+    },
+    async create(p) {
+      const rec = { ...p, id: `p${++seq}`, archived: false };
+      people.push(rec);
+      return rec;
+    },
+    async update(id, patch) {
+      const i = people.findIndex((p) => p.id === id);
+      if (i < 0) return null;
+      people[i] = { ...people[i], ...patch };
+      return people[i];
     },
   };
 
   const tx: TransactionRunner = { run: (fn) => fn(repos) };
-  return { repos, tx, entries, days, xp, lines, memory };
+  return { repos, tx, entries, days, xp, lines, memory, people };
 }

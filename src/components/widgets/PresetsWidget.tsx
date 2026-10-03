@@ -7,11 +7,15 @@ import { applyOptimisticEntry } from "@/client/optimistic";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht } from "@/domain/money";
-import { partnerShareFor } from "@/domain/split";
+import { personColor } from "@/client/people";
+import { sharesFor, type SplitMode } from "@/domain/split";
 import { useFeedback } from "../Feedback";
 import { Icon } from "../Icon";
 import { Spinner } from "../Loading";
 import { WidgetCard } from "./WidgetCard";
+
+const splitOf = (p: DashboardDTO["presets"][number]): SplitMode | undefined =>
+  p.personId && p.splitKind ? { kind: p.splitKind, people: [p.personId] } : undefined;
 
 export function PresetsWidget({ data }: { data: DashboardDTO }) {
   const qc = useQueryClient();
@@ -26,12 +30,12 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         categoryId: p.categoryId,
         note: p.label,
         source: "preset",
-        split: p.partnerMode ? { kind: p.partnerMode } : undefined,
+        split: splitOf(p),
       }),
     onMutate: (p) =>
       applyOptimisticEntry(qc, {
         kind: "expense", total: p.amount, categoryId: p.categoryId, note: p.label, source: "preset",
-        partnerShare: p.partnerMode ? partnerShareFor(p.amount, { kind: p.partnerMode }) : 0,
+        shares: sharesFor(p.amount, splitOf(p) ?? { kind: "none" }),
       }),
     onSuccess: (out) => {
       afterLog(out);
@@ -63,7 +67,11 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
             >
               <Icon name={p.icon} size={20} />
               {p.label} <span className="text-ink-3">฿{formatBaht(p.amount)}</span>
-              {p.partnerMode && <Icon name="group" size={16} className="text-partner" />}
+              {p.personId && (
+                <span style={{ color: personColor(data.people, p.personId) }}>
+                  <Icon name="group" size={16} />
+                </span>
+              )}
               {tap.isPending && tap.variables?.id === p.id && <Spinner size={14} />}
             </button>
           ))}

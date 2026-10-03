@@ -19,7 +19,7 @@ export function createStatsRepo(sequelize: Sequelize): StatsRepo {
       const end = bangkokDayRange(toExclusive).start;
       const rows = await sequelize.query<{ day: string; spent: string; earned: string }>(
         `SELECT to_char((occurred_at AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS day,
-                COALESCE(SUM(CASE WHEN kind = 'expense' THEN total - partner_share END), 0) AS spent,
+                COALESCE(SUM(CASE WHEN kind = 'expense' THEN total - others_share END), 0) AS spent,
                 COALESCE(SUM(CASE WHEN kind = 'income'  THEN total END), 0) AS earned
            FROM entries
           WHERE occurred_at >= :start AND occurred_at < :end AND kind IN ('expense', 'income')
@@ -31,15 +31,18 @@ export function createStatsRepo(sequelize: Sequelize): StatsRepo {
     async categoryTotals(from, toExclusive) {
       const start = bangkokDayRange(from).start;
       const end = bangkokDayRange(toExclusive).start;
-      // Receipt entries carry no category themselves: their lines do, and only our share of each line counts.
+      // Group entries (receipts, hand-typed groups) carry no category themselves: their lines do, and only
+      // our share of each line counts. A line's price splits equally between its owners, each person's part
+      // rounded down, so ours is whatever the people's parts leave over (mirrors domain lineShares).
       const rows = await sequelize.query<{ category_id: string | null; spent: string }>(
         `SELECT category_id, SUM(spent) AS spent FROM (
-           SELECT category_id, total - partner_share AS spent
+           SELECT category_id, total - others_share AS spent
              FROM entries
-            WHERE kind = 'expense' AND source <> 'receipt' AND occurred_at >= :start AND occurred_at < :end
+            WHERE kind = 'expense' AND source NOT IN ('receipt', 'itemized') AND occurred_at >= :start AND occurred_at < :end
            UNION ALL
            SELECT l.category_id,
-                  CASE l.owner WHEN 'me' THEN l.price WHEN 'partner' THEN 0 ELSE l.price - l.price / 2 END AS spent
+                  l.price - (l.price / (cardinality(l.people) + CASE WHEN l.includes_me THEN 1 ELSE 0 END))
+                            * cardinality(l.people) AS spent
              FROM receipt_lines l JOIN entries e ON e.id = l.entry_id
             WHERE e.kind = 'expense' AND e.occurred_at >= :start AND e.occurred_at < :end
          ) t
@@ -92,7 +95,8 @@ export function createPresetRepo(sequelize: Sequelize): PresetRepo {
     icon: p.icon,
     amount: p.amount,
     categoryId: p.categoryId,
-    partnerMode: p.partnerMode,
+    personId: p.personId,
+    splitKind: p.splitKind,
     sort: p.sort,
   });
   return {
@@ -116,7 +120,7 @@ export function createSettingsRepo(sequelize: Sequelize): SettingsRepo {
   const { Setting } = initModels(sequelize);
   const get = async () => {
     const [row] = await Setting.findOrCreate({ where: { id: 1 }, defaults: { id: 1 } });
-    return { partnerNote: row.partnerNote, dashboardLayout: normalizeLayout(row.dashboardLayout) };
+    return { dashboardLayout: normalizeLayout(row.dashboardLayout) };
   };
   return {
     get,

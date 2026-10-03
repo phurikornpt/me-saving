@@ -1,5 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { DashboardDTO, EntryDTO } from "./types";
+import { sumShares } from "@/domain/split";
+import type { DashboardDTO, EntryDTO, Share } from "./types";
 
 const KEY = ["dashboard"];
 const PENDING = "pending-";
@@ -9,7 +10,9 @@ export const isPendingEntry = (e: EntryDTO) => e.id.startsWith(PENDING);
 export interface OptimisticEntry {
   kind: EntryDTO["kind"];
   total: number;
-  partnerShare?: number;
+  shares?: Share[];
+  /** Who paid us back (repayments). */
+  personId?: string;
   categoryId?: string | null;
   note?: string | null;
   merchant?: string | null;
@@ -17,24 +20,29 @@ export interface OptimisticEntry {
 }
 
 /**
- * Shows the result of a save on the dashboard before the server answers: today's totals, the partner
- * balance and a "pending" row in recent. Returns a rollback. The real refetch replaces all of it.
+ * Shows the result of a save on the dashboard before the server answers: today's totals, what each
+ * person owes and a "pending" row in recent. Returns a rollback. The real refetch replaces all of it.
  */
 export async function applyOptimisticEntry(qc: QueryClient, e: OptimisticEntry): Promise<() => void> {
   await qc.cancelQueries({ queryKey: KEY });
   const prev = qc.getQueryData<DashboardDTO>(KEY);
   if (!prev) return () => undefined;
-  const partnerShare = e.partnerShare ?? 0;
+  const shares = e.shares ?? [];
+  const othersShare = sumShares(shares);
   const now = new Date().toISOString();
   const row: EntryDTO = {
-    id: `${PENDING}${Date.now()}`, kind: e.kind, occurredAt: now, createdAt: now, total: e.total, partnerShare,
-    categoryId: e.categoryId ?? null, note: e.note ?? null, merchant: e.merchant ?? null, source: e.source ?? "manual",
+    id: `${PENDING}${Date.now()}`, kind: e.kind, occurredAt: now, createdAt: now, total: e.total, shares, othersShare,
+    personId: e.personId ?? null, categoryId: e.categoryId ?? null, note: e.note ?? null, merchant: e.merchant ?? null,
+    source: e.source ?? "manual",
   };
+  const owed = new Map(prev.balances.map((b) => [b.personId, b.balance]));
+  for (const s of shares) owed.set(s.personId, (owed.get(s.personId) ?? 0) + s.amount);
+  if (e.kind === "repayment" && e.personId) owed.set(e.personId, (owed.get(e.personId) ?? 0) - e.total);
   qc.setQueryData<DashboardDTO>(KEY, {
     ...prev,
-    partnerBalance: e.kind === "repayment" ? prev.partnerBalance - e.total : prev.partnerBalance + partnerShare,
+    balances: [...owed].filter(([, b]) => b !== 0).map(([personId, balance]) => ({ personId, balance })),
     todayTotals: {
-      spent: prev.todayTotals.spent + (e.kind === "expense" ? e.total - partnerShare : 0),
+      spent: prev.todayTotals.spent + (e.kind === "expense" ? e.total - othersShare : 0),
       earned: prev.todayTotals.earned + (e.kind === "income" ? e.total : 0),
     },
     recent: [row, ...prev.recent].slice(0, 5),

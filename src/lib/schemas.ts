@@ -2,16 +2,20 @@ import { z } from "zod";
 
 export const satang = z.number().int().positive().max(2_000_000_000);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const owner = z.enum(["me", "partner", "split"]);
+const people = z.array(z.uuid()).max(20);
+const lineOwners = z.object({ me: z.boolean(), people });
 // Text that comes from the AI (or from OCR'd receipts) is trimmed to size instead of rejected, so one
 // over-long shop name can't make a whole receipt impossible to save.
 const clip = (max: number) => z.string().transform((s) => s.trim().slice(0, max));
 
 export const splitMode = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none") }),
-  z.object({ kind: z.literal("split") }),
-  z.object({ kind: z.literal("partnerAll") }),
-  z.object({ kind: z.literal("custom"), partnerShare: z.number().int().min(0) }),
+  z.object({ kind: z.literal("equal"), people: people.min(1) }),
+  z.object({ kind: z.literal("theirs"), people: people.min(1) }),
+  z.object({
+    kind: z.literal("custom"),
+    shares: z.array(z.object({ personId: z.uuid(), amount: z.number().int().min(0) })).min(1).max(20),
+  }),
 ]);
 
 export const recordEntryBody = z.object({
@@ -34,7 +38,7 @@ export const updateEntryBody = z.object({
   split: splitMode.optional(),
 });
 
-export const repaymentBody = z.object({ amount: satang, note: z.string().max(200).nullish() });
+export const repaymentBody = z.object({ personId: z.uuid(), amount: satang, note: z.string().max(200).nullish() });
 
 export const listEntriesQuery = z.object({
   day: day.optional(),
@@ -48,6 +52,7 @@ export const saveReceiptBody = z.object({
   merchant: clip(100).nullish(),
   occurredAt: z.coerce.date().optional(),
   total: satang,
+  people: people.optional(),
   lines: z
     .array(
       z.object({
@@ -55,7 +60,7 @@ export const saveReceiptBody = z.object({
         canonicalName: clip(100).pipe(z.string().min(1)),
         qty: z.number().int().min(1).max(999),
         price: z.number().int().min(0).max(2_000_000_000),
-        owner,
+        owners: lineOwners,
         categoryId: z.uuid().nullish(),
         lowConfidence: z.boolean().optional(),
       }),
@@ -83,12 +88,27 @@ export const presetCreateBody = z.object({
   icon,
   amount: satang,
   categoryId: z.uuid().nullable().default(null),
-  partnerMode: z.enum(["split", "partnerAll"]).nullable().default(null),
+  personId: z.uuid().nullable().default(null),
+  splitKind: z.enum(["equal", "theirs"]).nullable().default(null),
   sort: z.number().int().min(0).max(1000).default(0),
 });
 export const presetPatchBody = presetCreateBody.partial();
 
+export const personCreateBody = z.object({
+  name: z.string().trim().min(1).max(40),
+  note: z.string().max(500).default(""),
+});
+export const personPatchBody = z.object({
+  name: z.string().trim().min(1).max(40).optional(),
+  note: z.string().max(500).optional(),
+  sort: z.number().int().min(0).max(1000).optional(),
+  archived: z.boolean().optional(),
+});
+
+/** Who shares a scanned bill, sent next to the image as a comma-separated form field. */
+export const parsePeopleField = (raw: unknown) =>
+  people.parse(typeof raw === "string" && raw.trim() ? raw.split(",").map((s) => s.trim()) : []);
+
 export const settingsPatchBody = z.object({
-  partnerNote: z.string().max(500).optional(),
   dashboardLayout: z.array(z.object({ id: z.string(), enabled: z.boolean() })).optional(),
 });

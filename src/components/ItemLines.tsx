@@ -1,42 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import { useCategories } from "@/client/queries";
-import { NEXT_OWNER, type DraftLine } from "@/client/receiptMath";
-import type { Owner } from "@/client/types";
+import { useCategories, usePeople } from "@/client/queries";
+import { nextOwners, type DraftLine } from "@/client/receiptMath";
+import type { LineOwners, PersonDTO } from "@/client/types";
 import { formatBaht, parseBaht } from "@/domain/money";
+import { ME_ONLY } from "@/domain/split";
 import { Icon } from "./Icon";
+import { OwnersChip, OwnersToggle } from "./People";
 import { Sheet } from "./Sheet";
 
-const OWNER_LABEL: Record<Owner, string> = { me: "เรา", partner: "แฟน", split: "หาร" };
-const OWNER_STYLE: Record<Owner, string> = {
-  me: "bg-ink text-[var(--on-ink)]",
-  partner: "bg-partner text-white",
-  split: "bg-gradient-to-r from-ink to-partner text-white",
-};
-
 const blankLine = (): DraftLine => ({
-  key: `new-${Date.now()}`, rawName: "", canonicalName: "", qty: 1, price: 0, categoryId: null, owner: "me", lowConfidence: false,
+  key: `new-${Date.now()}`, rawName: "", canonicalName: "", qty: 1, price: 0, categoryId: null, owners: ME_ONLY, lowConfidence: false,
 });
 
 /**
- * The editable lines of a group: a scanned receipt or one typed by hand. Each line has its own owner
- * (tap the chip to cycle เรา → แฟน → หาร); tap a name to edit it.
+ * The editable lines of a group: a scanned receipt or one typed by hand. When the bill is shared
+ * (`onBill` not empty) each line says who it's for: with one person the chip cycles เรา -> them -> หาร,
+ * with more it opens a picker. Tap a name to edit the line.
  */
 export function ItemLines({
-  lines, onChange, addLabel, startAdding = false,
-}: { lines: DraftLine[]; onChange: (update: (ls: DraftLine[]) => DraftLine[]) => void; addLabel: string; startAdding?: boolean }) {
+  lines, onChange, onBill, addLabel, startAdding = false,
+}: {
+  lines: DraftLine[];
+  onChange: (update: (ls: DraftLine[]) => DraftLine[]) => void;
+  /** People sharing this bill. Empty = all ours, no owner chips. */
+  onBill: PersonDTO[];
+  addLabel: string;
+  startAdding?: boolean;
+}) {
+  const { data: people = [] } = usePeople();
   const [editing, setEditing] = useState<DraftLine | null>(() => (startAdding ? blankLine() : null));
-  const setAll = (owner: Owner) => onChange((ls) => ls.map((l) => ({ ...l, owner, lowConfidence: false })));
-  const patch = (key: string, p: Partial<DraftLine>) => onChange((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
+  const [picking, setPicking] = useState<DraftLine | null>(null);
+  const shared = onBill.length > 0;
+  const setAll = (owners: LineOwners) => onChange((ls) => ls.map((l) => ({ ...l, owners, lowConfidence: false })));
+  const setOwners = (key: string, owners: LineOwners) =>
+    onChange((ls) => ls.map((l) => (l.key === key ? { ...l, owners, lowConfidence: false } : l)));
 
   return (
     <>
-      {lines.length > 1 && (
+      {shared && lines.length > 1 && (
         <div className="flex gap-2 overflow-x-auto px-5 pb-3">
-          <button className="pill shrink-0 text-sm" onClick={() => setAll("me")}>ทั้งหมดของเรา</button>
-          <button className="pill shrink-0 text-sm" onClick={() => setAll("partner")}>ทั้งหมดของแฟน</button>
-          <button className="pill shrink-0 text-sm" onClick={() => setAll("split")}>หารทั้งหมด</button>
+          <button className="pill shrink-0 text-sm" onClick={() => setAll(ME_ONLY)}>ทั้งหมดของเรา</button>
+          <button className="pill shrink-0 text-sm" onClick={() => setAll({ me: true, people: onBill.map((p) => p.id) })}>หารทุกคน</button>
+          {onBill.map((p) => (
+            <button key={p.id} className="pill shrink-0 text-sm" onClick={() => setAll({ me: false, people: [p.id] })}>
+              ทั้งหมดของ{p.name}
+            </button>
+          ))}
         </div>
       )}
 
@@ -47,13 +58,13 @@ export function ItemLines({
               <span className="block truncate">{l.canonicalName}{l.qty > 1 && <span className="text-ink-3"> ×{l.qty}</span>}</span>
               <span className="block text-xs text-ink-3">฿{formatBaht(l.price)}{l.lowConfidence && " · AI ไม่แน่ใจ"}</span>
             </button>
-            <button
-              className={`min-w-14 rounded-full px-3 py-1.5 text-sm font-medium ${OWNER_STYLE[l.owner]}`}
-              onClick={() => patch(l.key, { owner: NEXT_OWNER[l.owner], lowConfidence: false })}
-              aria-label={`เจ้าของ: ${OWNER_LABEL[l.owner]} (แตะเพื่อเปลี่ยน)`}
-            >
-              {OWNER_LABEL[l.owner]}
-            </button>
+            {shared && (
+              <OwnersChip
+                people={people}
+                owners={l.owners}
+                onClick={() => (onBill.length === 1 ? setOwners(l.key, nextOwners(l.owners, onBill[0].id)) : setPicking(l))}
+              />
+            )}
           </li>
         ))}
         <li className="py-3">
@@ -63,9 +74,24 @@ export function ItemLines({
         </li>
       </ul>
 
+      {picking && (
+        <Sheet open onOpenChange={(o) => !o && setPicking(null)} title={`${picking.canonicalName} ของใคร`}>
+          <p className="mb-3 text-xs text-ink-3">เลือกได้หลายคน ราคาจะหารเท่ากัน</p>
+          <OwnersToggle
+            people={people}
+            onBill={onBill}
+            owners={lines.find((l) => l.key === picking.key)?.owners ?? picking.owners}
+            onChange={(o) => setOwners(picking.key, o)}
+          />
+          <button className="btn3d mt-4 w-full" onClick={() => setPicking(null)}>ตกลง</button>
+        </Sheet>
+      )}
+
       {editing && (
         <LineSheet
           line={editing}
+          people={people}
+          onBill={onBill}
           exists={lines.some((l) => l.key === editing.key)}
           onClose={() => setEditing(null)}
           onSave={(l) => {
@@ -83,14 +109,17 @@ export function ItemLines({
 }
 
 function LineSheet({
-  line, exists, onClose, onSave, onDelete,
-}: { line: DraftLine; exists: boolean; onClose: () => void; onSave: (l: DraftLine) => void; onDelete: (key: string) => void }) {
+  line, people, onBill, exists, onClose, onSave, onDelete,
+}: {
+  line: DraftLine; people: PersonDTO[]; onBill: PersonDTO[]; exists: boolean;
+  onClose: () => void; onSave: (l: DraftLine) => void; onDelete: (key: string) => void;
+}) {
   const { data: categories = [] } = useCategories();
   const [name, setName] = useState(line.canonicalName);
   const [price, setPrice] = useState(line.price ? formatBaht(line.price).replace(/,/g, "") : "");
   const [qty, setQty] = useState(String(line.qty));
   const [categoryId, setCategoryId] = useState(line.categoryId);
-  const [owner, setOwner] = useState<Owner>(line.owner);
+  const [owners, setOwners] = useState<LineOwners>(line.owners);
 
   let satang = 0;
   try {
@@ -99,6 +128,7 @@ function LineSheet({
     satang = -1;
   }
   const ok = name.trim().length > 0 && satang >= 0 && Number(qty) >= 1;
+  const sameOwners = owners.me === line.owners.me && owners.people.join() === line.owners.people.join();
 
   return (
     <Sheet open onOpenChange={(o) => !o && onClose()} title={exists ? "แก้รายการ" : "เพิ่มรายการ"}>
@@ -109,13 +139,7 @@ function LineSheet({
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} placeholder="ราคารวม (บาท)" className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 outline-none focus:border-ink" />
           <input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value.replace(/\D/g, ""))} aria-label="จำนวน" className="w-20 rounded-full border-2 border-line bg-card px-4 py-2 text-center outline-none focus:border-ink" />
         </div>
-        <div className="flex gap-2" role="group" aria-label="ของใคร">
-          {(["me", "partner", "split"] as const).map((o) => (
-            <button key={o} className="pill flex-1 text-sm" aria-pressed={owner === o} onClick={() => setOwner(o)}>
-              {o === "me" ? "ของเรา" : o === "partner" ? "ของแฟน" : "หารกัน"}
-            </button>
-          ))}
-        </div>
+        {onBill.length > 0 && <OwnersToggle people={people} onBill={onBill} owners={owners} onChange={setOwners} />}
         <div className="flex flex-wrap gap-2">
           {categories.filter((c) => c.kind === "expense" && !c.archived).map((c) => (
             <button key={c.id} className="pill flex items-center gap-1 text-sm" aria-pressed={categoryId === c.id} onClick={() => setCategoryId(c.id)}>
@@ -132,7 +156,7 @@ function LineSheet({
           <button
             className="btn3d flex-1"
             disabled={!ok}
-            onClick={() => onSave({ ...line, rawName: line.rawName || name.trim(), canonicalName: name.trim(), price: satang, qty: Number(qty), categoryId, owner, lowConfidence: owner === line.owner && line.lowConfidence })}
+            onClick={() => onSave({ ...line, rawName: line.rawName || name.trim(), canonicalName: name.trim(), price: satang, qty: Number(qty), categoryId, owners, lowConfidence: sameOwners && line.lowConfidence })}
           >
             ตกลง
           </button>

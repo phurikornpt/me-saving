@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { saveReceiptBody } from "./schemas";
 
-const line = { rawName: "ข้าวปั้น", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, owner: "me" as const };
+const line = { rawName: "ข้าวปั้น", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, owners: { me: true, people: [] } };
 
 describe("saveReceiptBody tolerates AI-produced text", () => {
   it("clips an over-long merchant and names instead of rejecting", () => {
@@ -22,6 +22,6 @@ describe("saveReceiptBody tolerates AI-produced text", () => {
     expect(() => saveReceiptBody.parse({ total: 0, lines: [line] })).toThrow();
     expect(() => saveReceiptBody.parse({ total: 1.5, lines: [line] })).toThrow();
     expect(() => saveReceiptBody.parse({ total: 100, lines: [] })).toThrow();
-    expect(() => saveReceiptBody.parse({ total: 100, lines: [{ ...line, owner: "nobody" }] })).toThrow();
+    expect(() => saveReceiptBody.parse({ total: 100, lines: [{ ...line, owners: { me: true, people: ["not-a-uuid"] } }] })).toThrow();
   });
 });

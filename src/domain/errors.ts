@@ -9,7 +9,8 @@ export type DomainErrorCode =
   | "INVALID_RECEIPT"
   | "NOT_FOUND"
   | "BALANCE_WOULD_GO_NEGATIVE"
-  | "ENTRY_LOCKED";
+  | "ENTRY_LOCKED"
+  | "UNKNOWN_PERSON";
 
 export class DomainError extends Error {
   constructor(

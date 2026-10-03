@@ -1,14 +1,23 @@
 import { normalizeLayout } from "@/domain/dashboard-layout";
-import type { CategoryRecord, CategoryRepo, PresetRecord, PresetRepo, SettingsRecord, SettingsRepo } from "../ports";
+import { DomainError } from "@/domain/errors";
+import type {
+  CategoryRecord,
+  CategoryRepo,
+  PersonRecord,
+  PersonRepo,
+  PresetRecord,
+  PresetRepo,
+  SettingsRecord,
+  SettingsRepo,
+} from "../ports";
 
 export class ManageSettings {
   constructor(private readonly settings: SettingsRepo) {}
   get() {
     return this.settings.get();
   }
-  update(patch: { partnerNote?: string; dashboardLayout?: unknown }): Promise<SettingsRecord> {
+  update(patch: { dashboardLayout?: unknown }): Promise<SettingsRecord> {
     return this.settings.update({
-      ...(patch.partnerNote !== undefined && { partnerNote: patch.partnerNote.slice(0, 500) }),
       ...(patch.dashboardLayout !== undefined && { dashboardLayout: normalizeLayout(patch.dashboardLayout) }),
     });
   }
@@ -44,5 +53,30 @@ export class ManagePresets {
   }
   remove(id: string) {
     return this.presets.remove(id);
+  }
+}
+
+/** The people we front money for. Hidden (archived), never deleted: old entries keep their name. */
+export class ManagePeople {
+  constructor(private readonly people: PersonRepo) {}
+  list() {
+    return this.people.list();
+  }
+  async create(p: { name: string; note?: string }): Promise<PersonRecord> {
+    const name = p.name.trim();
+    if (!name) throw new DomainError("INVALID_SPLIT", "a person needs a name");
+    const all = await this.people.list();
+    return this.people.create({ name, note: (p.note ?? "").slice(0, 500), sort: Math.max(-1, ...all.map((x) => x.sort)) + 1 });
+  }
+  async update(id: string, patch: Partial<Omit<PersonRecord, "id">>): Promise<PersonRecord> {
+    const name = patch.name?.trim();
+    if (name === "") throw new DomainError("INVALID_SPLIT", "a person needs a name");
+    const out = await this.people.update(id, {
+      ...patch,
+      ...(name !== undefined && { name }),
+      ...(patch.note !== undefined && { note: patch.note.slice(0, 500) }),
+    });
+    if (!out) throw new DomainError("NOT_FOUND", "person not found");
+    return out;
   }
 }

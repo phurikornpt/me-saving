@@ -18,7 +18,7 @@ import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
 import { CategorySummaryWidget } from "./widgets/CategorySummaryWidget";
 import { CalendarWidget } from "./widgets/CalendarWidget";
-import { PartnerWidget } from "./widgets/PartnerWidget";
+import { PeopleWidget } from "./widgets/PeopleWidget";
 import { PresetsWidget } from "./widgets/PresetsWidget";
 import { RecentWidget } from "./widgets/RecentWidget";
 import { StreakWidget } from "./widgets/StreakWidget";
@@ -27,7 +27,7 @@ import { TodayWidget } from "./widgets/TodayWidget";
 function renderWidget(id: WidgetId, data: DashboardDTO) {
   switch (id) {
     case "streak": return <StreakWidget data={data} />;
-    case "partner": return <PartnerWidget data={data} />;
+    case "people": return <PeopleWidget data={data} />;
     case "presets": return <PresetsWidget data={data} />;
     case "today": return <TodayWidget data={data} />;
     case "calendar": return <CalendarWidget today={data.today} />;
@@ -64,8 +64,8 @@ export function Dashboard() {
       outer: { id: "itemized", icon: "list_alt", label: "หลายรายการ", tone: "text-expense" },
     },
     { id: "income", icon: "savings", label: "รายรับ", tone: "text-income" },
-    { id: "front", icon: "group", label: "ออกก่อนแฟน", tone: "text-partner" },
-    { id: "repay", icon: "currency_exchange", label: "แฟนจ่ายคืน", tone: "text-partner", disabled: !data || data.partnerBalance === 0 },
+    { id: "front", icon: "group", label: "ออกก่อน", tone: "text-partner" },
+    { id: "repay", icon: "currency_exchange", label: "รับเงินคืน", tone: "text-partner", disabled: !data?.balances.some((b) => b.balance > 0) },
     { id: "nospend", icon: "bedtime", label: "ไม่ได้ใช้เงิน", tone: "text-xp", disabled: !data || data.streak.loggedToday },
     { id: "scan", icon: "photo_camera", label: "สแกนใบเสร็จ", tone: "text-ink" },
   ];
