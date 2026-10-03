@@ -1,3 +1,4 @@
+import pg from "pg";
 import { Sequelize } from "sequelize";
 
 const globalForDb = globalThis as unknown as { __sequelize?: Sequelize };
@@ -10,6 +11,9 @@ const globalForDb = globalThis as unknown as { __sequelize?: Sequelize };
 export function createSequelize(url: string, opts: { ssl?: boolean } = {}): Sequelize {
   return new Sequelize(url, {
     dialect: "postgres",
+    // Sequelize `require`s the driver dynamically, which Vercel's file tracing cannot see (the deployed
+    // function then fails with "Please install pg package manually"). Importing pg here makes it traced.
+    dialectModule: pg,
     logging: false,
     timezone: "+00:00",
     pool: { max: 2, min: 0, idle: 10_000, acquire: 15_000 },
