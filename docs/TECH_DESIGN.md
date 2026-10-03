@@ -257,6 +257,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | `AUTH_SECRET` | ✅ | secret ของ Auth.js (สร้างด้วย `openssl rand -base64 32`) |
 | `AUTH_EMAIL` | ✅ | อีเมลของผู้ใช้คนเดียว (`container()` จะ throw ถ้าไม่ตั้ง) |
 | `AUTH_PASSWORD_HASH` | ✅ | hash จาก `pnpm auth:hash` |
+| `AUTH_EXTRA_USERS` | ไม่จำเป็น | บัญชีเพิ่มที่ล็อกอินได้ รูปแบบ `อีเมล\|hash;อีเมล2\|hash2` ทุกบัญชีเห็นข้อมูลชุดเดียวกัน (ไม่มี user_id ในตาราง) |
 | `GEMINI_API_KEY` | สำหรับสแกนใบเสร็จ | key ของ Gemini (ฝั่ง server เท่านั้น) |
 | `GEMINI_MODEL` | ไม่จำเป็น | override รุ่นโมเดล (ค่าเริ่มต้น `gemini-3.5-flash-lite`) — ยังไม่อยู่ใน `.env.example` |
 

@@ -18,7 +18,7 @@ import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos"
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "@/infrastructure/db/repos/read-repos";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
 import { getSequelize } from "@/infrastructure/db/sequelize";
-import { createEnvCredentialVerifier } from "@/infrastructure/security/env-credential-verifier";
+import { createEnvCredentialVerifier, parseExtraAccounts } from "@/infrastructure/security/env-credential-verifier";
 
 /** Composition root: the only place that knows which implementation backs each port. */
 function build() {
@@ -38,7 +38,7 @@ function build() {
     sequelize,
     authenticateUser: new AuthenticateUser(
       createLoginAttemptRepo(sequelize),
-      createEnvCredentialVerifier(email, hash),
+      createEnvCredentialVerifier(email, hash, parseExtraAccounts(cleanEnv(process.env.AUTH_EXTRA_USERS))),
       systemClock,
     ),
     getDashboard: new GetDashboard(repos, stats, presets, settings, systemClock),

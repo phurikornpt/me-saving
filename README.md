@@ -37,6 +37,7 @@ pnpm dev                        # http://localhost:3000
 | `AUTH_SECRET` | secret ของ Auth.js สร้างด้วย `openssl rand -base64 32` |
 | `AUTH_EMAIL` | อีเมลของผู้ใช้คนเดียว |
 | `AUTH_PASSWORD_HASH` | ผลลัพธ์จาก `pnpm auth:hash` (รูปแบบ `scrypt:...` ไม่มีตัว `$`) |
+| `AUTH_EXTRA_USERS` | (ไม่บังคับ) บัญชีอื่นที่ล็อกอินได้ รูปแบบ `อีเมล\|hash;อีเมล2\|hash2` ทุกบัญชีเห็นข้อมูลชุดเดียวกัน |
 | `GEMINI_API_KEY` | key ของ Gemini ใช้เฉพาะตอนสแกนใบเสร็จ (ฝั่ง server เท่านั้น) |
 | `GEMINI_MODEL` | (ไม่บังคับ) เปลี่ยนรุ่นโมเดล ค่าเริ่มต้น `gemini-3.5-flash-lite` |
 
