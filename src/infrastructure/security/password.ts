@@ -34,3 +34,12 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const actual = await derive(password, Buffer.from(saltB64, "base64url"), params);
   return timingSafeEqual(actual, expected);
 }
+
+/** Structural check only (no password involved): is this string a hash this app can verify against? */
+export function isWellFormedHash(stored: string): boolean {
+  const parts = stored.split(":");
+  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const nums = parts.slice(1, 4).map(Number);
+  if (!nums.every((v) => Number.isSafeInteger(v) && v > 0)) return false;
+  return Buffer.from(parts[5], "base64url").length === KEY_LEN && Buffer.from(parts[4], "base64url").length > 0;
+}

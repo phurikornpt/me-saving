@@ -1,4 +1,6 @@
 import { getSequelize } from "@/infrastructure/db/sequelize";
+import { isWellFormedHash } from "@/infrastructure/security/password";
+import { cleanEnv } from "@/lib/env";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,9 +25,20 @@ export async function GET() {
     }
   }
 
+  // Shape only, never values: helps spot a mangled paste (wrong length, quotes, stray whitespace).
+  const rawHash = process.env.AUTH_PASSWORD_HASH;
+  const rawEmail = process.env.AUTH_EMAIL;
+  const auth = {
+    hashWellFormed: rawHash ? isWellFormedHash(cleanEnv(rawHash) ?? "") : false,
+    hashLength: rawHash?.length ?? 0, // a hash made by `pnpm auth:hash` is 83 characters
+    hashHadQuotesOrWhitespace: rawHash ? cleanEnv(rawHash) !== rawHash : false,
+    emailLength: rawEmail?.length ?? 0,
+    emailHadQuotesOrWhitespace: rawEmail ? cleanEnv(rawEmail) !== rawEmail : false,
+  };
+
   const missing = REQUIRED.filter((k) => !process.env[k]);
   return Response.json(
-    { ok: missing.length === 0 && database === "ok", env, missing, database, vercelEnv: process.env.VERCEL_ENV ?? null },
-    { status: missing.length === 0 && database === "ok" ? 200 : 503 },
+    { ok: missing.length === 0 && database === "ok" && auth.hashWellFormed, env, missing, database, auth, vercelEnv: process.env.VERCEL_ENV ?? null },
+    { status: missing.length === 0 && database === "ok" && auth.hashWellFormed ? 200 : 503 },
   );
 }

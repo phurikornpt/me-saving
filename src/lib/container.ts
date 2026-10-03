@@ -1,3 +1,4 @@
+import { cleanEnv } from "./env";
 import { AuthenticateUser } from "@/application/use-cases/authenticate-user";
 import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { GetCalendarMonth } from "@/application/use-cases/get-calendar-month";
@@ -28,8 +29,8 @@ function build() {
   const categories = createCategoryRepo(sequelize);
   const presets = createPresetRepo(sequelize);
   const settings = createSettingsRepo(sequelize);
-  const email = process.env.AUTH_EMAIL;
-  const hash = process.env.AUTH_PASSWORD_HASH;
+  const email = cleanEnv(process.env.AUTH_EMAIL);
+  const hash = cleanEnv(process.env.AUTH_PASSWORD_HASH);
   if (!email || !hash) throw new Error("AUTH_EMAIL and AUTH_PASSWORD_HASH must be set");
 
   return {
