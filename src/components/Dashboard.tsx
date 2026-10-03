@@ -3,10 +3,9 @@
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { api } from "@/client/api";
 import { useDashboard } from "@/client/queries";
-import { setPendingReceipt } from "@/client/receiptHandoff";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { wake } from "@/client/wake";
@@ -39,7 +38,6 @@ export function Dashboard() {
   const fb = useFeedback();
   const afterLog = useAfterLog();
   const [editing, setEditing] = useState(false);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
@@ -63,7 +61,9 @@ export function Dashboard() {
     if (id === "expense" || id === "income" || id === "front") router.push(`/new?mode=${id}`);
     else if (id === "repay") router.push("/repay");
     else if (id === "nospend") noSpend.mutate();
-    else if (id === "scan") fileInput.current?.click();
+    // Mobile browsers only open a file picker from a real tap, which the wheel's pointer-up is not,
+    // so the picker lives on /scan behind an ordinary button.
+    else if (id === "scan") router.push("/scan");
   };
 
   return (
@@ -98,22 +98,6 @@ export function Dashboard() {
       <div className="flex flex-col gap-3">
         {data?.layout.filter((w) => w.enabled).map((w) => <div key={w.id}>{renderWidget(w.id, data)}</div>)}
       </div>
-
-      <input
-        ref={fileInput}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) {
-            setPendingReceipt(f);
-            router.push("/scan");
-          }
-        }}
-      />
 
       <ModeWheel
         slots={slots}

@@ -3,10 +3,9 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { api, ApiError } from "@/client/api";
 import { useCategories } from "@/client/queries";
-import { takePendingReceipt } from "@/client/receiptHandoff";
 import { NEXT_OWNER, summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { Owner, ReceiptDraftDTO } from "@/client/types";
@@ -35,7 +34,8 @@ export function ScanScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
   const [editing, setEditing] = useState<DraftLine | null>(null);
-  const picker = useRef<HTMLInputElement>(null);
+  const camera = useRef<HTMLInputElement>(null);
+  const album = useRef<HTMLInputElement>(null);
 
   const toLines = (draft: ReceiptDraftDTO) => {
     const catId = (name: string | null) => categories.find((c) => c.name === name && c.kind === "expense")?.id ?? null;
@@ -60,11 +60,11 @@ export function ScanScreen() {
     onSuccess: toLines,
   });
 
-  // The photo arrives from the dashboard wheel (in memory); start reading it once.
-  useEffect(() => {
-    const file = takePendingReceipt();
-    if (file) read.mutate(file);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- mount only: `read.mutate` is stable enough and must not retrigger
+  const onPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) read.mutate(f);
+  };
 
   const phase = header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
@@ -114,25 +114,22 @@ export function ScanScreen() {
         <h1 className="font-display text-xl">สแกนใบเสร็จ</h1>
       </header>
 
-      <input
-        ref={picker}
-        type="file"
-        accept="image/*"
-        capture="environment"
-        className="hidden"
-        onChange={(e) => {
-          const f = e.target.files?.[0];
-          e.target.value = "";
-          if (f) read.mutate(f);
-        }}
-      />
+      {/* Two inputs: `capture` forces the camera on phones, so the album needs its own */}
+      <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
+      <input ref={album} type="file" accept="image/*" className="hidden" onChange={onPicked} />
 
       {phase === "idle" && (
         <Center>
-          <p className="text-ink-2">ถ่ายรูปหรือเลือกรูปใบเสร็จ</p>
-          <button className="btn3d mt-4" onClick={() => picker.current?.click()}>
-            <Icon name="photo_camera" /> เลือกรูป
-          </button>
+          <Icon name="receipt_long" size={56} className="text-ink-3" />
+          <p className="mt-3 text-ink-2">ถ่ายรูปหรือเลือกรูปใบเสร็จ</p>
+          <div className="mt-5 flex w-full max-w-xs flex-col gap-4">
+            <button className="btn3d py-4 text-lg" onClick={() => camera.current?.click()}>
+              <Icon name="photo_camera" /> ถ่ายรูป
+            </button>
+            <button className="btn3d key py-4 text-lg" onClick={() => album.current?.click()}>
+              <Icon name="add_photo_alternate" /> เลือกจากอัลบั้ม
+            </button>
+          </div>
         </Center>
       )}
 
@@ -156,7 +153,7 @@ export function ScanScreen() {
                   : "สแกนไม่สำเร็จ ลองอีกครั้ง"}
           </p>
           <div className="mt-4 flex gap-3">
-            <button className="btn3d key" onClick={() => picker.current?.click()}>ถ่ายใหม่</button>
+            <button className="btn3d key" onClick={() => album.current?.click()}>เลือกรูปใหม่</button>
             <Link href="/new?mode=front" className="btn3d">กรอกยอดเอง</Link>
           </div>
         </Center>
