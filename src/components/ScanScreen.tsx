@@ -10,6 +10,7 @@ import { NEXT_OWNER, summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { Owner, ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
@@ -80,7 +81,7 @@ export function ScanScreen() {
   const save = useMutation({
     mutationFn: () => {
       const date = header?.date ?? null;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = bangkokDay(new Date());
       return api.saveReceipt({
         merchant: header?.merchant ?? null,
         occurredAt: date && date <= today ? new Date(`${date}T12:00:00+07:00`).toISOString() : undefined,

@@ -9,6 +9,7 @@ import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { useCategories } from "@/client/queries";
 import type { SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { partnerShareFor } from "@/domain/split";
 import { useFeedback } from "./Feedback";
@@ -37,10 +38,10 @@ export function NewEntryScreen() {
   const [choice, setChoice] = useState<PartnerChoice>("split");
   const [customShare, setCustomShare] = useState("");
   const [note, setNote] = useState("");
-  // ?day=YYYY-MM-DD comes from "add to this day" on the calendar; ignore anything that isn't a past/today date
+  // ?day=YYYY-MM-DD comes from "add to this day" on the calendar; only past days count as backdated (today is a normal entry)
   const dayParam = params.get("day");
   const [day, setDay] = useState(
-    dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) && dayParam <= new Date().toISOString().slice(0, 10) ? dayParam : "",
+    dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) && dayParam < bangkokDay(new Date()) ? dayParam : "",
   );
 
   const visible = useMemo(
@@ -210,7 +211,7 @@ export function NewEntryScreen() {
           <input
             type="date"
             value={day}
-            max={new Date().toISOString().slice(0, 10)}
+            max={bangkokDay(new Date())}
             onChange={(e) => setDay(e.target.value)}
             className="w-[7.5rem] bg-transparent text-xs outline-none"
             aria-label="วันที่ (ค่าเริ่มต้นคือวันนี้)"
