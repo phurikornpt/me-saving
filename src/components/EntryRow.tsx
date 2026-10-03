@@ -9,8 +9,12 @@ export function EntryRow({ entry, categories, onClick }: { entry: EntryDTO; cate
   const cat = categories.find((c) => c.id === entry.categoryId);
   const isRepay = entry.kind === "repayment";
   const mine = entry.total - entry.partnerShare;
-  const icon = isRepay ? "currency_exchange" : entry.source === "receipt" ? "receipt_long" : (cat?.icon ?? "more_horiz");
-  const label = isRepay ? "แฟนจ่ายคืน" : (entry.merchant ?? entry.note ?? cat?.name ?? "รายการ");
+  const icon = isRepay
+    ? "currency_exchange"
+    : entry.source === "receipt" ? "receipt_long" : entry.source === "itemized" ? "list_alt" : (cat?.icon ?? "more_horiz");
+  const label = isRepay
+    ? "แฟนจ่ายคืน"
+    : (entry.merchant ?? entry.note ?? cat?.name ?? (entry.source === "itemized" ? "หลายรายการ" : "รายการ"));
   const color = entry.kind === "income" ? "text-income" : isRepay ? "text-partner" : "text-expense";
   const pending = isPendingEntry(entry);
   const sign = entry.kind === "expense" ? "-" : "+";

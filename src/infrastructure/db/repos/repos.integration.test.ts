@@ -287,6 +287,19 @@ describe("model registration is minifier-proof", () => {
   });
 });
 
+describe("itemized groups", () => {
+  it("the database accepts the itemized source", async () => {
+    const u = useCases();
+    const out = await new SaveReceiptEntry(createTransactionRunner(sequelize), u.clock).execute({
+      source: "itemized",
+      total: 3000,
+      lines: [{ rawName: "ไข่", canonicalName: "ไข่", qty: 1, price: 3000, owner: "split" }],
+    });
+    const [row] = await u.repos.entries.recent(1);
+    expect(row).toMatchObject({ id: out.entry.id, source: "itemized", partnerShare: 1500 });
+  });
+});
+
 describe("category totals", () => {
   it("counts our share per category, receipts by their lines, and ignores income and repayments", async () => {
     const u = useCases();

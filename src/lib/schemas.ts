@@ -44,6 +44,7 @@ export const listEntriesQuery = z.object({
 export const calendarQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
 
 export const saveReceiptBody = z.object({
+  source: z.enum(["receipt", "itemized"]).optional(),
   merchant: clip(100).nullish(),
   occurredAt: z.coerce.date().optional(),
   total: satang,

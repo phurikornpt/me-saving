@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { slotAt } from "./ModeWheel";
+import { outerRadius, slotAt, targetAt } from "./ModeWheel";
 
 // 6 slots, slot 0 at the top, clockwise
 describe("slotAt", () => {
@@ -19,5 +19,22 @@ describe("slotAt", () => {
     expect(slotAt(0, -10, 6)).toBeNull();
     expect(slotAt(0, -400, 6)).toBeNull();
     expect(slotAt(0, 330, 6)).toBeNull(); // where a thumb on the [+] button starts
+  });
+});
+
+describe("targetAt (outer slots)", () => {
+  const onlyTop = (i: number) => i === 0;
+  it("up a little = the slot, up further = its outer choice", () => {
+    expect(targetAt(0, -110, 6, onlyTop)).toEqual({ index: 0, outer: false });
+    expect(targetAt(0, -215, 6, onlyTop)).toEqual({ index: 0, outer: true });
+    expect(targetAt(0, -400, 6, onlyTop)).toBeNull();
+  });
+  it("slots without an outer choice still cancel past the ring", () => {
+    expect(targetAt(0, 110, 6, onlyTop)).toEqual({ index: 3, outer: false });
+    expect(targetAt(0, 215, 6, onlyTop)).toBeNull();
+  });
+  it("short screens pull the outer ring in, never onto the inner one", () => {
+    expect(outerRadius(900)).toBe(215);
+    expect(outerRadius(360)).toBe(172);
   });
 });

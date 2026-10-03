@@ -58,7 +58,11 @@ export function Dashboard() {
   });
 
   const slots: WheelSlot[] = [
-    { id: "expense", icon: "payments", label: "รายจ่าย", tone: "text-expense" },
+    {
+      id: "expense", icon: "payments", label: "รายจ่าย", tone: "text-expense",
+      // drag on past รายจ่าย for a group of items, each with its own owner
+      outer: { id: "itemized", icon: "list_alt", label: "หลายรายการ", tone: "text-expense" },
+    },
     { id: "income", icon: "savings", label: "รายรับ", tone: "text-income" },
     { id: "front", icon: "group", label: "ออกก่อนแฟน", tone: "text-partner" },
     { id: "repay", icon: "currency_exchange", label: "แฟนจ่ายคืน", tone: "text-partner", disabled: !data || data.partnerBalance === 0 },
@@ -68,6 +72,7 @@ export function Dashboard() {
 
   const pick = (id: string) => {
     if (id === "expense" || id === "income" || id === "front") router.push(`/new?mode=${id}`);
+    else if (id === "itemized") router.push("/itemized");
     else if (id === "repay") router.push("/repay");
     else if (id === "nospend") noSpend.mutate();
     // Mobile browsers only open a file picker from a real tap, which the wheel's pointer-up is not,

@@ -2,7 +2,7 @@ import { DomainError } from "@/domain/errors";
 import { assertSatang, type Satang } from "@/domain/money";
 import { partnerBalance } from "@/domain/partner";
 import { partnerShareFor, type SplitMode } from "@/domain/split";
-import type { EntryRecord, Repos, TransactionRunner } from "../ports";
+import { isGroupSource, type EntryRecord, type Repos, type TransactionRunner } from "../ports";
 
 /** A change must never leave the partner balance negative (this app only tracks "partner owes me"). */
 async function assertBalanceStillValid(repos: Repos) {
@@ -31,9 +31,9 @@ export class UpdateEntry {
       if (!current) throw new DomainError("NOT_FOUND", "entry not found");
 
       const touchesMoney = patch.total !== undefined || patch.split !== undefined;
-      if (current.source === "receipt" && touchesMoney) {
-        // The amount and split come from the receipt lines; changing them here would desync the two.
-        throw new DomainError("ENTRY_LOCKED", "receipt entries can't change amount or split");
+      if (isGroupSource(current.source) && touchesMoney) {
+        // The amount and split come from the group's lines; changing them here would desync the two.
+        throw new DomainError("ENTRY_LOCKED", "group entries can't change amount or split");
       }
       if (patch.split && current.kind !== "expense") {
         throw new DomainError("INVALID_SPLIT", "only expenses can be fronted for partner");

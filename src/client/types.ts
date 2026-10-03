@@ -16,7 +16,7 @@ export interface EntryDTO {
   categoryId: string | null;
   note: string | null;
   merchant: string | null;
-  source: "manual" | "preset" | "receipt" | "wheel";
+  source: "manual" | "preset" | "receipt" | "itemized" | "wheel";
 }
 export interface CategoryDTO { id: string; name: string; icon: string; kind: "expense" | "income"; sort: number; archived: boolean }
 export interface PresetDTO { id: string; label: string; icon: string; amount: number; categoryId: string | null; partnerMode: "split" | "partnerAll" | null; sort: number }

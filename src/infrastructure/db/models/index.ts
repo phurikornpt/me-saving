@@ -32,7 +32,7 @@ export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes
   declare categoryId: ForeignKey<Category["id"]> | null;
   declare note: string | null;
   declare merchant: string | null;
-  declare source: CreationOptional<"manual" | "preset" | "receipt" | "wheel">;
+  declare source: CreationOptional<"manual" | "preset" | "receipt" | "itemized" | "wheel">;
 }
 
 export class ReceiptLine extends Model<

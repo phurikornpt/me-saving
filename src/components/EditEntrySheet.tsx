@@ -35,6 +35,8 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
   const [split, setSplit] = useState<Choice>("keep");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // group entries (receipt / hand-typed) get amount and split from their lines
+  const locked = entry.source === "receipt" || entry.source === "itemized";
   const refresh = () => void qc.invalidateQueries();
   const onError = (e: unknown) => fb.toast({ tone: "error", message: ERRORS[(e as ApiError).code] ?? "ไม่สำเร็จ ลองอีกครั้ง" });
 
@@ -42,7 +44,7 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
     mutationFn: () => {
       const patch: Parameters<typeof api.updateEntry>[1] = { note: note.trim() || null };
       if (entry.kind !== "repayment") patch.categoryId = categoryId;
-      if (entry.source !== "receipt") {
+      if (!locked) {
         const total = parseBaht(amount);
         if (total !== entry.total) patch.total = total;
         if (split !== "keep") patch.split = { kind: split } as SplitMode;
@@ -67,7 +69,6 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
     onError,
   });
 
-  const locked = entry.source === "receipt";
   const cats = categories.filter((c) => c.kind === (entry.kind === "income" ? "income" : "expense") && !c.archived);
 
   return (
@@ -83,7 +84,7 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
             className="mt-1 w-full rounded-full border-2 border-line bg-card px-4 py-2 text-lg text-ink outline-none focus:border-ink disabled:opacity-50"
           />
         </label>
-        {locked && <p className="text-xs text-ink-3">ใบเสร็จแก้ยอดและการหารไม่ได้ เพราะมาจากบรรทัดในบิล</p>}
+        {locked && <p className="text-xs text-ink-3">รายการแบบกลุ่มแก้ยอดและการหารไม่ได้ เพราะมาจากรายการย่อยข้างใน</p>}
 
         {entry.kind === "expense" && !locked && (
           <div className="flex flex-wrap gap-2">

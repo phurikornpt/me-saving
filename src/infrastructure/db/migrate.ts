@@ -2,10 +2,12 @@ import { Umzug } from "umzug";
 import type { Sequelize } from "sequelize";
 import { migration as m001 } from "./migrations/001-initial";
 import { migration as m002 } from "./migrations/002-seed-categories";
+import { migration as m003 } from "./migrations/003-itemized-source";
 
 const migrations = [
   { name: "001-initial", ...m001 },
   { name: "002-seed-categories", ...m002 },
+  { name: "003-itemized-source", ...m003 },
 ];
 
 export function createMigrator(sequelize: Sequelize) {

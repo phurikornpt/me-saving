@@ -57,7 +57,7 @@ export const api = {
     return request<ReceiptDraftDTO>("POST", "/api/receipt/parse", f);
   },
   saveReceipt: (b: {
-    merchant?: string | null; occurredAt?: string; total: number;
+    source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number;
     lines: { rawName: string; canonicalName: string; qty: number; price: number; owner: "me" | "partner" | "split"; categoryId?: string | null; lowConfidence?: boolean }[];
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/receipts", b),
 

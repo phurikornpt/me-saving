@@ -7,6 +7,9 @@ import type { Clock, EntryRecord, TransactionRunner } from "../ports";
 import type { ActivityResult } from "../log-activity";
 
 export interface SaveReceiptInput {
+  /** A scanned receipt, or a group of items typed by hand ("ค่า 7-11": นม, ไก่ ...). Default: receipt. */
+  source?: "receipt" | "itemized";
+  /** Shop name, or the group's own name for a hand-typed group. */
   merchant?: string | null;
   occurredAt?: Date;
   /** Final amount paid; lines are scaled to add up to exactly this (discount / VAT allocation). */
@@ -24,7 +27,7 @@ export interface SaveReceiptInput {
 
 export type SaveReceiptOutput = ActivityResult & { entry: EntryRecord };
 
-/** One receipt = one expense entry that carries its lines. */
+/** One group (receipt or hand-typed) = one expense entry that carries its lines. */
 export class SaveReceiptEntry {
   constructor(
     private readonly tx: TransactionRunner,
@@ -61,7 +64,7 @@ export class SaveReceiptEntry {
         categoryId: null, // per-line categories live on the lines
         note: null,
         merchant: input.merchant ?? null,
-        source: "receipt",
+        source: input.source ?? "receipt",
       });
       await repos.receiptLines.insertMany(entry.id, lines);
       // What the user saved is what the AI should remember next time.

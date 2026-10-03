@@ -61,6 +61,21 @@ describe("UpdateEntry", () => {
     expect((await s.update.execute(entry.id, { note: "ok" })).note).toBe("ok");
   });
 
+  it("locks hand-typed groups the same way", async () => {
+    const s = setup();
+    const { entry } = await new SaveReceiptEntry(s.f.tx, new FixedClock(NOW)).execute({
+      source: "itemized",
+      merchant: "ค่า 7-11",
+      total: 6000,
+      lines: [
+        { rawName: "นม", canonicalName: "นม", qty: 1, price: 1000, owner: "me" },
+        { rawName: "ไก่", canonicalName: "ไก่", qty: 1, price: 5000, owner: "partner" },
+      ],
+    });
+    expect(entry).toMatchObject({ source: "itemized", merchant: "ค่า 7-11", partnerShare: 5000 });
+    await expect(s.update.execute(entry.id, { split: { kind: "none" } })).rejects.toMatchObject({ code: "ENTRY_LOCKED" });
+  });
+
   it("rejects splits on income and unknown ids", async () => {
     const s = setup();
     const { entry } = await s.record.execute({ kind: "income", total: 5000 });

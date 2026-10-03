@@ -12,6 +12,7 @@ export interface OptimisticEntry {
   partnerShare?: number;
   categoryId?: string | null;
   note?: string | null;
+  merchant?: string | null;
   source?: EntryDTO["source"];
 }
 
@@ -27,7 +28,7 @@ export async function applyOptimisticEntry(qc: QueryClient, e: OptimisticEntry):
   const now = new Date().toISOString();
   const row: EntryDTO = {
     id: `${PENDING}${Date.now()}`, kind: e.kind, occurredAt: now, createdAt: now, total: e.total, partnerShare,
-    categoryId: e.categoryId ?? null, note: e.note ?? null, merchant: null, source: e.source ?? "manual",
+    categoryId: e.categoryId ?? null, note: e.note ?? null, merchant: e.merchant ?? null, source: e.source ?? "manual",
   };
   qc.setQueryData<DashboardDTO>(KEY, {
     ...prev,

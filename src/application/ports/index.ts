@@ -8,7 +8,10 @@ export interface Clock {
   now(): Date;
 }
 
-export type EntrySource = "manual" | "preset" | "receipt" | "wheel";
+export type EntrySource = "manual" | "preset" | "receipt" | "itemized" | "wheel";
+
+/** Group entries (a scanned receipt, or several items typed by hand) get their amount and split from their lines. */
+export const isGroupSource = (s: EntrySource) => s === "receipt" || s === "itemized";
 
 export interface NewEntry {
   kind: "expense" | "income" | "repayment";
