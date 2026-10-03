@@ -17,7 +17,7 @@ let container: StartedPostgreSqlContainer;
 let sequelize: Sequelize;
 
 beforeAll(async () => {
-  container = await new PostgreSqlContainer("postgres:17-alpine").start();
+  container = await new PostgreSqlContainer(process.env.TEST_PG_IMAGE ?? "postgres:17-alpine").start();
   sequelize = createSequelize(container.getConnectionUri());
   await createMigrator(sequelize).up();
 }, 120_000);

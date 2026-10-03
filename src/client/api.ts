@@ -67,3 +67,9 @@ export const api = {
   updateSettings: (b: Partial<SettingsDTO>) => request<SettingsDTO>("PATCH", "/api/settings", b),
   wake: () => fetch("/api/wake", { cache: "no-store" }).catch(() => undefined),
 };
+
+/** Short, human-readable reason for a toast: "บันทึกไม่สำเร็จ (BAD_REQUEST: lines.0.price ...)". */
+export function describeFailure(prefix: string, e: unknown): string {
+  if (e instanceof ApiError) return `${prefix} (${e.code}${e.code === "BAD_REQUEST" || e.status >= 500 ? `: ${e.message.slice(0, 90)}` : ""})`;
+  return `${prefix} (เชื่อมต่อไม่ได้)`;
+}

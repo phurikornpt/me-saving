@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
-import { api, ApiError } from "@/client/api";
+import { api, ApiError, describeFailure } from "@/client/api";
 import { useCategories } from "@/client/queries";
 import { NEXT_OWNER, summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
@@ -99,7 +99,7 @@ export function ScanScreen() {
       });
       router.replace("/");
     },
-    onError: () => fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ ลองอีกครั้ง" }),
+    onError: (e) => fb.toast({ tone: "error", ms: 9000, message: describeFailure("บันทึกไม่สำเร็จ", e) }),
   });
 
   const setAll = (owner: Owner) => setLines((ls) => ls.map((l) => ({ ...l, owner, lowConfidence: false })));

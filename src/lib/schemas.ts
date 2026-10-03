@@ -3,6 +3,9 @@ import { z } from "zod";
 export const satang = z.number().int().positive().max(2_000_000_000);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 const owner = z.enum(["me", "partner", "split"]);
+// Text that comes from the AI (or from OCR'd receipts) is trimmed to size instead of rejected, so one
+// over-long shop name can't make a whole receipt impossible to save.
+const clip = (max: number) => z.string().transform((s) => s.trim().slice(0, max));
 
 export const splitMode = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("none") }),
@@ -41,14 +44,14 @@ export const listEntriesQuery = z.object({
 export const calendarQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
 
 export const saveReceiptBody = z.object({
-  merchant: z.string().max(100).nullish(),
+  merchant: clip(100).nullish(),
   occurredAt: z.coerce.date().optional(),
   total: satang,
   lines: z
     .array(
       z.object({
-        rawName: z.string().min(1).max(200),
-        canonicalName: z.string().min(1).max(100),
+        rawName: clip(200).pipe(z.string().min(1)),
+        canonicalName: clip(100).pipe(z.string().min(1)),
         qty: z.number().int().min(1).max(999),
         price: z.number().int().min(0).max(2_000_000_000),
         owner,

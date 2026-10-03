@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { api, ApiError } from "@/client/api";
+import { api, ApiError, describeFailure } from "@/client/api";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { useCategories } from "@/client/queries";
 import type { SplitMode } from "@/client/types";
@@ -88,7 +88,7 @@ export function NewEntryScreen() {
       });
       router.replace("/");
     },
-    onError: (e) => fb.toast({ tone: "error", message: MESSAGES[(e as ApiError).code] ?? "บันทึกไม่สำเร็จ ลองอีกครั้ง" }),
+    onError: (e) => fb.toast({ tone: "error", message: MESSAGES[(e as ApiError).code] ?? describeFailure("บันทึกไม่สำเร็จ", e) }),
   });
 
   const canSave = total > 0 && !save.isPending;
