@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useCategories } from "@/client/queries";
 import { isPendingEntry } from "@/client/optimistic";
@@ -11,17 +12,36 @@ import { WidgetCard } from "./WidgetCard";
 export function RecentWidget({ data }: { data: DashboardDTO }) {
   const { data: categories = [] } = useCategories();
   const [editing, setEditing] = useState<EntryDTO | null>(null);
+  // A saved entry replaces its "pending" row under a new id. That swap should not look like a second insert,
+  // so rows that arrive when the last pending row is resolved skip their enter animation.
+  const [prevRecent, setPrevRecent] = useState(data.recent);
+  const [skipEnter, setSkipEnter] = useState<ReadonlySet<string>>(new Set());
+  if (prevRecent !== data.recent) {
+    setPrevRecent(data.recent);
+    const resolved = prevRecent.some(isPendingEntry) && !data.recent.some(isPendingEntry);
+    setSkipEnter(new Set(resolved ? data.recent.map((e) => e.id) : []));
+  }
   return (
     <WidgetCard title="รายการล่าสุด">
       {data.recent.length === 0 ? (
         <p className="py-2 text-sm text-ink-3">ยังไม่มีรายการ กด + เพื่อจดอันแรก</p>
       ) : (
         <ul className="divide-y divide-line">
-          {data.recent.map((e) => (
-            <li key={e.id}>
-              <EntryRow entry={e} categories={categories} onClick={isPendingEntry(e) ? undefined : () => setEditing(e)} />
-            </li>
-          ))}
+          <AnimatePresence initial={false}>
+            {data.recent.map((e) => (
+              <motion.li
+                key={e.id}
+                layout="position"
+                initial={skipEnter.has(e.id) ? false : { opacity: 0, height: 0, y: -12 }}
+                animate={{ opacity: 1, height: "auto", y: 0 }}
+                exit={isPendingEntry(e) ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0, x: 40 }}
+                transition={{ duration: 0.28, ease: "easeOut" }}
+                className="overflow-hidden"
+              >
+                <EntryRow entry={e} categories={categories} onClick={isPendingEntry(e) ? undefined : () => setEditing(e)} />
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
       <EditEntrySheet entry={editing} onClose={() => setEditing(null)} />
