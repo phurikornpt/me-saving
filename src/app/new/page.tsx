@@ -1,10 +1,13 @@
 import { Suspense } from "react";
 import { NewEntryScreen } from "@/components/NewEntryScreen";
+import { PageTransition } from "@/components/PageTransition";
 
 export default function NewEntryPage() {
   return (
-    <Suspense>
-      <NewEntryScreen />
-    </Suspense>
+    <PageTransition>
+      <Suspense>
+        <NewEntryScreen />
+      </Suspense>
+    </PageTransition>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { useState } from "react";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
@@ -122,7 +123,7 @@ export function CalendarWidget({ today }: { today: string }) {
           ))}
         </ul>
         {openDay && openDay < addDays(today, 1) && (
-          <Link href={`/new?mode=expense&day=${openDay}`} className="btn3d key mt-4 w-full text-sm">
+          <Link href={`/new?mode=expense&day=${openDay}`} transitionTypes={FORWARD} className="btn3d key mt-4 w-full text-sm">
             <Icon name="add" size={18} /> {openDay === today ? "จดเพิ่มวันนี้" : "จดย้อนหลังวันนี้ (ไม่ต่อ streak)"}
           </Link>
         )}

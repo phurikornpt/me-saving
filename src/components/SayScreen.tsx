@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -201,7 +202,7 @@ export function SayScreen() {
           {read.isError && (
             <div className="mt-2 rounded-2xl bg-card p-4" role="alert">
               <p className="text-ink-2">{parseFailureMessage(failCode)}</p>
-              <Link href="/new" className="btn3d mt-3 inline-flex">จดเอง</Link>
+              <Link href="/new" transitionTypes={FORWARD} className="btn3d mt-3 inline-flex">จดเอง</Link>
             </div>
           )}
 
@@ -209,7 +210,7 @@ export function SayScreen() {
             <button className="btn3d py-4 text-lg" disabled={!text.trim() || read.isPending} onClick={submit}>
               {read.isPending ? <><Spinner /> กำลังอ่าน…</> : <><Icon name="edit_note" /> ให้ AI ช่วยกรอก</>}
             </button>
-            <Link href="/new" className="text-center text-sm text-ink-3 underline">จดเองแทน</Link>
+            <Link href="/new" transitionTypes={FORWARD} className="text-center text-sm text-ink-3 underline">จดเองแทน</Link>
           </div>
         </section>
       )}
