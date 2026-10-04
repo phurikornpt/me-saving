@@ -2,7 +2,8 @@
 
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { readNoSpendLogged, subscribeNoSpendLogged } from "@/client/justLogged";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
@@ -25,6 +26,7 @@ const shiftMonth = (month: string, by: number) => {
 };
 
 export function CalendarWidget({ today }: { today: string }) {
+  const noSpendJustNow = useSyncExternalStore(subscribeNoSpendLogged, readNoSpendLogged, () => false);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [editing, setEditing] = useState<EntryDTO | null>(null);
@@ -79,7 +81,7 @@ export function CalendarWidget({ today }: { today: string }) {
                 onClick={() => setOpenDay(d.day)}
                 className={`relative flex min-h-[3.6rem] flex-col items-center rounded-xl px-0.5 pt-1 text-[10px] leading-tight ${
                   d.day === today ? "ring-2 ring-ink" : ""
-                } ${future ? "opacity-40" : ""}`}
+                } ${future ? "opacity-40" : ""} ${d.day === today && d.logged === "no_spend" && noSpendJustNow ? "dot-pop" : ""}`}
                 style={{ background: `color-mix(in srgb, var(--expense) ${heat}%, var(--surface))` }}
                 aria-label={`${d.day} จ่าย ${formatBaht(d.spent)} รับ ${formatBaht(d.earned)}`}
               >

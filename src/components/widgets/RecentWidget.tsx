@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { readEntryLogged, subscribeEntryLogged } from "@/client/justLogged";
 import { useCategories } from "@/client/queries";
 import { isPendingEntry } from "@/client/optimistic";
 import type { DashboardDTO, EntryDTO } from "@/client/types";
@@ -12,6 +13,8 @@ import { WidgetCard } from "./WidgetCard";
 export function RecentWidget({ data }: { data: DashboardDTO }) {
   const { data: categories = [] } = useCategories();
   const [editing, setEditing] = useState<EntryDTO | null>(null);
+  const justLogged = useSyncExternalStore(subscribeEntryLogged, readEntryLogged, () => false);
+  const newest = data.recent.find((e) => !isPendingEntry(e))?.id; // the row that was just saved
   // A saved entry replaces its "pending" row under a new id. That swap should not look like a second insert,
   // so rows that arrive when the last pending row is resolved skip their enter animation.
   const [prevRecent, setPrevRecent] = useState(data.recent);
@@ -36,7 +39,7 @@ export function RecentWidget({ data }: { data: DashboardDTO }) {
                 animate={{ opacity: 1, height: "auto", y: 0 }}
                 exit={isPendingEntry(e) ? { opacity: 0, transition: { duration: 0 } } : { opacity: 0, height: 0, x: 40 }}
                 transition={{ duration: 0.28, ease: "easeOut" }}
-                className="overflow-hidden"
+                className={`overflow-hidden rounded-xl ${justLogged && e.id === newest ? "fresh-row" : ""}`}
               >
                 <EntryRow entry={e} categories={categories} onClick={isPendingEntry(e) ? undefined : () => setEditing(e)} />
               </motion.li>

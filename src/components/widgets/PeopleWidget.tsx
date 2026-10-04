@@ -1,7 +1,9 @@
 "use client";
 
+import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { DUR } from "@/client/motion";
 import { personColor, personName } from "@/client/people";
 import { FORWARD } from "@/client/nav";
 import { owedTitle, describeOwedLine, formatDebtMessage } from "@/client/debtMessage";
@@ -23,6 +25,24 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
   const outstanding = useOutstanding();
   const owing = data.balances.filter((b) => b.balance > 0).sort((a, b) => b.balance - a.balance);
   const total = owing.reduce((s, b) => s + b.balance, 0);
+  // Someone who just stopped owing stays for a moment with a tick, then the row folds away.
+  const ids = owing.map((b) => b.personId);
+  const [seen, setSeen] = useState(ids);
+  const [cleared, setCleared] = useState<string[]>([]);
+  if (ids.join() !== seen.join()) {
+    setSeen(ids);
+    const gone = seen.filter((id) => !ids.includes(id) && data.people.some((p) => p.id === id));
+    if (gone.length > 0) setCleared((c) => [...new Set([...c, ...gone])]);
+  }
+  useEffect(() => {
+    if (cleared.length === 0) return;
+    const t = setTimeout(() => setCleared([]), 1600);
+    return () => clearTimeout(t);
+  }, [cleared]);
+  const rows = [
+    ...owing.map((b) => ({ id: b.personId, balance: b.balance, done: false })),
+    ...cleared.filter((id) => !ids.includes(id)).map((id) => ({ id, balance: 0, done: true })),
+  ];
   const detail = outstanding.data?.find((o) => o.personId === open);
   const { data: categories = [] } = useCategories();
   const categoryName = (id: string | null) => categories.find((c) => c.id === id)?.name;
@@ -51,7 +71,7 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
   return (
     <>
       <WidgetCard title="คนที่ติดเรา">
-        {owing.length === 0 ? (
+        {rows.length === 0 ? (
           <div className="flex items-center gap-3">
             <Icon name="favorite" size={32} fill className="text-partner" />
             <span className="font-bold text-4xl text-partner">฿0</span>
@@ -61,16 +81,33 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
           <>
             {owing.length > 1 && <p className="mb-1 text-sm text-ink-3">รวม <AnimatedNumber value={total} format={baht} /></p>}
             <ul className="divide-y divide-line">
-              {owing.map((b) => (
-                <li key={b.personId}>
-                  <button className="press flex w-full items-center gap-3 py-2 text-left" onClick={() => setOpen(b.personId)}>
-                    <PersonDot people={data.people} id={b.personId} size={12} />
-                    <span className="min-w-0 flex-1 truncate">{personName(data.people, b.personId)}</span>
-                    <span className="font-bold text-2xl" style={{ color: personColor(data.people, b.personId) }}><AnimatedNumber value={b.balance} format={baht} /></span>
-                    <Icon name="chevron_right" className="text-ink-3" />
-                  </button>
-                </li>
-              ))}
+              <AnimatePresence initial={false}>
+                {rows.map((b) => (
+                  <motion.li
+                    key={b.id}
+                    className="overflow-hidden"
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: DUR.slow }}
+                  >
+                    {b.done ? (
+                      <div className="flex w-full items-center gap-3 py-2">
+                        <PersonDot people={data.people} id={b.id} size={12} />
+                        <span className="min-w-0 flex-1 truncate">{personName(data.people, b.id)}</span>
+                        <span className="dot-pop flex items-center gap-1 font-medium text-income">
+                          <Icon name="check" size={22} /> เคลียร์แล้ว
+                        </span>
+                      </div>
+                    ) : (
+                      <button className="press flex w-full items-center gap-3 py-2 text-left" onClick={() => setOpen(b.id)}>
+                        <PersonDot people={data.people} id={b.id} size={12} />
+                        <span className="min-w-0 flex-1 truncate">{personName(data.people, b.id)}</span>
+                        <span className="font-bold text-2xl" style={{ color: personColor(data.people, b.id) }}><AnimatedNumber value={b.balance} format={baht} /></span>
+                        <Icon name="chevron_right" className="text-ink-3" />
+                      </button>
+                    )}
+                  </motion.li>
+                ))}
+              </AnimatePresence>
             </ul>
           </>
         )}

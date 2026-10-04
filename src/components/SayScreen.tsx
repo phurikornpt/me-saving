@@ -16,6 +16,8 @@ import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { speechErrorMessage, speechRecognitionCtor, transcriptOf, type SpeechRecognitionLike } from "@/client/speech";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht } from "@/domain/money";
+import { motion } from "motion/react";
+import { DUR } from "@/client/motion";
 import { AiBudgetNote } from "./AiBudgetNote";
 import { AuroraCloud, type CloudMode } from "./AuroraCloud";
 import { useFeedback } from "./Feedback";
@@ -155,13 +157,14 @@ export function SayScreen() {
             : "พิมพ์ประโยคด้านล่างได้เลย";
 
   return (
-    <main className={`mx-auto flex min-h-dvh max-w-md flex-col ${cards ? "bg-bg" : "bg-[#0b0d12] text-white"}`}>
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-[#0b0d12] text-white">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
         <button className="rounded-full p-2" aria-label="กลับ" onClick={() => (cards ? setCards(null) : router.back())}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">จดประโยคเดียว</h1>
         {!cards && <AiBudgetNote onDark className="ml-auto" />}
+        {cards && <AuroraCloud mode="done" pulse={0} blur={5} className="aurora-in -my-6 ml-auto h-24 w-24" />}
       </header>
 
       {!cards && (
@@ -231,7 +234,12 @@ export function SayScreen() {
       )}
 
       {cards && ctx && (
-        <>
+        <motion.div
+          className="scope-night flex flex-1 flex-col"
+          initial={{ opacity: 0, y: 40 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: DUR.slow, ease: [0.32, 0.72, 0, 1] }}
+        >
           <section className="px-5 pt-1">
             <p className="truncate text-sm text-ink-3">&ldquo;{text.trim()}&rdquo;</p>
             <p className="text-xs text-ink-3">
@@ -253,7 +261,7 @@ export function SayScreen() {
               </p>
             )}
           </div>
-        </>
+        </motion.div>
       )}
     </main>
   );

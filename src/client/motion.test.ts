@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { clearFirstLogToday, markFirstLogToday, readFirstLog, subscribeFirstLog } from "./justLogged";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { _createFlag, clearFirstLogToday, markFirstLogToday, readFirstLog, subscribeFirstLog } from "./justLogged";
 import { DUR, staggerDelay } from "./motion";
 
 describe("staggerDelay", () => {
@@ -40,5 +40,35 @@ describe("first log of the day flag", () => {
     markFirstLogToday();
     expect(seen).toHaveBeenCalledTimes(2); // unsubscribed
     clearFirstLogToday();
+  });
+});
+
+describe("self-clearing flags", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("turns itself off after the delay, and marking again restarts the wait", () => {
+    vi.useFakeTimers();
+    const f = _createFlag(1000);
+    const seen = vi.fn();
+    f.subscribe(seen);
+    f.mark();
+    expect(f.read()).toBe(true);
+    vi.advanceTimersByTime(800);
+    f.mark(); // a second log: the glow lasts a full second again
+    vi.advanceTimersByTime(800);
+    expect(f.read()).toBe(true);
+    vi.advanceTimersByTime(300);
+    expect(f.read()).toBe(false);
+    expect(seen).toHaveBeenCalledTimes(2); // on, then off; the repeat mark was not a change
+  });
+
+  it("clearing early cancels the timer", () => {
+    vi.useFakeTimers();
+    const f = _createFlag(1000);
+    f.mark();
+    f.clear();
+    f.mark();
+    vi.advanceTimersByTime(900);
+    expect(f.read()).toBe(true);
   });
 });
