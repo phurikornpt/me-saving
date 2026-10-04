@@ -4,11 +4,14 @@ import type { QueryInterface } from "sequelize";
 // (ข้าว 50 / 55 / 60). Entries logged before this have no link: we match them back by their label
 // (a preset logs its label as the note), which misses any that were renamed since. That only thins
 // the price history; totals are untouched.
+// Safe to re-run: before develop gained its own 008 this shipped as "008-entry-preset", so a database
+// migrated from that branch already has the column and index but no "009" row.
 export const migration = {
   async up(qi: QueryInterface) {
     await qi.sequelize.query(`
-      ALTER TABLE entries ADD COLUMN preset_id uuid REFERENCES presets(id) ON DELETE SET NULL;
-      CREATE INDEX entries_preset_idx ON entries (user_id, preset_id, occurred_at DESC) WHERE preset_id IS NOT NULL;
+      ALTER TABLE entries ADD COLUMN IF NOT EXISTS preset_id uuid REFERENCES presets(id) ON DELETE SET NULL;
+      CREATE INDEX IF NOT EXISTS entries_preset_idx ON entries (user_id, preset_id, occurred_at DESC) WHERE preset_id IS NOT NULL;
+      DELETE FROM schema_migrations WHERE name = '008-entry-preset';
       UPDATE entries e SET preset_id = p.id
         FROM presets p
        WHERE e.source = 'preset' AND e.preset_id IS NULL AND p.user_id = e.user_id AND p.label = e.note

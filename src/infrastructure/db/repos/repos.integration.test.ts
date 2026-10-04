@@ -586,6 +586,26 @@ describe("migrations 004 + 005 on data recorded before people and accounts exist
 });
 
 describe("migration 009: entries learn which preset they came from", () => {
+  it("runs on a database that already got the column as 008-entry-preset", async () => {
+    await sequelize.query("DROP DATABASE IF EXISTS legacy");
+    await sequelize.query("CREATE DATABASE legacy");
+    const legacy = createSequelize(container.getConnectionUri().replace(/\/[^/]+$/, "/legacy"));
+    try {
+      const migrator = createMigrator(legacy);
+      await migrator.up({ to: "008-monthly-summaries" });
+      await legacy.query(`
+        ALTER TABLE entries ADD COLUMN preset_id uuid REFERENCES presets(id) ON DELETE SET NULL;
+        CREATE INDEX entries_preset_idx ON entries (user_id, preset_id, occurred_at DESC) WHERE preset_id IS NOT NULL;
+        INSERT INTO schema_migrations (name) VALUES ('008-entry-preset');
+      `);
+      await migrator.up();
+      const [rows] = (await legacy.query("SELECT name FROM schema_migrations WHERE name LIKE '%entry-preset' ORDER BY name")) as [{ name: string }[], unknown];
+      expect(rows.map((r) => r.name)).toEqual(["009-entry-preset"]);
+    } finally {
+      await legacy.close();
+      await sequelize.query("DROP DATABASE IF EXISTS legacy");
+    }
+  });
   it("links old preset entries by label, skipping labels two presets share", async () => {
     await sequelize.query("DROP DATABASE IF EXISTS legacy");
     await sequelize.query("CREATE DATABASE legacy");
