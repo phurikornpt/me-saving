@@ -5,6 +5,6 @@ import { calendarQuery } from "@/lib/schemas";
 export const runtime = "nodejs";
 
 export const GET = api(async (req, _ctx, me) => {
-  const { month } = calendarQuery.parse(Object.fromEntries(new URL(req.url).searchParams));
-  return container().forUser(me.userId).getCategoryBreakdown.execute(month);
+  const { month, wallet } = calendarQuery.parse(Object.fromEntries(new URL(req.url).searchParams));
+  return container().forUser(me.userId).getCategoryBreakdown.execute(month, wallet);
 });

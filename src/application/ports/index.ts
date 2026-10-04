@@ -43,7 +43,8 @@ export interface EntryRepo {
   insert(entry: NewEntry): Promise<EntryRecord>;
   /** Every person's shares and repayments. */
   ledger(): Promise<Ledger>;
-  recent(limit: number): Promise<EntryRecord[]>;
+  /** Newest first. With `walletId`: only entries that moved money in or out of that wallet (transfers both ways). */
+  recent(limit: number, walletId?: string): Promise<EntryRecord[]>;
   /** Entries that happened on a Bangkok calendar day, newest first. */
   onDay(day: DayKey): Promise<EntryRecord[]>;
   findById(id: string): Promise<EntryRecord | null>;
@@ -185,12 +186,12 @@ export interface DailyTotal {
 
 /** Read-side aggregates. Implemented with raw SQL for speed (dashboard / calendar). */
 export interface StatsRepo {
-  /** Per Bangkok day in [from, toExclusive), only days that have entries. */
-  dailyTotals(from: DayKey, toExclusive: DayKey): Promise<DailyTotal[]>;
+  /** Per Bangkok day in [from, toExclusive), only days that have entries. `walletId`: only that wallet's entries. */
+  dailyTotals(from: DayKey, toExclusive: DayKey, walletId?: string): Promise<DailyTotal[]>;
   /** (day, kind) of logged days in [from, toExclusive). */
   loggedKinds(from: DayKey, toExclusive: DayKey): Promise<{ day: DayKey; kind: "entry" | "no_spend" }[]>;
   /** Our own spending per category in [from, toExclusive); receipts count by their lines. categoryId null = uncategorised. */
-  categoryTotals(from: DayKey, toExclusive: DayKey): Promise<{ categoryId: string | null; spent: Satang }[]>;
+  categoryTotals(from: DayKey, toExclusive: DayKey, walletId?: string): Promise<{ categoryId: string | null; spent: Satang }[]>;
 }
 
 export interface CategoryRecord {

@@ -92,9 +92,9 @@ export function createRepos(sequelize: Sequelize, userId: string, transaction?: 
         repayments: repayments.map((r) => ({ personId: r.personId!, total: r.total })),
       };
     },
-    async recent(limit) {
+    async recent(limit, walletId) {
       const rows = await m.Entry.findAll({
-        where: mine,
+        where: walletId ? { ...mine, [Op.or]: [{ walletId }, { toWalletId: walletId }] } : mine,
         order: [
           ["occurredAt", "DESC"],
           ["createdAt", "DESC"],

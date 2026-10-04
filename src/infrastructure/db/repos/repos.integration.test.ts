@@ -634,6 +634,14 @@ describe("wallets against real Postgres", () => {
       { categoryId: null, spent: 5000 },
     ]);
 
+    // narrowed to one wallet: only what moved through it (transfers never count as spending)
+    const st = createStatsRepo(sequelize, USER);
+    expect(await st.dailyTotals("2026-10-03", "2026-10-04", bank.id)).toEqual([{ day: "2026-10-03", spent: 0, earned: 50000 }]);
+    expect(await st.dailyTotals("2026-10-03", "2026-10-04", CASH)).toEqual([{ day: "2026-10-03", spent: 5000, earned: 0 }]);
+    expect(await st.categoryTotals("2026-10-01", "2026-11-01", bank.id)).toEqual([]);
+    expect((await s.repos.entries.recent(10, bank.id)).map((e) => e.kind).sort()).toEqual(["income", "transfer"]);
+    expect((await s.repos.entries.recent(10, CASH)).map((e) => e.kind).sort()).toEqual(["expense", "repayment", "transfer"]);
+
     // "what I really have now" sets the opening balance backwards
     expect(await s.wallets.update(CASH, { balance: 1234 })).toMatchObject({ balance: 1234, openingBalance: 1234 - 15000 });
   });

@@ -14,7 +14,7 @@ import { initModels } from "../models";
 /** Raw SQL on purpose: grouping by Bangkok day with conditional sums is a hot path the ORM can't express cheaply. */
 export function createStatsRepo(sequelize: Sequelize, userId: string): StatsRepo {
   return {
-    async dailyTotals(from, toExclusive) {
+    async dailyTotals(from, toExclusive, walletId) {
       const start = bangkokDayRange(from).start;
       const end = bangkokDayRange(toExclusive).start;
       const rows = await sequelize.query<{ day: string; spent: string; earned: string }>(
@@ -23,12 +23,13 @@ export function createStatsRepo(sequelize: Sequelize, userId: string): StatsRepo
                 COALESCE(SUM(CASE WHEN kind = 'income'  THEN total END), 0) AS earned
            FROM entries
           WHERE user_id = :userId AND occurred_at >= :start AND occurred_at < :end AND kind IN ('expense', 'income')
+            AND (CAST(:walletId AS uuid) IS NULL OR wallet_id = :walletId)
           GROUP BY 1 ORDER BY 1`,
-        { replacements: { userId, start, end }, type: QueryTypes.SELECT },
+        { replacements: { userId, start, end, walletId: walletId ?? null }, type: QueryTypes.SELECT },
       );
       return rows.map((r) => ({ day: r.day, spent: Number(r.spent), earned: Number(r.earned) }));
     },
-    async categoryTotals(from, toExclusive) {
+    async categoryTotals(from, toExclusive, walletId) {
       const start = bangkokDayRange(from).start;
       const end = bangkokDayRange(toExclusive).start;
       // Group entries (receipts, hand-typed groups) carry no category themselves: their lines do, and only
@@ -40,15 +41,17 @@ export function createStatsRepo(sequelize: Sequelize, userId: string): StatsRepo
              FROM entries
             WHERE user_id = :userId AND kind = 'expense' AND source NOT IN ('receipt', 'itemized')
               AND occurred_at >= :start AND occurred_at < :end
+              AND (CAST(:walletId AS uuid) IS NULL OR wallet_id = :walletId)
            UNION ALL
            SELECT l.category_id,
                   l.price - (l.price / (cardinality(l.people) + CASE WHEN l.includes_me THEN 1 ELSE 0 END))
                             * cardinality(l.people) AS spent
              FROM receipt_lines l JOIN entries e ON e.id = l.entry_id
             WHERE e.user_id = :userId AND e.kind = 'expense' AND e.occurred_at >= :start AND e.occurred_at < :end
+              AND (CAST(:walletId AS uuid) IS NULL OR e.wallet_id = :walletId)
          ) t
          GROUP BY category_id HAVING SUM(spent) > 0 ORDER BY SUM(spent) DESC`,
-        { replacements: { userId, start, end }, type: QueryTypes.SELECT },
+        { replacements: { userId, start, end, walletId: walletId ?? null }, type: QueryTypes.SELECT },
       );
       return rows.map((r) => ({ categoryId: r.category_id, spent: Number(r.spent) }));
     },

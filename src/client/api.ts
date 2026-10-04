@@ -46,9 +46,12 @@ const q = (params: Record<string, string | number | undefined>) => {
 };
 
 export const api = {
-  dashboard: () => request<DashboardDTO>("GET", "/api/dashboard"),
-  calendar: (month: string) => request<CalendarDTO>("GET", `/api/calendar${q({ month })}`),
-  categoryBreakdown: (month: string) => request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month })}`),
+  /** `wallet`: narrow today's totals and recent entries to one wallet. */
+  dashboard: (wallet?: string | null) => request<DashboardDTO>("GET", `/api/dashboard${q({ wallet: wallet ?? undefined })}`),
+  calendar: (month: string, wallet?: string | null) =>
+    request<CalendarDTO>("GET", `/api/calendar${q({ month, wallet: wallet ?? undefined })}`),
+  categoryBreakdown: (month: string, wallet?: string | null) =>
+    request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month, wallet: wallet ?? undefined })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
   outstanding: () => request<OutstandingDTO>("GET", "/api/people/outstanding"),
   entryDetail: (id: string) => request<EntryDetailDTO>("GET", `/api/entries/${id}`),

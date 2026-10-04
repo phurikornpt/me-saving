@@ -21,10 +21,10 @@ export interface CalendarMonth {
 export class GetCalendarMonth {
   constructor(private readonly stats: StatsRepo) {}
 
-  async execute(month: string): Promise<CalendarMonth> {
+  async execute(month: string, walletId?: string): Promise<CalendarMonth> {
     const { days, nextMonthStart } = monthDays(month);
     const [totals, kinds] = await Promise.all([
-      this.stats.dailyTotals(days[0], nextMonthStart),
+      this.stats.dailyTotals(days[0], nextMonthStart, walletId),
       this.stats.loggedKinds(days[0], nextMonthStart),
     ]);
     const byDay = new Map(totals.map((t) => [t.day, t]));
