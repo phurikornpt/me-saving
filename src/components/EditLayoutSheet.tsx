@@ -24,12 +24,13 @@ const NAMES: Record<WidgetId, string> = {
 export function EditLayoutSheet({ open, layout, onOpenChange }: { open: boolean; layout: LayoutItem[]; onOpenChange: (o: boolean) => void }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} title="แก้ dashboard">
-      {open && <Editor layout={layout} onDone={() => onOpenChange(false)} />}
+      {open && <LayoutEditor layout={layout} onDone={() => onOpenChange(false)} />}
     </Sheet>
   );
 }
 
-function Editor({ layout, onDone }: { layout: LayoutItem[]; onDone: () => void }) {
+/** The toggle + drag list itself. Also used by the settings > dashboard page. */
+export function LayoutEditor({ layout, onDone }: { layout: LayoutItem[]; onDone: () => void }) {
   const qc = useQueryClient();
   const [items, setItems] = useState(layout);
   const save = useMutation({

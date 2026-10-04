@@ -23,7 +23,7 @@ export function WalletsWidget({ data }: { data: DashboardDTO }) {
             <Icon name="swap_horiz" size={18} /> โอน
           </Link>
         ) : (
-          <Link href="/settings#wallets" className="text-sm text-ink-3 underline">เพิ่มกระเป๋า</Link>
+          <Link href="/settings/wallets" className="text-sm text-ink-3 underline">เพิ่มกระเป๋า</Link>
         )
       }
     >
@@ -42,7 +42,7 @@ export function WalletsWidget({ data }: { data: DashboardDTO }) {
       </ul>
       {wallets.length === 1 && wallets[0].openingBalance === 0 && (
         <p className="mt-1 text-xs text-ink-3">
-          ยอดนับจากรายการที่จดไว้ <Link href="/settings#wallets" className="underline">ตั้งยอดเงินจริง</Link>
+          ยอดนับจากรายการที่จดไว้ <Link href="/settings/wallets" className="underline">ตั้งยอดเงินจริง</Link>
         </p>
       )}
     </WidgetCard>
