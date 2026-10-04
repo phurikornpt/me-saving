@@ -1,3 +1,5 @@
+import type { SingleCard } from "./draftCards";
+import { whenOfDay } from "./presetChoices";
 import type { CategoryDTO, ReceiptDraftDTO } from "./types";
 
 /** One past entry waiting on the review screen, before anything is saved. Amount is satang. */
@@ -61,26 +63,20 @@ export function rowsFromDraft(draft: ReceiptDraftDTO, categories: CategoryDTO[],
 export const applyDuplicates = (rows: BackfillRow[], duplicates: boolean[]): BackfillRow[] =>
   rows.map((r, i) => (duplicates[i] ? { ...r, duplicate: true, selected: false } : r));
 
-/** A ticked row can only be saved with an amount. */
-export const canSave = (rows: BackfillRow[]): boolean => {
-  const picked = rows.filter((r) => r.selected);
-  return picked.length > 0 && picked.every((r) => r.amount > 0);
-};
-
-export const summarizeRows = (rows: BackfillRow[]) => {
-  const picked = rows.filter((r) => r.selected);
-  const sum = (kind: BackfillRow["kind"]) => picked.filter((r) => r.kind === kind).reduce((s, r) => s + r.amount, 0);
-  return { count: picked.length, out: sum("expense"), in: sum("income") };
-};
-
-/** The ticked rows as the save request wants them. Noon Bangkok keeps the entry on its own day. */
-export const toSaveRows = (rows: BackfillRow[]) =>
-  rows
-    .filter((r) => r.selected)
-    .map((r) => ({
-      kind: r.kind,
-      total: r.amount,
-      occurredAt: new Date(`${r.day}T12:00:00+07:00`).toISOString(),
-      categoryId: r.categoryId,
-      note: r.description.trim() || null,
-    }));
+/** The rows as review cards, so a bank-history page is reviewed exactly like a spoken sentence. */
+export const cardsFromRows = (rows: BackfillRow[], today: string): SingleCard[] =>
+  rows.map((r) => ({
+    type: "single",
+    id: r.key,
+    kind: r.kind,
+    amount: r.amount > 0 ? String(r.amount / 100) : "",
+    categoryId: r.categoryId,
+    note: r.description,
+    split: "none",
+    personIds: [],
+    walletId: null,
+    uncertain: [],
+    when: whenOfDay(r.day, today),
+    selected: r.selected,
+    duplicate: r.duplicate,
+  }));

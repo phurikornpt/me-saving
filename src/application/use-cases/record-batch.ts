@@ -5,7 +5,7 @@ import type { Clock, EntryRecord, TransactionRunner } from "../ports";
 import { insertEntry, type RecordEntryInput } from "./record-entry";
 import { insertGroup, type SaveReceiptInput } from "./save-receipt-entry";
 
-export const MAX_BATCH_ITEMS = 10;
+export const MAX_BATCH_ITEMS = 60;
 
 export type BatchItem =
   | ({ type: "entry" } & Omit<RecordEntryInput, "presetId">)

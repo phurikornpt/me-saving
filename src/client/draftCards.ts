@@ -1,8 +1,9 @@
 import { parseBaht } from "@/domain/money";
 import type { api } from "./api";
+import { occurredAtOf, type WhenChoice } from "./presetChoices";
 import type { EntryDraftDTO, SplitMode } from "./types";
 
-export const MAX_CARDS = 10;
+export const MAX_CARDS = 60; // same limit as the server
 export type CardSplit = "none" | "equal" | "theirs";
 type Field = "amount" | "category" | "person" | "wallet";
 
@@ -26,6 +27,10 @@ export interface SingleCard {
   personIds: string[];
   walletId: string | null;
   uncertain: Field[];
+  when: WhenChoice;
+  /** Unticked cards stay on screen but are not saved (a possible duplicate of something already on file). */
+  selected: boolean;
+  duplicate: boolean;
 }
 export interface GroupCard {
   type: "group";
@@ -34,6 +39,9 @@ export interface GroupCard {
   walletId: string | null;
   lines: LineCard[];
   uncertain: Field[];
+  when: WhenChoice;
+  selected: boolean;
+  duplicate: boolean;
 }
 export type Card = SingleCard | GroupCard;
 export type BatchItems = Parameters<typeof api.recordBatch>[0]["items"];
@@ -57,9 +65,11 @@ export function fromDrafts(drafts: EntryDraftDTO[]): Card[] {
       ? {
           type: "single", id: nextId(), kind: d.kind, amount: baht(d.amount), categoryId: d.categoryId, note: d.note ?? "",
           split: d.split, personIds: d.personIds, walletId: d.walletId, uncertain: d.uncertain,
+          when: { kind: "now" }, selected: true, duplicate: false,
         }
       : {
           type: "group", id: nextId(), name: d.name ?? "", walletId: d.walletId, uncertain: d.uncertain,
+          when: { kind: "now" }, selected: true, duplicate: false,
           lines: d.lines.map((l) => ({
             id: nextId(), note: l.note ?? "", amount: baht(l.amount), categoryId: l.categoryId,
             me: l.owners.me, personIds: l.owners.people, uncertain: l.uncertain,
@@ -73,9 +83,11 @@ const lineOf = (c: SingleCard): LineCard => ({
   id: nextId(), note: c.note, amount: c.amount, categoryId: c.categoryId,
   me: c.split !== "theirs", personIds: c.split === "none" ? [] : c.personIds, uncertain: c.uncertain.filter((f) => f !== "wallet") as Field[],
 });
-const singleOf = (l: LineCard, walletId: string | null): SingleCard => ({
+/** A line leaving its group keeps the group's wallet and time. */
+const singleOf = (l: LineCard, from: GroupCard): SingleCard => ({
   type: "single", id: nextId(), kind: "expense", amount: l.amount, categoryId: l.categoryId, note: l.note,
-  split: splitOfLine(l), personIds: l.personIds, walletId, uncertain: l.uncertain,
+  split: splitOfLine(l), personIds: l.personIds, walletId: from.walletId, uncertain: l.uncertain,
+  when: from.when, selected: from.selected, duplicate: false,
 });
 
 export const update = (cards: Card[], id: string, patch: Partial<SingleCard> | Partial<GroupCard>): Card[] =>
@@ -98,7 +110,7 @@ export function moveLine(cards: Card[], lineId: string, to: string | "single"): 
   if (!from || !line || to === from.id) return cards;
   if (to === "single") {
     if (cards.length >= MAX_CARDS) return cards;
-    return dropEmpty([...removeLine(cards, lineId), singleOf(line, from.walletId)]);
+    return dropEmpty([...removeLine(cards, lineId), singleOf(line, from)]);
   }
   if (!cards.some((c) => c.id === to && c.type === "group")) return cards;
   return dropEmpty(cards.map((c): Card => {
@@ -121,6 +133,9 @@ export function mergeCards(cards: Card[], id: string, into: string): Card[] {
     id: b.id,
     name: b.type === "group" ? b.name : a.type === "group" ? a.name : "",
     walletId: b.walletId,
+    when: b.when,
+    selected: b.selected || a.selected,
+    duplicate: false,
     uncertain: b.uncertain.includes("wallet") ? ["wallet"] : [],
     lines: [...linesOf(b), ...linesOf(a)],
   };
@@ -131,15 +146,16 @@ export function mergeCards(cards: Card[], id: string, into: string): Card[] {
 export function splitGroup(cards: Card[], id: string): Card[] {
   const g = cards.find((c): c is GroupCard => c.type === "group" && c.id === id);
   if (!g || cards.length - 1 + g.lines.length > MAX_CARDS) return cards;
-  return cards.flatMap((c) => (c.id === id ? g.lines.map((l) => singleOf(l, g.walletId)) : [c]));
+  return cards.flatMap((c) => (c.id === id ? g.lines.map((l) => singleOf(l, g)) : [c]));
 }
 
 export const groupTotal = (g: GroupCard) => g.lines.reduce((s, l) => s + satangOf(l.amount), 0);
 export const cardTotal = (c: Card) => (c.type === "group" ? groupTotal(c) : satangOf(c.amount));
 
 /** Why the whole set can't be saved yet, in Thai; null when it can. */
-export function cardsProblem(cards: Card[]): string | null {
-  if (cards.length === 0) return "ไม่มีรายการ";
+export function cardsProblem(all: Card[]): string | null {
+  const cards = all.filter((c) => c.selected);
+  if (cards.length === 0) return all.length === 0 ? "ไม่มีรายการ" : "ติ๊กอย่างน้อย 1 รายการ";
   if (cards.length > MAX_CARDS) return `บันทึกได้ครั้งละไม่เกิน ${MAX_CARDS} รายการ`;
   for (const c of cards) {
     if (c.type === "single") {
@@ -157,7 +173,8 @@ export function cardsProblem(cards: Card[]): string | null {
 }
 
 /** The headline number on the save button: expenses if there are any, else incomes. */
-export function headlineTotal(cards: Card[]): number {
+export function headlineTotal(all: Card[]): number {
+  const cards = all.filter((c) => c.selected);
   const expenses = cards.filter((c) => c.type === "group" || c.kind === "expense");
   return (expenses.length > 0 ? expenses : cards).reduce((s, c) => s + cardTotal(c), 0);
 }
@@ -168,13 +185,14 @@ export function splitMode(c: SingleCard): SplitMode | undefined {
 
 /** What /api/entries/batch takes. Call only when `cardsProblem` is null. */
 export function toBatchItems(cards: Card[]): BatchItems {
-  return cards.map((c): BatchItems[number] => {
+  return cards.filter((c) => c.selected).map((c): BatchItems[number] => {
     const walletId = c.walletId ?? undefined;
+    const occurredAt = occurredAtOf(c.when);
     if (c.type === "single") {
-      return { type: "entry", kind: c.kind, total: satangOf(c.amount), categoryId: c.categoryId, note: c.note.trim() || null, split: splitMode(c), walletId };
+      return { type: "entry", kind: c.kind, total: satangOf(c.amount), categoryId: c.categoryId, note: c.note.trim() || null, split: splitMode(c), walletId, occurredAt };
     }
     return {
-      type: "group", source: "itemized", merchant: c.name.trim() || null, total: groupTotal(c), walletId,
+      type: "group", source: "itemized", merchant: c.name.trim() || null, total: groupTotal(c), walletId, occurredAt,
       people: [...new Set(c.lines.flatMap((l) => l.personIds))],
       lines: c.lines.map((l) => ({
         rawName: l.note.trim() || "รายการ", canonicalName: l.note.trim() || "รายการ", qty: 1, price: satangOf(l.amount),
@@ -185,5 +203,5 @@ export function toBatchItems(cards: Card[]): BatchItems {
 }
 
 export function usedCategoryIds(cards: Card[]): string[] {
-  return cards.flatMap((c) => (c.type === "single" ? [c.categoryId] : c.lines.map((l) => l.categoryId))).filter((x): x is string => !!x);
+  return cards.filter((c) => c.selected).flatMap((c) => (c.type === "single" ? [c.categoryId] : c.lines.map((l) => l.categoryId))).filter((x): x is string => !!x);
 }

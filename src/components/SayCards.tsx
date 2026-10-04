@@ -6,9 +6,11 @@ import { cardTotal, groupTotal, MAX_CARDS, satangOf, splitMode } from "@/client/
 import type { CategoryDTO, PersonDTO, WalletDTO } from "@/client/types";
 import { formatBaht } from "@/domain/money";
 import { sharesFor, sumShares } from "@/domain/split";
+import { isBackdated } from "@/client/presetChoices";
 import { Icon } from "./Icon";
 import { PeoplePicker } from "./People";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 const SPLITS: [CardSplit, string][] = [
   ["none", "ของเราทั้งหมด"],
@@ -23,6 +25,8 @@ export interface CardsCtx {
   categories: CategoryDTO[];
   people: PersonDTO[];
   wallets: WalletDTO[];
+  /** Cards carry a tick (bank-history pages: untick what is already on file). */
+  selectable: boolean;
   patch: (id: string, p: Partial<SingleCard> | Partial<GroupCard>) => void;
   patchLine: (lineId: string, p: Partial<LineCard>) => void;
   remove: (id: string) => void;
@@ -52,17 +56,28 @@ function CategoryChips({ categories, value, onChange, kind, unsure }: {
   );
 }
 
-const Shell = ({ title, children, onDelete }: { title: string; children: React.ReactNode; onDelete: () => void }) => (
-  <section className="mx-4 mt-3 rounded-3xl border-2 border-line bg-card/60 p-3">
-    <div className="mb-2 flex items-center justify-between">
-      <h2 className="text-sm font-semibold text-ink-3">{title}</h2>
-      <button className="rounded-full p-1 text-ink-3" aria-label="ลบรายการนี้" onClick={onDelete}>
-        <Icon name="delete" size={20} />
-      </button>
-    </div>
-    {children}
-  </section>
-);
+function Shell({ card, ctx, title, children }: { card: Card; ctx: CardsCtx; title: string; children: React.ReactNode }) {
+  return (
+    <section className={`mx-4 mt-3 rounded-3xl border-2 bg-card/60 p-3 transition-opacity ${card.duplicate ? "flash-once border-streak" : "border-line"} ${card.selected ? "" : "opacity-60"}`}>
+      <div className="mb-2 flex items-center gap-2">
+        {ctx.selectable && (
+          <input type="checkbox" className="size-5" checked={card.selected} aria-label="จดรายการนี้" onChange={(e) => ctx.patch(card.id, { selected: e.target.checked })} />
+        )}
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold text-ink-3">{title}</h2>
+        {card.duplicate && <span className="shrink-0 text-xs text-ink-2">อาจซ้ำกับที่จดไว้</span>}
+        <button className="rounded-full p-1 text-ink-3" aria-label="ลบรายการนี้" onClick={() => ctx.remove(card.id)}>
+          <Icon name="delete" size={20} />
+        </button>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+const BackdateNote = ({ card }: { card: Card }) =>
+  card.when.kind === "at" && isBackdated(card.when, new Date()) ? (
+    <p className="mt-1 px-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>
+  ) : null;
 
 function MergeSelect({ ctx, id }: { ctx: CardsCtx; id: string }) {
   const targets = ctx.cards.filter((c) => c.id !== id && (c.type === "group" || c.kind === "expense"));
@@ -96,7 +111,7 @@ export function SingleCardView({ card, ctx }: { card: SingleCard; ctx: CardsCtx 
   } catch {}
   const has = (f: SingleCard["uncertain"][number]) => card.uncertain.includes(f);
   return (
-    <Shell title={card.kind === "income" ? "รายรับ" : "รายจ่าย"} onDelete={() => ctx.remove(card.id)}>
+    <Shell card={card} ctx={ctx} title={card.kind === "income" ? "รายรับ" : "รายจ่าย"}>
       <div className="flex gap-2">
         {(["expense", "income"] as const).map((k) => (
           <button
@@ -124,14 +139,18 @@ export function SingleCardView({ card, ctx }: { card: SingleCard; ctx: CardsCtx 
           className={`min-w-0 flex-1 bg-transparent text-3xl font-bold outline-none ${card.kind === "income" ? "text-income" : "text-ink"}`}
         />
       </label>
-      <input
-        value={card.note}
-        maxLength={200}
-        aria-label="โน้ต"
-        placeholder="โน้ต (ไม่ใส่ก็ได้)"
-        onChange={(e) => ctx.patch(card.id, { note: e.target.value })}
-        className="mt-1 w-full rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
-      />
+      <div className="mt-1 flex items-center gap-2">
+        <input
+          value={card.note}
+          maxLength={200}
+          aria-label="โน้ต"
+          placeholder="โน้ต (ไม่ใส่ก็ได้)"
+          onChange={(e) => ctx.patch(card.id, { note: e.target.value })}
+          className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
+        />
+        <WhenField value={card.when} onChange={(when) => ctx.patch(card.id, { when })} />
+      </div>
+      <BackdateNote card={card} />
       <p className="mt-1 min-h-5 truncate text-sm text-partner">{preview}</p>
       {card.kind === "expense" && (
         <div className={`p-1 ${flag(has("person"))}`}>
@@ -218,15 +237,19 @@ function LineView({ line, group, ctx }: { line: LineCard; group: GroupCard; ctx:
 
 export function GroupCardView({ card, ctx }: { card: GroupCard; ctx: CardsCtx }) {
   return (
-    <Shell title={`ซื้อด้วยกัน · ${card.lines.length} อย่าง`} onDelete={() => ctx.remove(card.id)}>
-      <input
-        value={card.name}
-        maxLength={100}
-        aria-label="ชื่อกลุ่ม"
-        placeholder="ชื่อกลุ่ม เช่น ค่า 7-11 (ไม่ใส่ก็ได้)"
-        onChange={(e) => ctx.patch(card.id, { name: e.target.value })}
-        className="w-full rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
-      />
+    <Shell card={card} ctx={ctx} title={`ซื้อด้วยกัน · ${card.lines.length} อย่าง`}>
+      <div className="flex items-center gap-2">
+        <input
+          value={card.name}
+          maxLength={100}
+          aria-label="ชื่อกลุ่ม"
+          placeholder="ชื่อกลุ่ม เช่น ค่า 7-11 (ไม่ใส่ก็ได้)"
+          onChange={(e) => ctx.patch(card.id, { name: e.target.value })}
+          className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
+        />
+        <WhenField value={card.when} onChange={(when) => ctx.patch(card.id, { when })} />
+      </div>
+      <BackdateNote card={card} />
       <ul className="mt-2 flex flex-col gap-2">
         {card.lines.map((l) => <LineView key={l.id} line={l} group={card} ctx={ctx} />)}
       </ul>

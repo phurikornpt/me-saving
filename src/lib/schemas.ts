@@ -207,5 +207,5 @@ export const batchBody = z.object({
       ]),
     )
     .min(1)
-    .max(10),
+    .max(60),
 });

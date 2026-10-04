@@ -7,6 +7,7 @@ import { useState } from "react";
 import { api, ApiError } from "@/client/api";
 import { describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
+import { occurredAtOf, sameWhen, whenOfInstant, type WhenChoice } from "@/client/presetChoices";
 import type { EntryDTO } from "@/client/types";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
@@ -15,6 +16,7 @@ import { Spinner } from "./Loading";
 import { PeoplePicker } from "./People";
 import { Sheet } from "./Sheet";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 const ERRORS: Record<string, string> = {
   BALANCE_WOULD_GO_NEGATIVE: "แก้ไม่ได้: มีคนจ่ายคืนไปแล้วมากกว่ายอดที่จะค้างหลังแก้",
@@ -48,6 +50,8 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
   const [split, setSplit] = useState<Choice>("keep");
   const [withWho, setWithWho] = useState<string[]>(entry.shares.map((s) => s.personId));
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [original] = useState<WhenChoice>(() => whenOfInstant(new Date(entry.occurredAt)));
+  const [when, setWhen] = useState<WhenChoice>(original);
 
   // group entries (receipt / hand-typed) get amount and split from their lines
   const locked = entry.source === "receipt" || entry.source === "itemized";
@@ -59,6 +63,7 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
       const patch: Parameters<typeof api.updateEntry>[1] = { note: note.trim() || null };
       if (entry.kind !== "repayment" && !isTransfer) patch.categoryId = categoryId;
       if (walletId !== entry.walletId) patch.walletId = walletId;
+      if (!locked && !sameWhen(when, original)) patch.occurredAt = occurredAtOf(when) ?? new Date().toISOString();
       if (toWalletId && toWalletId !== entry.toWalletId) patch.toWalletId = toWalletId;
       if (!locked) {
         const total = parseBaht(amount);
@@ -162,13 +167,16 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
           </div>
         )}
 
-        <input
-          value={note}
-          maxLength={200}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="โน้ต"
-          className="rounded-full border-2 border-line bg-card px-4 py-2 outline-none focus:border-ink"
-        />
+        <div className="flex items-center gap-2">
+          <input
+            value={note}
+            maxLength={200}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="โน้ต"
+            className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 outline-none focus:border-ink"
+          />
+          {!locked && <WhenField value={when} onChange={setWhen} />}
+        </div>
 
         <div className="mt-2 flex gap-3">
           <button

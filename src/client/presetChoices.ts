@@ -60,9 +60,28 @@ export function quickWhen(id: "now" | "hourAgo" | "yesterday", now: Date): WhenC
   return { kind: "at", ...c, day: addDays(c.day, -1) };
 }
 
-/** The days the wheel offers, today first. */
-export const pickableDays = (now: Date): DayKey[] =>
-  Array.from({ length: BACK_DAYS + 1 }, (_, i) => addDays(bangkokDay(now), -i));
+/** The days the wheel offers, today first. `from` reaches back further when something already sits on an older day. */
+export function pickableDays(now: Date, from?: DayKey): DayKey[] {
+  const today = bangkokDay(now);
+  let back = BACK_DAYS;
+  if (from && from < today) while (back < 800 && addDays(today, -back) > from) back++;
+  return Array.from({ length: back + 1 }, (_, i) => addDays(today, -i));
+}
+
+export type AtChoice = Extract<WhenChoice, { kind: "at" }>;
+
+/** An instant as a choice, minute kept exact (so an untouched entry keeps its time). */
+export function whenOfInstant(d: Date): AtChoice {
+  const t = new Date(d.getTime() + 7 * 3600_000);
+  return { kind: "at", day: bangkokDay(d), hour: t.getUTCHours(), minute: t.getUTCMinutes() };
+}
+
+/** A day with no time of its own: noon Bangkok keeps it on that day. Today (or later) means "now". */
+export const whenOfDay = (day: DayKey | null | undefined, today: DayKey): WhenChoice =>
+  day && day < today ? { kind: "at", day, hour: 12, minute: 0 } : { kind: "now" };
+
+export const sameWhen = (a: WhenChoice, b: WhenChoice): boolean =>
+  a.kind === "now" ? b.kind === "now" : b.kind === "at" && a.day === b.day && a.hour === b.hour && a.minute === b.minute;
 
 const WEEKDAY = ["อา.", "จ.", "อ.", "พ.", "พฤ.", "ศ.", "ส."];
 const MONTH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];

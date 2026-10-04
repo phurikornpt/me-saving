@@ -4,20 +4,21 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import {
-  dayLabel,
+  BACK_DAYS,
   isFuture,
   MINUTE_STEP,
-  pickableDays,
   priceChoices,
   quickWhen,
   wallClock,
   whenLabel,
+  type AtChoice,
   type WhenChoice,
 } from "@/client/presetChoices";
 import { usePresetPrices } from "@/client/queries";
 import type { DashboardDTO } from "@/client/types";
 import { formatBaht } from "@/domain/money";
 import { Icon } from "../Icon";
+import { WhenWheels } from "../WhenField";
 import { WheelPicker } from "../WheelPicker";
 
 type Preset = DashboardDTO["presets"][number];
@@ -356,41 +357,14 @@ function TimePanel({
   onDone: (w: WhenChoice) => void;
 }) {
   const now = useMemo(() => new Date(), []);
-  const days = useMemo(() => pickableDays(now), [now]);
-  const start = initial.kind === "at" ? initial : wallClock(now);
-  const [day, setDay] = useState(Math.max(0, days.indexOf(start.day)));
-  const [hour, setHour] = useState(start.hour);
-  const [minute, setMinute] = useState(start.minute / MINUTE_STEP);
-  const choice: WhenChoice = { kind: "at", day: days[day], hour, minute: minute * MINUTE_STEP };
+  const [choice, setChoice] = useState<AtChoice>(initial.kind === "at" ? initial : { kind: "at", ...wallClock(now) });
   const future = isFuture(choice, now);
-  const nowClock = wallClock(now);
-  const today = day === 0;
 
   return (
     <>
-      <Header preset={preset} onBack={onBack} title={`${preset.label} · เวลา`} aside={<span className="text-xs text-white/55">ย้อนหลังได้ {days.length - 1} วัน</span>} />
-      <div className="mb-1 flex gap-1">
-        <WheelPicker
-          className="flex-[1.6]"
-          label="วัน"
-          items={days.map((d) => ({ key: d, label: dayLabel(d, now) }))}
-          index={day}
-          onChange={setDay}
-        />
-        <WheelPicker
-          className="flex-1"
-          label="ชั่วโมง"
-          items={Array.from({ length: 24 }, (_, h) => ({ key: String(h), label: String(h).padStart(2, "0"), disabled: today && h > nowClock.hour }))}
-          index={hour}
-          onChange={setHour}
-        />
-        <WheelPicker
-          className="flex-1"
-          label="นาที"
-          items={Array.from({ length: 60 / MINUTE_STEP }, (_, m) => ({ key: String(m), label: String(m * MINUTE_STEP).padStart(2, "0") }))}
-          index={minute}
-          onChange={setMinute}
-        />
+      <Header preset={preset} onBack={onBack} title={`${preset.label} · เวลา`} aside={<span className="text-xs text-white/55">ย้อนหลังได้ {BACK_DAYS} วัน</span>} />
+      <div className="mb-1">
+        <WhenWheels value={choice} now={now} onChange={setChoice} />
       </div>
       <p className={`mb-3 text-center text-xs ${future ? "text-[#ff7a59]" : "text-white/55"}`} role={future ? "alert" : undefined}>
         {future ? "เวลานี้ยังมาไม่ถึง เลื่อนย้อนกลับ" : `นาทีทีละ ${MINUTE_STEP}`}

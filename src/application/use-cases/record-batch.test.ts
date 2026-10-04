@@ -50,10 +50,10 @@ describe("RecordBatch", () => {
     expect(f.days.size).toBe(0);
   });
 
-  it("refuses an empty batch, more than 10 items, and an unknown wallet", async () => {
+  it("refuses an empty batch, more than 60 items, and an unknown wallet", async () => {
     const { uc } = setup();
     await expect(uc.execute({ items: [] })).rejects.toMatchObject({ code: "INVALID_AMOUNT" });
-    await expect(uc.execute({ items: Array(11).fill(income) })).rejects.toMatchObject({ code: "INVALID_AMOUNT" });
+    await expect(uc.execute({ items: Array(61).fill(income) })).rejects.toMatchObject({ code: "INVALID_AMOUNT" });
     await expect(uc.execute({ walletId: "nope", items: [income] })).rejects.toMatchObject({ code: "UNKNOWN_WALLET" });
   });
 });

@@ -42,6 +42,7 @@ export function WheelPicker({
   const el = useRef<HTMLDivElement>(null);
   const ours = useRef(0); // until when scroll events are our own scrollTo, not the user's
   const frame = useRef(0);
+  const fromScroll = useRef(-1); // the index the user's own scrolling just set: the wheel is already there, don't animate to it
   const x = axis === "x";
   const pad = (size * (visible - 1)) / 2;
   const thick = cross ?? size;
@@ -50,6 +51,10 @@ export function WheelPicker({
   useEffect(() => {
     const node = el.current;
     if (!node) return;
+    if (fromScroll.current === index) {
+      fromScroll.current = -1;
+      return; // fighting the finger (or the fling) with a scrollTo is what made it stutter
+    }
     const target = index * size;
     const at = x ? node.scrollLeft : node.scrollTop;
     if (Math.abs(at - target) < 1) return;
@@ -68,7 +73,10 @@ export function WheelPicker({
       const node = el.current;
       if (!node) return;
       const i = Math.max(0, Math.min(items.length - 1, Math.round((x ? node.scrollLeft : node.scrollTop) / size)));
-      if (i !== index) onChange(i);
+      if (i !== index) {
+        fromScroll.current = i;
+        onChange(i);
+      }
     });
   };
 
@@ -122,8 +130,8 @@ export function WheelPicker({
               <div
                 key={it.key}
                 onClick={() => !it.disabled && onChange(i)}
-                className={`flex shrink-0 snap-center items-center justify-center gap-1 tabular-nums transition-[opacity,font-size] ${
-                  on ? "text-lg font-semibold" : "text-base opacity-50"
+                className={`flex shrink-0 snap-center items-center justify-center gap-1 tabular-nums transition-[opacity,transform] text-lg ${
+                  on ? "font-semibold" : "scale-90 opacity-50"
                 } ${it.disabled ? "line-through opacity-25" : ""}`}
                 style={x ? { width: size, height: thick } : { height: size }}
               >

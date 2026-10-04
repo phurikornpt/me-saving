@@ -85,8 +85,8 @@ export const api = {
   recordBatch: (b: {
     walletId?: string;
     items: (
-      | { type: "entry"; kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null; split?: SplitMode; walletId?: string }
-      | { type: "group"; source?: "receipt" | "itemized"; merchant?: string | null; total: number; people?: string[]; walletId?: string;
+      | { type: "entry"; kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null; split?: SplitMode; walletId?: string; occurredAt?: string }
+      | { type: "group"; source?: "receipt" | "itemized"; merchant?: string | null; total: number; people?: string[]; walletId?: string; occurredAt?: string;
           lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null }[] }
     )[];
   }) => request<ActivityDTO & { entries: EntryDTO[] }>("POST", "/api/entries/batch", b),

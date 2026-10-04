@@ -10,14 +10,14 @@ import { activePeople, describeShares } from "@/client/people";
 import { usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { useAfterLog } from "@/client/useAfterLog";
-import { occurredAtFor } from "@/client/occurredAt";
-import { bangkokDay } from "@/domain/day";
+import { isBackdated, occurredAtOf, type WhenChoice } from "@/client/presetChoices";
 import { formatBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 /** A group typed by hand ("ค่า 7-11": นม 10, ไก่ 50), each item with its own owners. Saved as one expense. */
 export function ItemizedScreen() {
@@ -27,7 +27,7 @@ export function ItemizedScreen() {
   const fb = useFeedback();
   const afterLog = useAfterLog();
   const [name, setName] = useState("");
-  const [day, setDay] = useState("");
+  const [when, setWhen] = useState<WhenChoice>({ kind: "now" });
   const [lines, setLines] = useState<DraftLine[]>([]);
   const { data: people = [] } = usePeople();
   const { data: wallets = [] } = useWallets();
@@ -47,15 +47,14 @@ export function ItemizedScreen() {
 
   const total = lines.reduce((s, l) => s + l.price, 0);
   const sum = summarize(lines, total);
-  const today = bangkokDay(new Date());
-  const backdated = !!day && day < today;
+  const backdated = isBackdated(when, new Date());
 
   const save = useMutation({
-    mutationFn: (v: { name: string; lines: DraftLine[]; total: number; day: string; people: string[]; walletId: string | null }) =>
+    mutationFn: (v: { name: string; lines: DraftLine[]; total: number; when: WhenChoice; people: string[]; walletId: string | null }) =>
       api.saveReceipt({
         source: "itemized",
         merchant: v.name.trim() || null,
-        occurredAt: occurredAtFor(v.day, today),
+        occurredAt: occurredAtOf(v.when),
         total: v.total,
         people: v.people,
         walletId: v.walletId ?? undefined,
@@ -69,7 +68,7 @@ export function ItemizedScreen() {
         })),
       }),
     onMutate: (v) =>
-      v.day && v.day < today
+      isBackdated(v.when, new Date())
         ? undefined // a backdated group doesn't belong in today's numbers
         : applyOptimisticEntry(qc, {
             kind: "expense", total: v.total, source: "itemized", merchant: v.name.trim() || "หลายรายการ",
@@ -106,17 +105,7 @@ export function ItemizedScreen() {
           placeholder="ชื่อกลุ่ม เช่น ค่า 7-11 (ไม่ใส่ก็ได้)"
           className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
         />
-        <label className="pill flex items-center gap-1 text-sm">
-          <Icon name="calendar_month" size={18} />
-          <input
-            type="date"
-            value={day}
-            max={today}
-            onChange={(e) => setDay(e.target.value)}
-            className="w-[7.5rem] bg-transparent text-xs outline-none"
-            aria-label="วันที่ (ค่าเริ่มต้นคือวันนี้)"
-          />
-        </label>
+        <WhenField value={when} onChange={setWhen} />
       </section>
       {backdated && <p className="-mt-2 px-6 pb-2 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
       <section className="px-5 pb-3">
@@ -136,7 +125,7 @@ export function ItemizedScreen() {
           className="btn3d w-full py-4 text-lg"
           disabled={!sum.valid}
           onClick={() => {
-            save.mutate({ name, lines, total, day, people: onBill.map((p) => p.id), walletId });
+            save.mutate({ name, lines, total, when, people: onBill.map((p) => p.id), walletId });
             router.replace("/");
           }}
         >
