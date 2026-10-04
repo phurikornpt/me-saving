@@ -207,18 +207,30 @@ export interface ReceiptParser {
  * What the AI made of one sentence ("ข้าวมันไก่ 60 หารแฟน"). People and wallets are the short keys we
  * handed out (p1, w1 ...), never ids; the use case maps them back and drops anything it didn't give.
  */
-export interface ParsedEntryText {
-  kind: "expense" | "income";
+/** One thing bought, as the model read it. Owners are per item, so a split needs no separate field. */
+export interface ParsedEntryItem {
+  note: string | null;
   /** Satang; null when no amount was said. */
   amount: Satang | null;
   categoryName: string | null;
-  note: string | null;
-  /** How an expense is split with `personKeys`. Always "none" for income. */
-  split: "none" | "equal" | "theirs";
+  /** Does the speaker pay for / use their own part of this item? */
+  me: boolean;
+  /** Keys of the people the item is shared with, or is entirely for. */
   personKeys: string[];
+  uncertain: ("amount" | "category" | "person")[];
+}
+/** One entry the sentence describes: income, a single expense, or several items bought together. */
+export interface ParsedEntry {
+  kind: "expense" | "income";
+  /** A name for a group of items ("ค่า 7-11"); null when none was said. */
+  name: string | null;
   walletKey: string | null;
-  /** Fields the model is unsure about. */
-  uncertain: ("amount" | "category" | "person" | "wallet")[];
+  items: ParsedEntryItem[];
+  uncertain: "wallet"[];
+}
+/** A sentence can describe several unrelated entries ("เงินเดือนเข้า 25000 ซื้อข้าว 50 น้ำ 20"). */
+export interface ParsedEntries {
+  entries: ParsedEntry[];
 }
 export interface TextEntryParser {
   parse(
@@ -228,7 +240,7 @@ export interface TextEntryParser {
       people: { key: string; name: string; note: string }[];
       wallets: { key: string; name: string }[];
     },
-  ): Promise<ParsedEntryText>;
+  ): Promise<ParsedEntries>;
 }
 
 export interface DailyTotal {
