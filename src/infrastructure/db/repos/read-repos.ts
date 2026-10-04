@@ -14,18 +14,20 @@ import { initModels } from "../models";
 /** Raw SQL on purpose: grouping by Bangkok day with conditional sums is a hot path the ORM can't express cheaply. */
 export function createStatsRepo(sequelize: Sequelize, userId: string): StatsRepo {
   return {
-    async dailyTotals(from, toExclusive, walletId) {
+    async dailyTotals(from, toExclusive, walletId, spend = "all") {
       const start = bangkokDayRange(from).start;
       const end = bangkokDayRange(toExclusive).start;
       const rows = await sequelize.query<{ day: string; spent: string; earned: string }>(
         `SELECT to_char((occurred_at AT TIME ZONE 'Asia/Bangkok')::date, 'YYYY-MM-DD') AS day,
-                COALESCE(SUM(CASE WHEN kind = 'expense' THEN total - others_share END), 0) AS spent,
+                COALESCE(SUM(CASE WHEN kind = 'expense' THEN (CASE WHEN :spend = 'all' THEN total - others_share ELSE total END) END), 0) AS spent,
                 COALESCE(SUM(CASE WHEN kind = 'income'  THEN total END), 0) AS earned
            FROM entries
-          WHERE user_id = :userId AND occurred_at >= :start AND occurred_at < :end AND kind IN ('expense', 'income')
+          WHERE user_id = :userId AND occurred_at >= :start AND occurred_at < :end
+            AND (kind = 'expense' OR (kind = 'income' AND :spend = 'all'))
+            AND (:spend = 'all' OR (:spend = 'mine' AND others_share = 0) OR (:spend = 'fronted' AND others_share > 0))
             AND (CAST(:walletId AS uuid) IS NULL OR wallet_id = :walletId)
           GROUP BY 1 ORDER BY 1`,
-        { replacements: { userId, start, end, walletId: walletId ?? null }, type: QueryTypes.SELECT },
+        { replacements: { userId, start, end, walletId: walletId ?? null, spend }, type: QueryTypes.SELECT },
       );
       return rows.map((r) => ({ day: r.day, spent: Number(r.spent), earned: Number(r.earned) }));
     },

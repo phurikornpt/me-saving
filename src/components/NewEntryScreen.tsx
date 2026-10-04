@@ -1,7 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useMemo, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
@@ -32,6 +34,7 @@ export function NewEntryScreen() {
   const params = useSearchParams();
   const mode = params.get("mode"); // expense | income | front
   const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -43,6 +46,7 @@ export function NewEntryScreen() {
 
   const [kind, setKind] = useState<"expense" | "income">(mode === "income" ? "income" : "expense");
   const [amount, setAmount] = useState("");
+  const [shake, setShake] = useState(0);
   const [fronting, setFronting] = useState(mode === "front");
   const [choice, setChoice] = useState<SplitChoice>("equal");
   // null = untouched: with only one person set up, they are picked for you
@@ -150,7 +154,7 @@ export function NewEntryScreen() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <div className="flex gap-2">
@@ -171,10 +175,32 @@ export function NewEntryScreen() {
       </header>
 
       <section className="px-6 pt-4 text-center">
-        <div className={`font-bold text-6xl ${kind === "income" ? "text-income" : "text-ink"}`} aria-live="polite">
-          <span className="text-3xl text-ink-3">฿ </span>
-          {amount || "0"}
-        </div>
+        {/* remounting on each rejected key restarts the shake */}
+        <motion.div
+          key={shake}
+          animate={shake ? { x: [0, -9, 8, -5, 3, 0] } : { x: 0 }}
+          transition={{ duration: 0.32 }}
+          className={`font-bold text-6xl ${kind === "income" ? "text-income" : "text-ink"}`}
+          aria-live="polite"
+          aria-label={`฿ ${amount || "0"}`}
+        >
+          <span className="text-3xl text-ink-3" aria-hidden>฿ </span>
+          <span aria-hidden>
+            <AnimatePresence initial={false}>
+              {(amount || "0").split("").map((ch, i) => (
+                <motion.span
+                  key={i}
+                  className="inline-block"
+                  initial={{ scale: 0.55, opacity: 0.3 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ type: "spring", stiffness: 600, damping: 22 }}
+                >
+                  {ch}
+                </motion.span>
+              ))}
+            </AnimatePresence>
+          </span>
+        </motion.div>
         {/* always occupies its line so the keypad below never jumps while typing */}
         <p className="mt-1 h-5 truncate text-sm text-partner">
           {preview && preview.length > 0 && total > 0 && `ของเรา ฿${formatBaht(total - sumShares(preview))} · ${describeShares(people, preview)}`}
@@ -276,7 +302,14 @@ export function NewEntryScreen() {
       {day && <p className="px-6 pt-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
 
       <div className="safe-bottom mt-auto pt-4">
-        <Keypad value={amount} onChange={setAmount} />
+        <Keypad
+          value={amount}
+          onChange={setAmount}
+          onReject={() => {
+            setShake((n) => n + 1);
+            navigator.vibrate?.(30);
+          }}
+        />
       </div>
     </main>
   );

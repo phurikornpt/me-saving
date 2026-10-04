@@ -15,6 +15,7 @@ import { createSequelize } from "../sequelize";
 import { createRepos, createTransactionRunner } from "./index";
 import { createLoginAttemptRepo } from "./login-attempt-repo";
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "./read-repos";
+import { createSummaryRepo } from "./summary-repo";
 import { createDbCredentialVerifier, createUser } from "./user-repo";
 import { hashPassword } from "../../security/password";
 
@@ -216,6 +217,16 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
       { day: "2026-10-03", spent: 5000, earned: 0 },
       { day: "2026-10-04", spent: 2000, earned: 1500000 },
     ]);
+  });
+
+  it("narrows to our own or fronted expenses at their full amount, without income", async () => {
+    await mk("expense", "2026-10-03T05:00:00Z", 10000, 5000); // fronted: we paid 10000, 5000 is theirs
+    await mk("expense", "2026-10-03T06:00:00Z", 2000); //        just ours
+    await mk("income", "2026-10-03T07:00:00Z", 1500000);
+    const stats = createStatsRepo(sequelize, USER);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "all")).toEqual([{ day: "2026-10-03", spent: 7000, earned: 1500000 }]);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "mine")).toEqual([{ day: "2026-10-03", spent: 2000, earned: 0 }]);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "fronted")).toEqual([{ day: "2026-10-03", spent: 10000, earned: 0 }]);
   });
 
   it("returns logged days with how they were logged", async () => {
@@ -574,14 +585,14 @@ describe("migrations 004 + 005 on data recorded before people and accounts exist
   });
 });
 
-describe("migration 008: entries learn which preset they came from", () => {
+describe("migration 009: entries learn which preset they came from", () => {
   it("links old preset entries by label, skipping labels two presets share", async () => {
     await sequelize.query("DROP DATABASE IF EXISTS legacy");
     await sequelize.query("CREATE DATABASE legacy");
     const legacy = createSequelize(container.getConnectionUri().replace(/\/[^/]+$/, "/legacy"));
     try {
       const migrator = createMigrator(legacy);
-      await migrator.up({ to: "007-wallets" });
+      await migrator.up({ to: "008-monthly-summaries" });
       await legacy.query(`
         WITH u AS (INSERT INTO users (email, password_hash) VALUES ('m@x.com', 'h') RETURNING id),
              w AS (INSERT INTO wallets (user_id, name, icon) SELECT id, 'เงินสด', 'payments' FROM u RETURNING id, user_id),
@@ -748,5 +759,21 @@ describe("wallets against real Postgres", () => {
         { replacements: { USER, CASH } },
       ),
     ).rejects.toThrow(/entries_transfer_check/);
+  });
+});
+
+describe("monthly summaries (AI cache)", () => {
+  it("stores one text per month, replaces it on save, and keeps accounts apart", async () => {
+    const mine = createSummaryRepo(sequelize, USER);
+    expect(await mine.get("2026-10")).toBeNull();
+    await mine.save("2026-10", "แรก", NOON);
+    await mine.save("2026-10", "สอง", NOON);
+    expect(await mine.get("2026-10")).toEqual({ month: "2026-10", text: "สอง", createdAt: NOON });
+
+    const other = await createUser(sequelize, `summary-${Date.now()}@example.com`, await hashPassword("y".repeat(12), FAST));
+    expect(await createSummaryRepo(sequelize, other).get("2026-10")).toBeNull();
+    await expect(
+      sequelize.query("INSERT INTO monthly_summaries (user_id, month, text) VALUES (:USER, '2026-13', 'x')", { replacements: { USER } }),
+    ).rejects.toThrow();
   });
 });

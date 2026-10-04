@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { personColor, personName } from "@/client/people";
+import { FORWARD } from "@/client/nav";
 import { owedTitle, describeOwedLine, formatDebtMessage } from "@/client/debtMessage";
 import { useCategories, useOutstanding } from "@/client/queries";
 import type { DashboardDTO, OwedItemDTO } from "@/client/types";
@@ -62,7 +63,7 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
             <ul className="divide-y divide-line">
               {owing.map((b) => (
                 <li key={b.personId}>
-                  <button className="flex w-full items-center gap-3 py-2 text-left" onClick={() => setOpen(b.personId)}>
+                  <button className="press flex w-full items-center gap-3 py-2 text-left" onClick={() => setOpen(b.personId)}>
                     <PersonDot people={data.people} id={b.personId} size={12} />
                     <span className="min-w-0 flex-1 truncate">{personName(data.people, b.personId)}</span>
                     <span className="font-bold text-2xl" style={{ color: personColor(data.people, b.personId) }}><AnimatedNumber value={b.balance} format={baht} /></span>
@@ -88,7 +89,7 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
             ส่งรายการให้ {personName(data.people, open)}
           </button>
         )}
-        <Link href={`/repay?person=${open}`} onClick={() => setOpen(null)} className="btn3d mt-3 w-full">
+        <Link href={`/repay?person=${open}`} transitionTypes={FORWARD} onClick={() => setOpen(null)} className="btn3d mt-3 w-full">
           {personName(data.people, open)} จ่ายคืน
         </Link>
       </Sheet>

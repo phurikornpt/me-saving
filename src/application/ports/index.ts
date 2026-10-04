@@ -3,6 +3,7 @@ import type { Satang } from "@/domain/money";
 import type { LayoutItem } from "@/domain/dashboard-layout";
 import type { Ledger } from "@/domain/ledger";
 import type { LineOwners, Share } from "@/domain/split";
+import type { SpendFilter } from "@/domain/spend-filter";
 import type { EntryKind } from "@/domain/wallet";
 
 export interface Clock {
@@ -157,13 +158,36 @@ export interface ParsedReceiptLine {
   /** false => the guess is weak; the UI highlights the line. */
   confident: boolean;
 }
+/** What the picture turned out to be. `unknown` never leaves the parser: it becomes INVALID_RECEIPT. */
+export type ImageKind = "receipt" | "delivery" | "online_order" | "transfer_slip" | "history";
+/** One row of a bank / e-wallet history page. */
+export interface ParsedTransaction {
+  /** ISO date if the row (or its day header) shows one. */
+  date: string | null;
+  description: string;
+  /** Always positive; `direction` says which way the money went. */
+  amount: Satang;
+  direction: "out" | "in";
+  categoryName: string | null;
+}
+/** A bill-level charge that is not a product (delivery, service fee, tip ...), in satang. */
+export interface ParsedFee {
+  name: string;
+  amount: Satang;
+}
 export interface ParsedReceipt {
+  kind: ImageKind;
+  /** Shop name; for a transfer slip, who the money went to. */
   merchant: string | null;
   /** ISO date (YYYY-MM-DD) if readable. */
   date: string | null;
   /** Final amount actually paid. */
   total: Satang;
   lines: ParsedReceiptLine[];
+  /** Delivery / service fees etc. Discounts are never fees: they are already inside `total`. */
+  fees: ParsedFee[];
+  /** Only for kind "history", where `lines` is empty. */
+  transactions?: ParsedTransaction[];
 }
 export interface ReceiptParser {
   parse(
@@ -179,6 +203,34 @@ export interface ReceiptParser {
   ): Promise<ParsedReceipt>;
 }
 
+/**
+ * What the AI made of one sentence ("ข้าวมันไก่ 60 หารแฟน"). People and wallets are the short keys we
+ * handed out (p1, w1 ...), never ids; the use case maps them back and drops anything it didn't give.
+ */
+export interface ParsedEntryText {
+  kind: "expense" | "income";
+  /** Satang; null when no amount was said. */
+  amount: Satang | null;
+  categoryName: string | null;
+  note: string | null;
+  /** How an expense is split with `personKeys`. Always "none" for income. */
+  split: "none" | "equal" | "theirs";
+  personKeys: string[];
+  walletKey: string | null;
+  /** Fields the model is unsure about. */
+  uncertain: ("amount" | "category" | "person" | "wallet")[];
+}
+export interface TextEntryParser {
+  parse(
+    text: string,
+    context: {
+      categories: { name: string; kind: "expense" | "income" }[];
+      people: { key: string; name: string; note: string }[];
+      wallets: { key: string; name: string }[];
+    },
+  ): Promise<ParsedEntryText>;
+}
+
 export interface DailyTotal {
   day: DayKey;
   /** Our own spending only: other people's shares are excluded. */
@@ -188,8 +240,12 @@ export interface DailyTotal {
 
 /** Read-side aggregates. Implemented with raw SQL for speed (dashboard / calendar). */
 export interface StatsRepo {
-  /** Per Bangkok day in [from, toExclusive), only days that have entries. `walletId`: only that wallet's entries. */
-  dailyTotals(from: DayKey, toExclusive: DayKey, walletId?: string): Promise<DailyTotal[]>;
+  /**
+   * Per Bangkok day in [from, toExclusive), only days that have entries. `walletId`: only that wallet's entries.
+   * `spend` "mine" / "fronted": only expenses with no one else's share / with someone else's share, at their full
+   * amount, and no income.
+   */
+  dailyTotals(from: DayKey, toExclusive: DayKey, walletId?: string, spend?: SpendFilter): Promise<DailyTotal[]>;
   /** (day, kind) of logged days in [from, toExclusive). */
   loggedKinds(from: DayKey, toExclusive: DayKey): Promise<{ day: DayKey; kind: "entry" | "no_spend" }[]>;
   /** Our own spending per category in [from, toExclusive); receipts count by their lines. categoryId null = uncategorised. */
@@ -264,4 +320,37 @@ export interface LoginAttemptRepo {
 export interface CredentialVerifier {
   /** The account id, or null when the email or password is wrong. */
   verify(email: string, password: string): Promise<string | null>;
+}
+
+/** Aggregates of one month for the plain-language summary. Money is satang; no entry, note, merchant or person ever goes in. */
+export interface MonthFacts {
+  /** "YYYY-MM" */
+  month: string;
+  /** Days counted: the whole month, or 1st..today while it is unfinished (then the previous month is cut at the same day too). */
+  daysCovered: number;
+  loggedDays: number;
+  noSpendDays: number;
+  /** Our own spending over `daysCovered`, and the previous month over the same span. */
+  spent: Satang;
+  prevSpent: Satang;
+  /** Change vs the previous month in whole percent (computed in code); null when the previous month had no spending. */
+  changePct: number | null;
+  /** Largest categories first. */
+  categories: { name: string; spent: Satang; prevSpent: Satang; changePct: number | null; sharePct: number }[];
+}
+export interface MonthSummarizer {
+  /** About three short Thai lines phrased from the facts. Throws AI_UNAVAILABLE when the model fails. */
+  summarize(facts: MonthFacts): Promise<string>;
+}
+
+export interface MonthlySummaryRecord {
+  month: string;
+  text: string;
+  createdAt: Date;
+}
+/** Stored summaries, one per month (the cache that keeps the AI to one call per month). */
+export interface SummaryRepo {
+  get(month: string): Promise<MonthlySummaryRecord | null>;
+  /** Replaces the month's summary. */
+  save(month: string, text: string, at: Date): Promise<void>;
 }

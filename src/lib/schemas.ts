@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SPEND_FILTERS } from "@/domain/spend-filter";
 
 export const satang = z.number().int().positive().max(2_000_000_000);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -66,8 +67,11 @@ export const calendarQuery = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   /** Only this wallet's entries. */
   wallet: z.uuid().optional(),
+  /** Only our own expenses ("mine") or only ones we fronted for others ("fronted") at their full amount. */
+  spend: z.enum(SPEND_FILTERS).optional(),
 });
-export const dashboardQuery = z.object({ wallet: z.uuid().optional() });
+export const summaryQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+export const dashboardQuery =z.object({ wallet: z.uuid().optional() });
 
 export const saveReceiptBody = z.object({
   source: z.enum(["receipt", "itemized"]).optional(),
@@ -163,7 +167,31 @@ export const walletPatchBody = z.object({
 export const parsePeopleField = (raw: unknown) =>
   people.parse(typeof raw === "string" && raw.trim() ? raw.split(",").map((s) => s.trim()) : []);
 
+/** One sentence to turn into a draft entry. Length is judged by the use case (INVALID_TEXT); this only bounds the payload. */
+export const parseEntryBody = z.object({ text: z.string().max(2000) });
+
 export const settingsPatchBody = z.object({
   dashboardLayout: z.array(z.object({ id: z.string(), enabled: z.boolean() })).optional(),
   meNote: z.string().trim().max(500).optional(),
+});
+
+// Batch of past entries (bank-history screenshot, several slips). Text is clipped, not rejected, like receipts.
+export const backfillBody = z.object({
+  walletId: z.uuid().nullish(),
+  rows: z
+    .array(
+      z.object({
+        kind: z.enum(["expense", "income"]),
+        total: satang,
+        occurredAt: z.coerce.date(),
+        categoryId: z.uuid().nullish(),
+        note: clip(200).nullish(),
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+
+export const backfillCheckBody = z.object({
+  rows: z.array(z.object({ day, total: satang, kind: z.enum(["expense", "income"]), description: clip(100) })).max(100),
 });

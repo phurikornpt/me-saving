@@ -147,6 +147,13 @@ export class LoginAttempt extends Model<
   declare attemptedAt: CreationOptional<Date>;
 }
 
+export class MonthlySummary extends Model<InferAttributes<MonthlySummary>, InferCreationAttributes<MonthlySummary>> {
+  declare userId: ForeignKey<User["id"]>;
+  declare month: string; // "YYYY-MM"
+  declare text: string;
+  declare createdAt: CreationOptional<Date>;
+}
+
 export interface Models {
   User: typeof User;
   Category: typeof Category;
@@ -161,6 +168,7 @@ export interface Models {
   XpEvent: typeof XpEvent;
   Setting: typeof Setting;
   LoginAttempt: typeof LoginAttempt;
+  MonthlySummary: typeof MonthlySummary;
 }
 
 // The model classes are module-level singletons, so they can only be bound to one Sequelize at a time.
@@ -335,6 +343,16 @@ export function initModels(sequelize: Sequelize): Models {
       opts("LoginAttempt", "login_attempts"),
     );
 
+    MonthlySummary.init(
+      {
+        userId: { ...userId, primaryKey: true },
+        month: { type: DataTypes.TEXT, primaryKey: true },
+        text: { type: DataTypes.TEXT, allowNull: false },
+        createdAt: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
+      },
+      opts("MonthlySummary", "monthly_summaries"),
+    );
+
     Entry.hasMany(EntryShare, { foreignKey: "entryId", as: "shares", onDelete: "CASCADE" });
     EntryShare.belongsTo(Entry, { foreignKey: "entryId" });
     Person.hasMany(EntryShare, { foreignKey: "personId" });
@@ -350,5 +368,5 @@ export function initModels(sequelize: Sequelize): Models {
 
     boundTo = sequelize;
   }
-  return { User, Category, Person, Wallet, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
+  return { User, Category, Person, Wallet, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt, MonthlySummary };
 }

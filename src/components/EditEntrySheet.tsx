@@ -1,5 +1,6 @@
 "use client";
 
+import { FORWARD } from "@/client/nav";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
@@ -101,7 +102,7 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
           />
         </label>
         {locked && (
-          <Link href={`/entries/${entry.id}`} onClick={onClose} className="pill flex items-center justify-between text-sm text-ink">
+          <Link href={`/entries/${entry.id}`} transitionTypes={FORWARD} onClick={onClose} className="pill flex items-center justify-between text-sm text-ink">
             <span className="flex items-center gap-2"><Icon name="list_alt" size={18} /> ดูรายการย่อย / แก้ไข</span>
             <Icon name="chevron_right" size={18} />
           </Link>

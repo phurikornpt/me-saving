@@ -7,9 +7,14 @@ import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { GetAiBudget } from "@/application/use-cases/get-ai-budget";
+import { FindDuplicates } from "@/application/use-cases/find-duplicates";
+import { GetMonthSummary } from "@/application/use-cases/get-month-summary";
+import { ParseEntryText } from "@/application/use-cases/parse-entry-text";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
+import { RecordBackfill } from "@/application/use-cases/record-backfill";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
 import { RecordTransfer } from "@/application/use-cases/record-transfer";
@@ -19,14 +24,17 @@ import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos"
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "@/infrastructure/db/repos/read-repos";
 import { createDbCredentialVerifier } from "@/infrastructure/db/repos/user-repo";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
+import { createGeminiMonthSummarizer } from "@/infrastructure/ai/GeminiMonthSummarizer";
+import { createGeminiTextEntryParser } from "@/infrastructure/ai/GeminiTextEntryParser";
+import { createSummaryRepo } from "@/infrastructure/db/repos/summary-repo";
 import { getSequelize } from "@/infrastructure/db/sequelize";
-import { cleanEnv } from "./env";
+import { aiDailyLimit } from "./env";
 
-/** Optional daily receipt-scan limit per account. Unset = scans are counted but never blocked. */
-function scanLimitPerDay(): number | null {
-  const n = Number(cleanEnv(process.env.RECEIPT_SCAN_DAILY_LIMIT));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
+/** One budget per account, shared by every AI feature: a new AI use case must count under this same key. */
+const aiLimit = (userId: string) => ({
+  key: `ai:${userId}`,
+  perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
+});
 
 /** Composition root: the only place that knows which implementation backs each port. */
 function build() {
@@ -36,6 +44,19 @@ function build() {
   let parser: ReturnType<typeof createGeminiReceiptParser> | undefined;
   const receiptParser = () =>
     (parser ??= createGeminiReceiptParser({
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      model: process.env.GEMINI_MODEL || undefined,
+    }));
+
+  let textParser: ReturnType<typeof createGeminiTextEntryParser> | undefined;
+  const textEntryParser = () =>
+    (textParser ??= createGeminiTextEntryParser({
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      model: process.env.GEMINI_MODEL || undefined,
+    }));
+  let summarizer: ReturnType<typeof createGeminiMonthSummarizer> | undefined;
+  const monthSummarizer = () =>
+    (summarizer ??= createGeminiMonthSummarizer({
       apiKey: process.env.GEMINI_API_KEY ?? "",
       model: process.env.GEMINI_MODEL || undefined,
     }));
@@ -65,10 +86,14 @@ function build() {
       managePeople: new ManagePeople(repos.people),
       saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
       parseReceipt: () =>
-        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, {
-          key: `receipt-parse:${userId}`,
-          perDay: scanLimitPerDay(),
-        }),
+        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, aiLimit(userId)),
+      parseEntryText: () =>
+        new ParseEntryText(textEntryParser(), categories, repos.people, repos.wallets, attempts, systemClock, aiLimit(userId)),
+      getMonthSummary: () =>
+        new GetMonthSummary(stats, categories, createSummaryRepo(sequelize, userId), monthSummarizer(), attempts, systemClock, aiLimit(userId)),
+      getAiBudget: new GetAiBudget(attempts, systemClock, aiLimit(userId)),
+      findDuplicates: new FindDuplicates(repos.entries),
+      recordBackfill: new RecordBackfill(tx, systemClock),
       recordEntry: new RecordEntry(tx, systemClock, presets),
       recordRepayment: new RecordRepayment(tx, systemClock),
       recordTransfer: new RecordTransfer(tx, systemClock),

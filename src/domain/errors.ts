@@ -7,6 +7,7 @@ export type DomainErrorCode =
   | "RATE_LIMITED"
   | "AI_UNAVAILABLE"
   | "INVALID_RECEIPT"
+  | "INVALID_TEXT"
   | "NOT_FOUND"
   | "BALANCE_WOULD_GO_NEGATIVE"
   | "ENTRY_LOCKED"
