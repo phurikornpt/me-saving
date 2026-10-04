@@ -102,9 +102,23 @@ export function SayScreen() {
     onSuccess: ({ drafts }) => setCards(fromDrafts(drafts)),
   });
 
+  // Sending ends the voice for good: abort (not stop) so no late result rewrites the text and the mic closes at once.
+  const endListening = () => {
+    const r = recognizer.current;
+    if (r) {
+      r.onresult = null;
+      r.onerror = null;
+      r.onend = null;
+      r.abort();
+      recognizer.current = null;
+    }
+    setListening(false);
+  };
+
   const submit = () => {
-    recognizer.current?.stop();
-    if (text.trim() && !read.isPending) read.mutate();
+    if (!text.trim() || read.isPending) return;
+    endListening();
+    read.mutate();
   };
 
   const problem = cards ? cardsProblem(cards) : null;

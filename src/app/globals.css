@@ -90,6 +90,7 @@
   --color-surface: var(--surface);
   --color-card: var(--card);
   --color-ink: var(--text);
+  --color-on-ink: var(--on-ink);
   --color-ink-2: var(--text-2);
   --color-ink-3: var(--text-3);
   --color-line: var(--line);
