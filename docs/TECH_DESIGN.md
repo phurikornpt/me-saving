@@ -238,7 +238,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 ### Gemini (free tier) ✅ T5
 - **รับรู้ความเสี่ยงแล้ว:** บน free tier Google อาจนำรูปใบเสร็จและ prompt (รวมถึงชื่อและโน้ตพฤติกรรมของคนที่เลือกตอนสแกนหารกัน) ไปใช้ปรับปรุงผลิตภัณฑ์ → **ห้ามใส่ข้อมูลอ่อนไหวลงในชื่อหรือโน้ตของคน** เช่น ชื่อจริงหรือเรื่องสุขภาพ และให้ขึ้นคำเตือนเล็กๆ ในหน้าตั้งค่าส่วนคน ส่วนสแกนแบบไม่เลือกใครจะไม่ส่งข้อมูลคนไปเลย
 - **ถ้าโดน 429/quota หมด:** ขึ้นข้อความ "AI พักก่อน ลองใหม่อีกที หรือกรอกยอดรวมเองไปก่อน" แล้วเข้า flow จดมือ (ตาม Fallback ใน FR-10)
-- rate limit ในแอปเองไว้ที่ **20 ใบต่อ 24 ชั่วโมง** (`MAX_PARSES_PER_DAY`, นับจากตาราง `login_attempts` key `receipt-parse` และนับครั้งที่ล้มเหลวด้วย) จะได้ไม่ไปชน quota ของ free tier ตอนที่มีบั๊กยิงวนลูป เกินแล้วตอบ 429 `RATE_LIMITED`
+- rate limit ในแอปเองไว้ที่ **20 ครั้งต่อ 24 ชั่วโมง ต่อบัญชี** (ปรับด้วย `AI_DAILY_LIMIT`; นับจากตาราง `login_attempts` key `ai:<userId>` และนับครั้งที่ล้มเหลวด้วย) ใช้ร่วมกันทุกฟีเจอร์ AI จะได้ไม่ไปชน quota ของ free tier ตอนที่มีบั๊กยิงวนลูป เกินแล้วตอบ 429 `RATE_LIMITED` ฟีเจอร์ AI ใหม่ต้องนับใต้ key เดียวกันนี้
 - ถ้าวันหนึ่งอยากเปลี่ยนเป็น paid → แค่เปลี่ยน API key (ผูก billing) ไม่ต้องแก้โค้ด
 - `GEMINI_API_KEY` อยู่ใน env ฝั่ง server เท่านั้น
 - **รุ่นโมเดล:** ค่าเริ่มต้น `gemini-3.5-flash-lite` (ตามคอมเมนต์ในโค้ด เร็วกว่า Flash เต็มราว 2-4 วินาที เทียบกับราว 8 วินาที เพราะหน้าตรวจแก้ได้ง่ายอยู่แล้ว) override ด้วย env `GEMINI_MODEL`
@@ -274,9 +274,9 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | `DATABASE_URL` | ✅ | connection string ของ Postgres (dev: `postgres://mebudget:mebudget@localhost:5432/mebudget`) |
 | `AUTH_SECRET` | ✅ | secret ของ Auth.js (สร้างด้วย `openssl rand -base64 32`) |
 | `AUTH_EMAIL`, `AUTH_PASSWORD_HASH`, `AUTH_EXTRA_USERS` | เฉพาะตอน migrate | อ่านแค่ใน migration `005-users` (ดู data model) แอปไม่อ่านแล้ว |
-| `RECEIPT_SCAN_DAILY_LIMIT` | ไม่จำเป็น | จำกัดสแกนต่อบัญชีต่อ 24 ชม. ไม่ตั้ง = นับใน `login_attempts` (key `receipt-parse:<userId>`) แต่ไม่บล็อก |
+| `AI_DAILY_LIMIT` | ไม่จำเป็น | จำนวนครั้งเรียก AI ต่อบัญชีต่อ 24 ชม. ใช้ร่วมกันทุกฟีเจอร์ ไม่ตั้ง = 20 · `0` = ไม่จำกัด (ยังนับ) นับใน `login_attempts` (key `ai:<userId>`) · ชื่อเก่า `RECEIPT_SCAN_DAILY_LIMIT` ยังอ่านถ้าไม่ได้ตั้งตัวนี้ |
 | `GEMINI_API_KEY` | สำหรับสแกนใบเสร็จ | key ของ Gemini (ฝั่ง server เท่านั้น) |
-| `GEMINI_MODEL` | ไม่จำเป็น | override รุ่นโมเดล (ค่าเริ่มต้น `gemini-3.5-flash-lite`) — ยังไม่อยู่ใน `.env.example` |
+| `GEMINI_MODEL` | ไม่จำเป็น | override รุ่นโมเดล (ค่าเริ่มต้น `gemini-3.5-flash-lite`) |
 
 ### Deploy (Vercel + Neon)
 - push ขึ้น branch **`develop`** → Vercel deploy ให้

@@ -20,13 +20,7 @@ import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRe
 import { createDbCredentialVerifier } from "@/infrastructure/db/repos/user-repo";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
 import { getSequelize } from "@/infrastructure/db/sequelize";
-import { cleanEnv } from "./env";
-
-/** Optional daily receipt-scan limit per account. Unset = scans are counted but never blocked. */
-function scanLimitPerDay(): number | null {
-  const n = Number(cleanEnv(process.env.RECEIPT_SCAN_DAILY_LIMIT));
-  return Number.isSafeInteger(n) && n > 0 ? n : null;
-}
+import { aiDailyLimit } from "./env";
 
 /** Composition root: the only place that knows which implementation backs each port. */
 function build() {
@@ -66,8 +60,9 @@ function build() {
       saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
       parseReceipt: () =>
         new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, {
-          key: `receipt-parse:${userId}`,
-          perDay: scanLimitPerDay(),
+          // One budget per account for every AI feature: new ones must count under this same key.
+          key: `ai:${userId}`,
+          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
         }),
       recordEntry: new RecordEntry(tx, systemClock),
       recordRepayment: new RecordRepayment(tx, systemClock),
