@@ -8,6 +8,9 @@ import { Icon } from "./Icon";
 /**
  * Bottom sheet (Radix Dialog handles focus trap, Esc and scroll lock; motion handles the slide).
  * Drag the grabber or title down to close. Dragging is limited to that header so the body can still scroll.
+ * Text is not selectable (a drag or long press would pop the copy menu instead of scrolling); fields still are.
+ * The body scroller is a layoutScroll root inside a layoutRoot sheet, so rows that animate their layout
+ * (the calendar's day list) measure correctly while scrolled instead of jumping.
  */
 export function Sheet({
   open,
@@ -38,7 +41,8 @@ export function Sheet({
               </Dialog.Overlay>
               <Dialog.Content asChild forceMount aria-describedby={undefined}>
                 <motion.div
-                  className="safe-bottom fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[88dvh] max-w-md flex-col rounded-t-[32px] bg-card px-5 pt-3 shadow-xl outline-none"
+                  className="safe-bottom fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[88dvh] max-w-md select-none flex-col rounded-t-[32px] bg-card px-5 pt-3 shadow-xl outline-none will-change-transform [-webkit-touch-callout:none] [&_input]:select-text [&_textarea]:select-text"
+                  layoutRoot
                   initial={{ y: "100%" }}
                   animate={{ y: 0 }}
                   exit={{ y: "100%", transition: { duration: 0.22, ease: "easeIn" } }}
@@ -65,7 +69,7 @@ export function Sheet({
                       </Dialog.Close>
                     </div>
                   </div>
-                  <div className="overflow-y-auto pb-2">{children}</div>
+                  <motion.div layoutScroll className="touch-pan-y overflow-y-auto overscroll-contain pb-2">{children}</motion.div>
                 </motion.div>
               </Dialog.Content>
             </Fragment>
