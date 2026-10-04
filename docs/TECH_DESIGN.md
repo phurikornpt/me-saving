@@ -158,6 +158,7 @@ logged_days    day (date, PK), kind(entry|no_spend), first_logged_at
 xp_events      id, created_at, reason, amount
 settings       (1 แถว, id=1) dashboard_layout (jsonb: [{id, enabled}] ตามลำดับ)
 login_attempts id, key (`email:..`/`ip:..`/`receipt-parse`), attempted_at
+monthly_summaries user_id, month ('YYYY-MM'), text (1-600 ตัวอักษร), created_at  -- PK (user_id, month) cache สรุป AI รายเดือน
 schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน migrate.ts
 ```
 - ข้อจำกัดในฐานข้อมูล: `total > 0`, `0 ≤ others_share ≤ total`, `others_share = 0` ถ้าไม่ใช่ expense, repayment ต้องมี `person_id` (และอย่างอื่นห้ามมี), บรรทัด/ความจำต้องมีเจ้าของอย่างน้อย 1 (`includes_me OR cardinality(people) > 0`), `kind`/`source` เป็นค่าใน CHECK, `xp_events.amount > 0`
@@ -220,6 +221,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | PATCH | `/api/wallets/[id]` | แก้ชื่อ / icon / ลำดับ / ซ่อน / `balance` (ยอดจริงตอนนี้) / `isDefault: true` (ไม่มี DELETE) |
 | GET / POST | `/api/people` | รายการคน (รวมที่ซ่อน) / เพิ่มคน `{ name, note }` |
 | PATCH | `/api/people/[id]` | แก้ชื่อ / โน้ต / ลำดับ / ซ่อน (ไม่มี DELETE) |
+| GET | `/api/summary?month=YYYY-MM` | สรุปเดือนเป็นภาษาคนด้วย AI → `{ month, text, generatedAt }` (`generatedAt` = null เมื่อเดือนนั้นไม่มีรายจ่าย) cache hit ไม่เรียก AI · เรียกจริงนับโควตา AI · 429 `RATE_LIMITED` / 503 `AI_UNAVAILABLE` |
 | GET | `/api/people/outstanding` | ทุกคนที่ยังติดเรา + ยอดค้างตามรายการ (FIFO ต่อคน) |
 | POST | `/api/no-spend` | วันนี้ไม่ได้ใช้เงิน |
 | POST | `/api/receipt/parse` | รูป (multipart field `image`, `people` ถ้าหารกัน) → ร่างใบเสร็จ JSON ไม่บันทึกอะไร (`maxDuration = 30`) |
@@ -239,6 +241,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 - **รับรู้ความเสี่ยงแล้ว:** บน free tier Google อาจนำรูปใบเสร็จและ prompt (รวมถึงชื่อและโน้ตพฤติกรรมของคนที่เลือกตอนสแกนหารกัน) ไปใช้ปรับปรุงผลิตภัณฑ์ → **ห้ามใส่ข้อมูลอ่อนไหวลงในชื่อหรือโน้ตของคน** เช่น ชื่อจริงหรือเรื่องสุขภาพ และให้ขึ้นคำเตือนเล็กๆ ในหน้าตั้งค่าส่วนคน ส่วนสแกนแบบไม่เลือกใครจะไม่ส่งข้อมูลคนไปเลย
 - **ถ้าโดน 429/quota หมด:** ขึ้นข้อความ "AI พักก่อน ลองใหม่อีกที หรือกรอกยอดรวมเองไปก่อน" แล้วเข้า flow จดมือ (ตาม Fallback ใน FR-10)
 - rate limit ในแอปเองไว้ที่ **20 ครั้งต่อ 24 ชั่วโมง ต่อบัญชี** (ปรับด้วย `AI_DAILY_LIMIT`; นับจากตาราง `login_attempts` key `ai:<userId>` และนับครั้งที่ล้มเหลวด้วย) ใช้ร่วมกันทุกฟีเจอร์ AI จะได้ไม่ไปชน quota ของ free tier ตอนที่มีบั๊กยิงวนลูป เกินแล้วตอบ 429 `RATE_LIMITED` ฟีเจอร์ AI ใหม่ต้องนับใต้ key เดียวกันนี้
+- **สรุปรายเดือน (`GeminiMonthSummarizer.ts`, เฟส 3 ของ AI_ROADMAP):** ส่งเฉพาะข้อความที่เป็นยอดรวมต่อหมวด (เดือนนี้ vs เดือนก่อน + จำนวนวันที่จด) ไม่ส่งรูปหรือรายการดิบ · % คิดในโค้ด · schema `{ summary }` ตัดที่ 400 ตัวอักษร `temperature 0.2` retry 5xx หนึ่งครั้ง ไม่ retry 429 · เก็บใน `monthly_summaries` (เดือนที่จบแล้วไม่สร้างใหม่ เดือนปัจจุบันสร้างใหม่ได้วันละครั้ง) · นับโควตาผ่าน `ai-budget.ts` key `ai:<userId>` เหมือนสแกนใบเสร็จ
 - ถ้าวันหนึ่งอยากเปลี่ยนเป็น paid → แค่เปลี่ยน API key (ผูก billing) ไม่ต้องแก้โค้ด
 - `GEMINI_API_KEY` อยู่ใน env ฝั่ง server เท่านั้น
 - **รุ่นโมเดล:** ค่าเริ่มต้น `gemini-3.5-flash-lite` (ตามคอมเมนต์ในโค้ด เร็วกว่า Flash เต็มราว 2-4 วินาที เทียบกับราว 8 วินาที เพราะหน้าตรวจแก้ได้ง่ายอยู่แล้ว) override ด้วย env `GEMINI_MODEL`

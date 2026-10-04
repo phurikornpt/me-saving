@@ -21,7 +21,13 @@ export const useCategoryBreakdown = (month: string, wallet: string | null = null
     queryFn: () => api.categoryBreakdown(month, wallet),
     placeholderData: (prev) => prev,
   });
-export const useEntriesOn = (day: string | null) =>
+/**
+ * The AI summary of a month. Only fetched once `enabled` (the person asked for it): a fetch can spend AI quota,
+ * so it never retries on its own. The server caches it, so asking again is free.
+ */
+export const useMonthSummary = (month: string, enabled: boolean) =>
+  useQuery({ queryKey: ["summary", month], queryFn: () => api.monthSummary(month), enabled, retry: false, staleTime: 5 * 60_000 });
+export const useEntriesOn =(day: string | null) =>
   useQuery({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day!), enabled: !!day });
 export const useOutstanding = () => useQuery({ queryKey: ["outstanding"], queryFn: api.outstanding });
 export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: api.people, staleTime: 5 * 60_000 });

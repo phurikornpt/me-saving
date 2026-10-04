@@ -1,4 +1,4 @@
-export const WIDGET_IDS = ["streak", "people", "wallets", "presets", "today", "calendar", "summary", "recent"] as const;
+export const WIDGET_IDS = ["streak", "people", "wallets", "presets", "today", "calendar", "summary", "recent", "monthSummary"] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
 export interface LayoutItem {
@@ -16,6 +16,8 @@ export const DEFAULT_LAYOUT: LayoutItem[] = [
   { id: "calendar", enabled: true },
   { id: "summary", enabled: true },
   { id: "recent", enabled: true },
+  // On by default: it only shows a "สรุปให้หน่อย" button and never calls the AI until pressed.
+  { id: "monthSummary", enabled: true },
 ];
 
 /**

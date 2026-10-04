@@ -21,6 +21,7 @@ import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
 import { CategorySummaryWidget } from "./widgets/CategorySummaryWidget";
 import { CalendarWidget } from "./widgets/CalendarWidget";
+import { MonthSummaryWidget } from "./widgets/MonthSummaryWidget";
 import { PeopleWidget } from "./widgets/PeopleWidget";
 import { PresetsWidget } from "./widgets/PresetsWidget";
 import { RecentWidget } from "./widgets/RecentWidget";
@@ -38,6 +39,7 @@ function renderWidget(id: WidgetId, data: DashboardDTO) {
     case "calendar": return <CalendarWidget today={data.today} />;
     case "summary": return <CategorySummaryWidget today={data.today} />;
     case "recent": return <RecentWidget data={data} />;
+    case "monthSummary": return <MonthSummaryWidget today={data.today} />;
   }
 }
 

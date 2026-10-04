@@ -7,6 +7,7 @@ import type {
   EntryDTO,
   EntryDetailDTO,
   LineOwners,
+  MonthSummaryDTO,
   OutstandingDTO,
   PersonDTO,
   PresetDTO,
@@ -52,6 +53,8 @@ export const api = {
     request<CalendarDTO>("GET", `/api/calendar${q({ month, wallet: wallet ?? undefined })}`),
   categoryBreakdown: (month: string, wallet?: string | null) =>
     request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month, wallet: wallet ?? undefined })}`),
+  /** May call the AI (once per month at most, and it counts against the daily AI limit). */
+  monthSummary: (month: string) => request<MonthSummaryDTO>("GET", `/api/summary${q({ month })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
   outstanding: () => request<OutstandingDTO>("GET", "/api/people/outstanding"),
   entryDetail: (id: string) => request<EntryDetailDTO>("GET", `/api/entries/${id}`),
