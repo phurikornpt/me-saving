@@ -12,6 +12,7 @@ import { useDashboard } from "@/client/queries";
 import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { usePullToRefresh } from "@/client/usePullToRefresh";
 import { wake } from "@/client/wake";
 import type { WidgetId } from "@/domain/dashboard-layout";
 import { EditLayoutSheet } from "./EditLayoutSheet";
@@ -19,6 +20,7 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
+import { PullIndicator } from "./PullIndicator";
 import { CategorySummaryWidget } from "./widgets/CategorySummaryWidget";
 import { CalendarWidget } from "./widgets/CalendarWidget";
 import { PeopleWidget } from "./widgets/PeopleWidget";
@@ -72,6 +74,8 @@ export function Dashboard() {
   const afterLog = useAfterLog();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  // refetches whatever is on screen (dashboard, calendar, breakdown, ...); the rest goes stale and loads when next opened
+  const { pull, refreshing } = usePullToRefresh(() => qc.invalidateQueries());
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
@@ -111,6 +115,7 @@ export function Dashboard() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-36">
+      <PullIndicator pull={pull} refreshing={refreshing} />
       <header className="intro-rise safe-top flex items-center justify-between pb-3">
         <h1 className="font-display text-2xl">me-budget</h1>
         <div className="flex gap-1">
