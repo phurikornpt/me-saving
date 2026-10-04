@@ -7,13 +7,14 @@ import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { applyDuplicates, rowsFromDraft, type BackfillRow } from "@/client/backfill";
 import { activePeople, describeShares } from "@/client/people";
-import { useCategories, usePeople, useWallets } from "@/client/queries";
+import { useAiBudget, useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
+import { AiBudgetNote } from "./AiBudgetNote";
 import { BackfillReview } from "./BackfillReview";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
@@ -47,6 +48,7 @@ export function ScanScreen() {
   const { data: categories = [] } = useCategories();
   const { data: people = [] } = usePeople();
   const { data: wallets = [] } = useWallets();
+  const { data: budget } = useAiBudget();
   const [walletId, setWalletId] = useState<string | null>(null);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
@@ -119,12 +121,24 @@ export function ScanScreen() {
       } else toLines(drafts[0]);
     },
     onError: () => setProgress(null),
+    // Each picture read used one AI call, whether it worked or not.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["aiBudget"] }),
   });
 
   const onPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, MAX_PICTURES);
+    const picked = Array.from(e.target.files ?? []).slice(0, MAX_PICTURES);
     e.target.value = "";
-    if (files.length > 0) read.mutate(files);
+    if (picked.length === 0) return;
+    // One picture = one AI call: never start more than the allowance left, and say so.
+    const left = budget?.remaining ?? null;
+    if (left !== null && left < picked.length) {
+      if (left === 0) {
+        fb.toast({ tone: "error", message: "ใช้ AI ครบโควตาแล้ว ลองใหม่ภายหลัง หรือจดเอง" });
+        return;
+      }
+      fb.toast({ message: `AI เหลือ ${left} ครั้ง จะอ่านแค่ ${left} รูปแรก` });
+    }
+    read.mutate(left === null ? picked : picked.slice(0, left));
   };
 
   const phase = rows ? "backfill" : header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
@@ -187,13 +201,14 @@ export function ScanScreen() {
             <br />
             <span className="text-sm text-ink-3">ใบเสร็จ · ออเดอร์เดลิเวอรี่/ช้อปออนไลน์ (แคปหน้าจอ) · สลิปโอน</span>
             <br />
-            <span className="text-sm text-ink-3">ลืมจดหลายวัน? แคปหน้าประวัติในแอปธนาคาร หรือเลือกหลายรูปพร้อมกัน (สูงสุด {MAX_PICTURES})</span>
+            <span className="text-sm text-ink-3">ลืมจดหลายวัน? แคปหน้าประวัติในแอปธนาคาร หรือเลือกหลายรูปพร้อมกัน (สูงสุด {MAX_PICTURES} · รูปละ 1 ครั้งของโควตา AI)</span>
           </p>
           <div className="mt-5 w-full max-w-xs rounded-2xl bg-card p-4">
             <p className="mb-2 text-sm text-ink-3">หารกับใคร? (ไม่เลือก = แค่แกะรายการ ของเราทั้งหมด)</p>
             <PeoplePicker people={people} selected={sharedWith} onChange={setSharedWith} label="หารกับใคร" />
             {onBill.length > 0 && <p className="mt-2 text-xs text-ink-3">AI จะเดาว่าแต่ละรายการเป็นของใคร จากชื่อและโน้ตของแต่ละคน</p>}
           </div>
+          <AiBudgetNote className="mt-3" />
           <div className="mt-5 flex w-full max-w-xs flex-col gap-4">
             <button className="btn3d py-4 text-lg" onClick={() => camera.current?.click()}>
               <Icon name="photo_camera" /> ถ่ายรูป

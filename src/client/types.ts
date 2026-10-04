@@ -82,6 +82,8 @@ export interface OwedItemDTO {
   title: string | null; categoryId: string | null; source: string; lines: OwedLineDTO[];
 }
 export type OutstandingDTO = { personId: string; balance: number; items: OwedItemDTO[] }[];
+/** Shared daily AI allowance. `limit`/`remaining` are null when there is no limit. */
+export interface AiBudgetDTO { used: number; limit: number | null; remaining: number | null }
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
 export interface TransactionDTO { date: string | null; description: string; amount: number; direction: "out" | "in"; categoryName: string | null }

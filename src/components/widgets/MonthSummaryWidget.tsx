@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ApiError } from "@/client/api";
 import { useMonthSummary } from "@/client/queries";
+import { AiBudgetNote } from "../AiBudgetNote";
 import { Icon } from "../Icon";
 import { Skeleton } from "../Loading";
 import { WidgetCard } from "./WidgetCard";
@@ -30,6 +31,7 @@ export function MonthSummaryWidget({ today }: { today: string }) {
             <Icon name="auto_awesome" size={20} />
             สรุปให้หน่อย
           </button>
+          <AiBudgetNote />
         </div>
       )}
       {asked && isFetching && !data && <Skeleton className="h-16 w-full" />}

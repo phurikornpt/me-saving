@@ -12,6 +12,7 @@ import type {
   OutstandingDTO,
   PersonDTO,
   PresetDTO,
+  AiBudgetDTO,
   ReceiptDraftDTO,
   SettingsDTO,
   SplitMode,
@@ -65,6 +66,7 @@ export const api = {
   wallets: () => request<WalletDTO[]>("GET", "/api/wallets"),
 
   /** Which rows look like entries already on file (no AI, no quota). */
+  aiBudget: () => request<AiBudgetDTO>("GET", "/api/ai-budget"),
   checkBackfill: (rows: { day: string; total: number; kind: "expense" | "income"; description: string }[]) =>
     request<{ duplicates: boolean[] }>("POST", "/api/backfill/check", { rows }),
   saveBackfill: (b: {

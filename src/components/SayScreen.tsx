@@ -14,6 +14,7 @@ import type { EntryTextDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { sharesFor, sumShares } from "@/domain/split";
+import { AiBudgetNote } from "./AiBudgetNote";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Spinner } from "./Loading";
@@ -85,6 +86,8 @@ export function SayScreen() {
 
   const read = useMutation({
     mutationFn: () => api.parseEntryText(text.trim()),
+    // Whether it worked or not, it may have used one of today's AI calls.
+    onSettled: () => void qc.invalidateQueries({ queryKey: ["aiBudget"] }),
     onSuccess: (d) => {
       setDraft(d);
       setKind(d.kind);
@@ -190,6 +193,7 @@ export function SayScreen() {
               </button>
             )}
           </div>
+          <AiBudgetNote className="mt-2" />
           <p className="mt-2 min-h-5 text-sm" role="status">
             {listening ? <span className="text-ink-2">กำลังฟัง… พูดได้เลย</span> : micError && <span className="text-expense">{micError}</span>}
           </p>

@@ -7,6 +7,7 @@ import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { GetAiBudget } from "@/application/use-cases/get-ai-budget";
 import { FindDuplicates } from "@/application/use-cases/find-duplicates";
 import { GetMonthSummary } from "@/application/use-cases/get-month-summary";
 import { ParseEntryText } from "@/application/use-cases/parse-entry-text";
@@ -28,6 +29,12 @@ import { createGeminiTextEntryParser } from "@/infrastructure/ai/GeminiTextEntry
 import { createSummaryRepo } from "@/infrastructure/db/repos/summary-repo";
 import { getSequelize } from "@/infrastructure/db/sequelize";
 import { aiDailyLimit } from "./env";
+
+/** One budget per account, shared by every AI feature: a new AI use case must count under this same key. */
+const aiLimit = (userId: string) => ({
+  key: `ai:${userId}`,
+  perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
+});
 
 /** Composition root: the only place that knows which implementation backs each port. */
 function build() {
@@ -79,21 +86,12 @@ function build() {
       managePeople: new ManagePeople(repos.people),
       saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
       parseReceipt: () =>
-        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, {
-          // One budget per account for every AI feature: new ones must count under this same key.
-          key: `ai:${userId}`,
-          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
-        }),
+        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, aiLimit(userId)),
       parseEntryText: () =>
-        new ParseEntryText(textEntryParser(), categories, repos.people, repos.wallets, attempts, systemClock, {
-          key: `ai:${userId}`, // the same budget as a receipt scan
-          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
-        }),
+        new ParseEntryText(textEntryParser(), categories, repos.people, repos.wallets, attempts, systemClock, aiLimit(userId)),
       getMonthSummary: () =>
-        new GetMonthSummary(stats, categories, createSummaryRepo(sequelize, userId), monthSummarizer(), attempts, systemClock, {
-          key: `ai:${userId}`, // the same shared AI budget as parseReceipt
-          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
-        }),
+        new GetMonthSummary(stats, categories, createSummaryRepo(sequelize, userId), monthSummarizer(), attempts, systemClock, aiLimit(userId)),
+      getAiBudget: new GetAiBudget(attempts, systemClock, aiLimit(userId)),
       findDuplicates: new FindDuplicates(repos.entries),
       recordBackfill: new RecordBackfill(tx, systemClock),
       recordEntry: new RecordEntry(tx, systemClock),
