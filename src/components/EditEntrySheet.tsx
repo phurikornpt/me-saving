@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, ApiError } from "@/client/api";
 import { describeShares } from "@/client/people";
-import { useCategories, usePeople } from "@/client/queries";
+import { useCategories, usePeople, useWallets } from "@/client/queries";
 import type { EntryDTO } from "@/client/types";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
@@ -12,11 +12,14 @@ import { Icon } from "./Icon";
 import { Spinner } from "./Loading";
 import { PeoplePicker } from "./People";
 import { Sheet } from "./Sheet";
+import { WalletPicker } from "./Wallets";
 
 const ERRORS: Record<string, string> = {
   BALANCE_WOULD_GO_NEGATIVE: "แก้ไม่ได้: มีคนจ่ายคืนไปแล้วมากกว่ายอดที่จะค้างหลังแก้",
   ENTRY_LOCKED: "ใบเสร็จแก้ยอดไม่ได้ (แก้โน้ตได้)",
   INVALID_SPLIT: "ส่วนของคนอื่นต้องไม่เกินยอดรวม",
+  INVALID_TRANSFER: "โอนเข้ากระเป๋าเดียวกันไม่ได้",
+  UNKNOWN_WALLET: "ไม่พบกระเป๋าที่เลือก",
 };
 
 type Choice = "keep" | "none" | "equal" | "theirs";
@@ -32,6 +35,10 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
   const fb = useFeedback();
   const { data: categories = [] } = useCategories();
   const { data: people = [] } = usePeople();
+  const { data: wallets = [] } = useWallets();
+  const [walletId, setWalletId] = useState(entry.walletId);
+  const [toWalletId, setToWalletId] = useState(entry.toWalletId);
+  const isTransfer = entry.kind === "transfer";
   const [amount, setAmount] = useState(formatBaht(entry.total).replace(/,/g, ""));
   const [note, setNote] = useState(entry.note ?? "");
   const [categoryId, setCategoryId] = useState<string | null>(entry.categoryId);
@@ -47,7 +54,9 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
   const save = useMutation({
     mutationFn: () => {
       const patch: Parameters<typeof api.updateEntry>[1] = { note: note.trim() || null };
-      if (entry.kind !== "repayment") patch.categoryId = categoryId;
+      if (entry.kind !== "repayment" && !isTransfer) patch.categoryId = categoryId;
+      if (walletId !== entry.walletId) patch.walletId = walletId;
+      if (toWalletId && toWalletId !== entry.toWalletId) patch.toWalletId = toWalletId;
       if (!locked) {
         const total = parseBaht(amount);
         if (total !== entry.total) patch.total = total;
@@ -114,7 +123,28 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
           </>
         )}
 
-        {entry.kind !== "repayment" && (
+        {/* the entry's own wallet stays pickable here even if it has been archived since */}
+        <WalletPicker
+          wallets={wallets.map((w) => (w.id === entry.walletId ? { ...w, archived: false } : w))}
+          value={walletId}
+          onChange={setWalletId}
+          exclude={isTransfer ? toWalletId : null}
+          label={isTransfer ? "โอนจาก" : entry.kind === "expense" ? "จ่ายจากกระเป๋า" : "เข้ากระเป๋า"}
+        />
+        {isTransfer && (
+          <>
+            <p className="-mb-1 text-xs text-ink-3">ไปที่</p>
+            <WalletPicker
+              wallets={wallets.map((w) => (w.id === entry.toWalletId ? { ...w, archived: false } : w))}
+              value={toWalletId}
+              onChange={setToWalletId}
+              exclude={walletId}
+              label="โอนไป"
+            />
+          </>
+        )}
+
+        {entry.kind !== "repayment" && !isTransfer && (
           <div className="flex flex-wrap gap-2">
             {cats.map((c) => (
               <button key={c.id} className="pill flex items-center gap-1 text-sm" aria-pressed={categoryId === c.id} onClick={() => setCategoryId(c.id)}>

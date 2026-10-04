@@ -1,6 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { sumShares } from "@/domain/split";
+import { walletDeltas } from "@/domain/wallet";
 import type { DashboardDTO, EntryDTO, Share } from "./types";
+import { defaultWalletId } from "./wallets";
 
 const KEY = ["dashboard"];
 const PENDING = "pending-";
@@ -17,11 +19,15 @@ export interface OptimisticEntry {
   note?: string | null;
   merchant?: string | null;
   source?: EntryDTO["source"];
+  /** Omitted = the default wallet. */
+  walletId?: string | null;
+  /** Transfers only. */
+  toWalletId?: string;
 }
 
 /**
  * Shows the result of a save on the dashboard before the server answers: today's totals, what each
- * person owes and a "pending" row in recent. Returns a rollback. The real refetch replaces all of it.
+ * person owes, wallet balances and a "pending" row in recent. Returns a rollback. The real refetch replaces all of it.
  */
 export async function applyOptimisticEntry(qc: QueryClient, e: OptimisticEntry): Promise<() => void> {
   await qc.cancelQueries({ queryKey: KEY });
@@ -30,11 +36,14 @@ export async function applyOptimisticEntry(qc: QueryClient, e: OptimisticEntry):
   const shares = e.shares ?? [];
   const othersShare = sumShares(shares);
   const now = new Date().toISOString();
+  const wallets = prev.wallets ?? [];
+  const walletId = e.walletId ?? defaultWalletId(wallets) ?? "";
   const row: EntryDTO = {
     id: `${PENDING}${Date.now()}`, kind: e.kind, occurredAt: now, createdAt: now, total: e.total, shares, othersShare,
     personId: e.personId ?? null, categoryId: e.categoryId ?? null, note: e.note ?? null, merchant: e.merchant ?? null,
-    source: e.source ?? "manual",
+    source: e.source ?? "manual", walletId, toWalletId: e.toWalletId ?? null,
   };
+  const moved = new Map(walletDeltas(row));
   const owed = new Map(prev.balances.map((b) => [b.personId, b.balance]));
   for (const s of shares) owed.set(s.personId, (owed.get(s.personId) ?? 0) + s.amount);
   if (e.kind === "repayment" && e.personId) owed.set(e.personId, (owed.get(e.personId) ?? 0) - e.total);
@@ -46,6 +55,7 @@ export async function applyOptimisticEntry(qc: QueryClient, e: OptimisticEntry):
       earned: prev.todayTotals.earned + (e.kind === "income" ? e.total : 0),
     },
     recent: [row, ...prev.recent].slice(0, 5),
+    wallets: prev.wallets?.map((w) => ({ ...w, balance: w.balance + (moved.get(w.id) ?? 0) })),
   });
   return () => qc.setQueryData(KEY, prev);
 }

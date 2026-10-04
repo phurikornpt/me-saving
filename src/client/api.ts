@@ -1,6 +1,6 @@
 import type {
   ActivityDTO, CalendarDTO, CategoryBreakdownDTO, CategoryDTO, DashboardDTO, EntryDTO, LineOwners, OutstandingDTO, PersonDTO,
-  PresetDTO, ReceiptDraftDTO, SettingsDTO, SplitMode,
+  PresetDTO, ReceiptDraftDTO, SettingsDTO, SplitMode, WalletDTO,
 } from "./types";
 
 export const AUTH_EXPIRED_EVENT = "me-budget:auth-expired";
@@ -41,16 +41,27 @@ export const api = {
   people: () => request<PersonDTO[]>("GET", "/api/people"),
   categories: () => request<CategoryDTO[]>("GET", "/api/categories"),
   settings: () => request<SettingsDTO>("GET", "/api/settings"),
+  wallets: () => request<WalletDTO[]>("GET", "/api/wallets"),
 
   recordEntry: (b: {
     kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null;
     occurredAt?: string; split?: SplitMode; source?: "manual" | "preset" | "wheel";
+    /** Omit for the default wallet. */
+    walletId?: string;
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/entries", b),
-  updateEntry: (id: string, b: Partial<{ total: number; categoryId: string | null; note: string | null; occurredAt: string; split: SplitMode }>) =>
+  updateEntry: (
+    id: string,
+    b: Partial<{
+      total: number; categoryId: string | null; note: string | null; occurredAt: string; split: SplitMode;
+      walletId: string; toWalletId: string;
+    }>,
+  ) =>
     request<EntryDTO>("PATCH", `/api/entries/${id}`, b),
   deleteEntry: (id: string) => request<void>("DELETE", `/api/entries/${id}`),
-  repay: (personId: string, amount: number, note?: string) =>
-    request<ActivityDTO & { entry: EntryDTO; balanceAfter: number }>("POST", "/api/repayments", { personId, amount, note }),
+  repay: (personId: string, amount: number, walletId?: string) =>
+    request<ActivityDTO & { entry: EntryDTO; balanceAfter: number }>("POST", "/api/repayments", { personId, amount, walletId }),
+  transfer: (b: { fromWalletId: string; toWalletId: string; amount: number; note?: string | null }) =>
+    request<{ entry: EntryDTO }>("POST", "/api/transfers", b),
   noSpend: () => request<ActivityDTO>("POST", "/api/no-spend"),
 
   /** `people`: who shares the bill. None = just read the lines. */
@@ -62,16 +73,20 @@ export const api = {
   },
   saveReceipt: (b: {
     source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number; people?: string[];
+    walletId?: string;
     lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null; lowConfidence?: boolean }[];
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/receipts", b),
 
-  createPreset: (b: Omit<PresetDTO, "id" | "sort"> & { sort?: number }) => request<PresetDTO>("POST", "/api/presets", b),
+  createPreset: (b: Omit<PresetDTO, "id" | "sort" | "walletId"> & { sort?: number; walletId?: string | null }) => request<PresetDTO>("POST", "/api/presets", b),
   deletePreset: (id: string) => request<void>("DELETE", `/api/presets/${id}`),
   createCategory: (b: { name: string; icon: string; kind: "expense" | "income" }) => request<CategoryDTO>("POST", "/api/categories", b),
   archiveCategory: (id: string) => request<void>("DELETE", `/api/categories/${id}`),
   createPerson: (b: { name: string; note?: string }) => request<PersonDTO>("POST", "/api/people", b),
   updatePerson: (id: string, b: Partial<Pick<PersonDTO, "name" | "note" | "archived" | "sort">>) =>
     request<PersonDTO>("PATCH", `/api/people/${id}`, b),
+  createWallet: (b: { name: string; icon: string; balance?: number }) => request<WalletDTO>("POST", "/api/wallets", b),
+  updateWallet: (id: string, b: Partial<{ name: string; icon: string; sort: number; archived: boolean; balance: number; isDefault: true }>) =>
+    request<WalletDTO>("PATCH", `/api/wallets/${id}`, b),
   updateSettings: (b: Partial<SettingsDTO>) => request<SettingsDTO>("PATCH", "/api/settings", b),
   wake: () => fetch("/api/wake", { cache: "no-store" }).catch(() => undefined),
 };

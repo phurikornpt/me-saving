@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { activePeople, describeShares } from "@/client/people";
-import { useCategories, usePeople } from "@/client/queries";
+import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
@@ -18,6 +18,7 @@ import { Icon } from "./Icon";
 import { ReadingReceipt, Spinner } from "./Loading";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
+import { WalletPicker } from "./Wallets";
 
 type Header = { merchant: string | null; date: string | null };
 
@@ -32,6 +33,8 @@ export function ScanScreen() {
   const afterLog = useAfterLog();
   const { data: categories = [] } = useCategories();
   const { data: people = [] } = usePeople();
+  const { data: wallets = [] } = useWallets();
+  const [walletId, setWalletId] = useState<string | null>(null);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
   const [header, setHeader] = useState<Header | null>(null);
@@ -88,6 +91,7 @@ export function ScanScreen() {
         occurredAt: date && date <= today ? new Date(`${date}T12:00:00+07:00`).toISOString() : undefined,
         total,
         people: onBill.map((p) => p.id),
+        walletId: walletId ?? undefined,
         lines: lines.map((l) => ({
           rawName: l.rawName,
           canonicalName: l.canonicalName,
@@ -203,6 +207,9 @@ export function ScanScreen() {
               </p>
             )}
             <SplitSummary people={people} mine={sum.mine} shares={sum.shares} total={total} />
+            <div className="mb-2">
+              <WalletPicker wallets={wallets} value={walletId} onChange={setWalletId} label="จ่ายจากกระเป๋า" />
+            </div>
             <button className="btn3d w-full py-4 text-lg" disabled={!sum.valid || save.isPending} onClick={() => save.mutate()}>
               {save.isPending ? <><Spinner /> กำลังบันทึก…</> : "บันทึก"}
             </button>

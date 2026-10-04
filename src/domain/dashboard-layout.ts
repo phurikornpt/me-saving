@@ -1,4 +1,4 @@
-export const WIDGET_IDS = ["streak", "people", "presets", "today", "calendar", "summary", "recent"] as const;
+export const WIDGET_IDS = ["streak", "people", "wallets", "presets", "today", "calendar", "summary", "recent"] as const;
 export type WidgetId = (typeof WIDGET_IDS)[number];
 
 export interface LayoutItem {
@@ -6,10 +6,11 @@ export interface LayoutItem {
   enabled: boolean;
 }
 
-/** First-run order from the TOR: Streak & Level, who owes us, presets, calendar, recent. */
+/** First-run order from the TOR: Streak & Level, who owes us, wallets, presets, calendar, recent. */
 export const DEFAULT_LAYOUT: LayoutItem[] = [
   { id: "streak", enabled: true },
   { id: "people", enabled: true },
+  { id: "wallets", enabled: true },
   { id: "presets", enabled: true },
   { id: "today", enabled: false },
   { id: "calendar", enabled: true },

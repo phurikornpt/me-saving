@@ -6,13 +6,16 @@ import { useState, useSyncExternalStore } from "react";
 import { api } from "@/client/api";
 import { ICON_CHOICES } from "@/client/icons";
 import { personColor } from "@/client/people";
-import { useCategories, useDashboard, usePeople } from "@/client/queries";
+import { useCategories, useDashboard, usePeople, useWallets } from "@/client/queries";
+import { walletOf } from "@/client/wallets";
 import { readTheme, setTheme, subscribeTheme, type ThemePref } from "@/client/theme";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { PeoplePicker } from "./People";
 import { PeopleSettings } from "./PeopleSettings";
+import { WalletPicker } from "./Wallets";
+import { WalletSettings } from "./WalletSettings";
 
 const Section = ({ title, id, children }: { title: string; id?: string; children: React.ReactNode }) => (
   <section id={id} className="scroll-mt-4 rounded-[24px] bg-card p-4">
@@ -41,17 +44,20 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
   const dash = useDashboard();
   const { data: categories = [] } = useCategories();
   const { data: people = [] } = usePeople();
+  const { data: wallets = [] } = useWallets();
 
   const [label, setLabel] = useState("");
   const [amount, setAmount] = useState("");
   const [icon, setIcon] = useState<string>(ICON_CHOICES[0]);
   const [mode, setMode] = useState<"" | "equal" | "theirs">("");
   const [presetPerson, setPresetPerson] = useState<string | null>(null);
+  // null = whatever the default wallet is when the preset is tapped
+  const [presetWallet, setPresetWallet] = useState<string | null>(null);
   const addPreset = useMutation({
     mutationFn: () =>
       api.createPreset({
         label: label.trim(), icon, amount: parseBaht(amount), categoryId: null,
-        personId: mode ? presetPerson : null, splitKind: mode || null,
+        personId: mode ? presetPerson : null, splitKind: mode || null, walletId: presetWallet,
       }),
     onSuccess: () => {
       setLabel("");
@@ -106,6 +112,10 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
           <PeopleSettings />
         </Section>
 
+        <Section title="กระเป๋าเงิน" id="wallets">
+          <WalletSettings />
+        </Section>
+
         <Section title="ปุ่มลัด">
           <ul className="mb-3 divide-y divide-line">
             {dash.data?.presets.map((p) => (
@@ -116,6 +126,9 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
                   <span className="text-xs" style={{ color: personColor(people, p.personId) }}>
                     {p.splitKind === "equal" ? "หารกับ" : "ของ"}{people.find((x) => x.id === p.personId)?.name}
                   </span>
+                )}
+                {p.walletId && walletOf(wallets, p.walletId) && (
+                  <Icon name={walletOf(wallets, p.walletId)!.icon} size={16} className="text-ink-3" />
                 )}
                 <button aria-label={`ลบ ${p.label}`} className="rounded-full p-1 text-ink-3" onClick={() => removePreset.mutate(p.id)}>
                   <Icon name="delete" size={20} />
@@ -137,6 +150,7 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
               ))}
             </div>
             {mode && <PeoplePicker people={people} selected={presetPerson ? [presetPerson] : []} onChange={([id]) => setPresetPerson(id ?? null)} single label="กับใคร" />}
+            <WalletPicker wallets={wallets} value={presetWallet} onChange={setPresetWallet} label="จ่ายจากกระเป๋า" />
             <button
               className="btn3d"
               disabled={!label.trim() || !amount || (mode !== "" && !presetPerson) || addPreset.isPending}

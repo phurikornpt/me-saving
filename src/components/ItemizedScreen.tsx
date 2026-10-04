@@ -6,7 +6,7 @@ import { useState } from "react";
 import { api, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import { activePeople, describeShares } from "@/client/people";
-import { usePeople } from "@/client/queries";
+import { usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { useAfterLog } from "@/client/useAfterLog";
 import { bangkokDay } from "@/domain/day";
@@ -15,6 +15,7 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
+import { WalletPicker } from "./Wallets";
 
 /** A group typed by hand ("ค่า 7-11": นม 10, ไก่ 50), each item with its own owners. Saved as one expense. */
 export function ItemizedScreen() {
@@ -26,6 +27,8 @@ export function ItemizedScreen() {
   const [day, setDay] = useState("");
   const [lines, setLines] = useState<DraftLine[]>([]);
   const { data: people = [] } = usePeople();
+  const { data: wallets = [] } = useWallets();
+  const [walletId, setWalletId] = useState<string | null>(null);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
   // Taking someone off the bill takes them off every line too; a line left with nobody becomes ours.
@@ -45,13 +48,14 @@ export function ItemizedScreen() {
   const backdated = !!day && day < today;
 
   const save = useMutation({
-    mutationFn: (v: { name: string; lines: DraftLine[]; total: number; day: string; people: string[] }) =>
+    mutationFn: (v: { name: string; lines: DraftLine[]; total: number; day: string; people: string[]; walletId: string | null }) =>
       api.saveReceipt({
         source: "itemized",
         merchant: v.name.trim() || null,
         occurredAt: v.day && v.day < today ? new Date(`${v.day}T12:00:00+07:00`).toISOString() : undefined,
         total: v.total,
         people: v.people,
+        walletId: v.walletId ?? undefined,
         lines: v.lines.map((l) => ({
           rawName: l.rawName || l.canonicalName,
           canonicalName: l.canonicalName,
@@ -66,7 +70,7 @@ export function ItemizedScreen() {
         ? undefined // a backdated group doesn't belong in today's numbers
         : applyOptimisticEntry(qc, {
             kind: "expense", total: v.total, source: "itemized", merchant: v.name.trim() || "หลายรายการ",
-            shares: summarize(v.lines, v.total).shares,
+            shares: summarize(v.lines, v.total).shares, walletId: v.walletId,
           }),
     onSuccess: (out) => {
       afterLog(out);
@@ -122,11 +126,14 @@ export function ItemizedScreen() {
 
       <div className="safe-bottom sticky bottom-0 border-t border-line bg-bg px-5 pt-3">
         <SplitSummary people={people} mine={sum.mine} shares={sum.shares} total={total} />
+        <div className="mb-2">
+          <WalletPicker wallets={wallets} value={walletId} onChange={setWalletId} label="จ่ายจากกระเป๋า" />
+        </div>
         <button
           className="btn3d w-full py-4 text-lg"
           disabled={!sum.valid}
           onClick={() => {
-            save.mutate({ name, lines, total, day, people: onBill.map((p) => p.id) });
+            save.mutate({ name, lines, total, day, people: onBill.map((p) => p.id), walletId });
             router.replace("/");
           }}
         >

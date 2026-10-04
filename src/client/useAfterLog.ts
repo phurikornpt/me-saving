@@ -15,6 +15,7 @@ export function useAfterLog() {
     void qc.invalidateQueries({ queryKey: ["calendar"] });
     void qc.invalidateQueries({ queryKey: ["breakdown"] });
     void qc.invalidateQueries({ queryKey: ["outstanding"] });
+    void qc.invalidateQueries({ queryKey: ["wallets"] });
     fb.xp(a.xpGained);
     const firstOfDay = a.xpGained >= 10; // only the first log of a day moves the streak
     if (a.leveledUp) fb.celebrate({ title: "เลเวลอัป!", subtitle: "เก่งมาก จดต่อเนื่องแบบนี้เลย", icon: "military_tech" });
