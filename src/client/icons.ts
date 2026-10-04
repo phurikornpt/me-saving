@@ -3,7 +3,7 @@
 // user come from this list too (see ICON_CHOICES).
 export const ICONS = [
   "account_balance", "account_balance_wallet", "add", "add_photo_alternate", "arrow_back", "arrow_downward", "arrow_upward",
-  "backspace", "bedtime", "bolt", "calendar_month", "check", "chevron_left", "chevron_right", "close",
+  "auto_awesome", "backspace", "bedtime", "bolt", "calendar_month", "check", "chevron_left", "chevron_right", "close",
   "coffee", "credit_card", "currency_exchange", "delete", "drag_indicator", "edit", "edit_note", "expand_less", "expand_more", "favorite", "flight", "group",
   "health_and_safety", "history", "home", "ios_share", "list_alt", "local_fire_department", "local_grocery_store", "local_taxi",
   "logout", "mic", "military_tech", "more_horiz", "movie", "payments", "person", "person_add", "pets", "photo_camera", "receipt",

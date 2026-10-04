@@ -15,6 +15,7 @@ import { createSequelize } from "../sequelize";
 import { createRepos, createTransactionRunner } from "./index";
 import { createLoginAttemptRepo } from "./login-attempt-repo";
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "./read-repos";
+import { createSummaryRepo } from "./summary-repo";
 import { createDbCredentialVerifier, createUser } from "./user-repo";
 import { hashPassword } from "../../security/password";
 
@@ -697,5 +698,21 @@ describe("wallets against real Postgres", () => {
         { replacements: { USER, CASH } },
       ),
     ).rejects.toThrow(/entries_transfer_check/);
+  });
+});
+
+describe("monthly summaries (AI cache)", () => {
+  it("stores one text per month, replaces it on save, and keeps accounts apart", async () => {
+    const mine = createSummaryRepo(sequelize, USER);
+    expect(await mine.get("2026-10")).toBeNull();
+    await mine.save("2026-10", "แรก", NOON);
+    await mine.save("2026-10", "สอง", NOON);
+    expect(await mine.get("2026-10")).toEqual({ month: "2026-10", text: "สอง", createdAt: NOON });
+
+    const other = await createUser(sequelize, `summary-${Date.now()}@example.com`, await hashPassword("y".repeat(12), FAST));
+    expect(await createSummaryRepo(sequelize, other).get("2026-10")).toBeNull();
+    await expect(
+      sequelize.query("INSERT INTO monthly_summaries (user_id, month, text) VALUES (:USER, '2026-13', 'x')", { replacements: { USER } }),
+    ).rejects.toThrow();
   });
 });

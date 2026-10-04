@@ -7,6 +7,7 @@ import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { GetMonthSummary } from "@/application/use-cases/get-month-summary";
 import { ParseEntryText } from "@/application/use-cases/parse-entry-text";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
@@ -20,7 +21,9 @@ import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos"
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "@/infrastructure/db/repos/read-repos";
 import { createDbCredentialVerifier } from "@/infrastructure/db/repos/user-repo";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
+import { createGeminiMonthSummarizer } from "@/infrastructure/ai/GeminiMonthSummarizer";
 import { createGeminiTextEntryParser } from "@/infrastructure/ai/GeminiTextEntryParser";
+import { createSummaryRepo } from "@/infrastructure/db/repos/summary-repo";
 import { getSequelize } from "@/infrastructure/db/sequelize";
 import { aiDailyLimit } from "./env";
 
@@ -39,6 +42,12 @@ function build() {
   let textParser: ReturnType<typeof createGeminiTextEntryParser> | undefined;
   const textEntryParser = () =>
     (textParser ??= createGeminiTextEntryParser({
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      model: process.env.GEMINI_MODEL || undefined,
+    }));
+  let summarizer: ReturnType<typeof createGeminiMonthSummarizer> | undefined;
+  const monthSummarizer = () =>
+    (summarizer ??= createGeminiMonthSummarizer({
       apiKey: process.env.GEMINI_API_KEY ?? "",
       model: process.env.GEMINI_MODEL || undefined,
     }));
@@ -76,6 +85,11 @@ function build() {
       parseEntryText: () =>
         new ParseEntryText(textEntryParser(), categories, repos.people, repos.wallets, attempts, systemClock, {
           key: `ai:${userId}`, // the same budget as a receipt scan
+          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
+        }),
+      getMonthSummary: () =>
+        new GetMonthSummary(stats, categories, createSummaryRepo(sequelize, userId), monthSummarizer(), attempts, systemClock, {
+          key: `ai:${userId}`, // the same shared AI budget as parseReceipt
           perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
         }),
       recordEntry: new RecordEntry(tx, systemClock),

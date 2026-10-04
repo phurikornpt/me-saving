@@ -66,7 +66,8 @@ export const calendarQuery = z.object({
   /** Only this wallet's entries. */
   wallet: z.uuid().optional(),
 });
-export const dashboardQuery = z.object({ wallet: z.uuid().optional() });
+export const summaryQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
+export const dashboardQuery =z.object({ wallet: z.uuid().optional() });
 
 export const saveReceiptBody = z.object({
   source: z.enum(["receipt", "itemized"]).optional(),

@@ -293,3 +293,36 @@ export interface CredentialVerifier {
   /** The account id, or null when the email or password is wrong. */
   verify(email: string, password: string): Promise<string | null>;
 }
+
+/** Aggregates of one month for the plain-language summary. Money is satang; no entry, note, merchant or person ever goes in. */
+export interface MonthFacts {
+  /** "YYYY-MM" */
+  month: string;
+  /** Days counted: the whole month, or 1st..today while it is unfinished (then the previous month is cut at the same day too). */
+  daysCovered: number;
+  loggedDays: number;
+  noSpendDays: number;
+  /** Our own spending over `daysCovered`, and the previous month over the same span. */
+  spent: Satang;
+  prevSpent: Satang;
+  /** Change vs the previous month in whole percent (computed in code); null when the previous month had no spending. */
+  changePct: number | null;
+  /** Largest categories first. */
+  categories: { name: string; spent: Satang; prevSpent: Satang; changePct: number | null; sharePct: number }[];
+}
+export interface MonthSummarizer {
+  /** About three short Thai lines phrased from the facts. Throws AI_UNAVAILABLE when the model fails. */
+  summarize(facts: MonthFacts): Promise<string>;
+}
+
+export interface MonthlySummaryRecord {
+  month: string;
+  text: string;
+  createdAt: Date;
+}
+/** Stored summaries, one per month (the cache that keeps the AI to one call per month). */
+export interface SummaryRepo {
+  get(month: string): Promise<MonthlySummaryRecord | null>;
+  /** Replaces the month's summary. */
+  save(month: string, text: string, at: Date): Promise<void>;
+}
