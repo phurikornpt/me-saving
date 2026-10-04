@@ -91,6 +91,12 @@ describe("GetCalendarMonth", () => {
     expect(out.totals).toEqual({ spent: 37000, earned: 1500000, net: 1463000 });
     expect(out.maxSpent).toBe(32000);
   });
+  it("passes the wallet and spend filter through to the totals", async () => {
+    let seen: unknown[] = [];
+    const repo: StatsRepo = { ...stats(), dailyTotals: async (...args) => ((seen = args), []) };
+    await new GetCalendarMonth(repo).execute("2026-10", "w1", "fronted");
+    expect(seen).toEqual(["2026-10-01", "2026-11-01", "w1", "fronted"]);
+  });
   it("handles February and rejects bad months", async () => {
     expect((await new GetCalendarMonth(stats()).execute("2028-02")).days).toHaveLength(29);
     await expect(new GetCalendarMonth(stats()).execute("2026-13")).rejects.toThrow();
