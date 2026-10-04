@@ -155,13 +155,24 @@ export interface ParsedReceiptLine {
   /** false => the guess is weak; the UI highlights the line. */
   confident: boolean;
 }
+/** What the picture turned out to be. `unknown` never leaves the parser: it becomes INVALID_RECEIPT. */
+export type ImageKind = "receipt" | "delivery" | "online_order" | "transfer_slip";
+/** A bill-level charge that is not a product (delivery, service fee, tip ...), in satang. */
+export interface ParsedFee {
+  name: string;
+  amount: Satang;
+}
 export interface ParsedReceipt {
+  kind: ImageKind;
+  /** Shop name; for a transfer slip, who the money went to. */
   merchant: string | null;
   /** ISO date (YYYY-MM-DD) if readable. */
   date: string | null;
   /** Final amount actually paid. */
   total: Satang;
   lines: ParsedReceiptLine[];
+  /** Delivery / service fees etc. Discounts are never fees: they are already inside `total`. */
+  fees: ParsedFee[];
 }
 export interface ReceiptParser {
   parse(

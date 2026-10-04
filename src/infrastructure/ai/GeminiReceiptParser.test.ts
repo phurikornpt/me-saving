@@ -25,7 +25,7 @@ describe("transient Gemini failures", () => {
             generateContent: async () => {
               calls.push(1);
               if (calls.length === 1) throw new real.ApiError({ message: "overloaded", status: 503 });
-              return { text: JSON.stringify({ merchant: null, date: "2569-10-03", total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
+              return { text: JSON.stringify({ kind: "receipt", fees: [], merchant: null, date: "2569-10-03", total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
             },
           };
         },
@@ -79,7 +79,7 @@ describe("bills shared with people", () => {
               requests.push(req);
               return {
                 text: JSON.stringify({
-                  merchant: "7-Eleven", date: null, total_paid: 50,
+                  kind: "receipt", fees: [], merchant: "7-Eleven", date: null, total_paid: 50,
                   lines: [
                     { raw_name: "นมเปรี้ยว", canonical_name: "นมเปรี้ยว", quantity: 1, line_total: 15, category: null, owners: ["p1"], confident: true },
                     { raw_name: "แชมพู", canonical_name: "แชมพู", quantity: 1, line_total: 35, category: null, owners: ["me", "p1", "p2"], confident: false },
@@ -127,7 +127,7 @@ describe("bills shared with people", () => {
           models = {
             generateContent: async (req: { config: { responseJsonSchema: unknown } }) => {
               schema = JSON.stringify(req.config.responseJsonSchema);
-              return { text: JSON.stringify({ merchant: null, date: null, total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
+              return { text: JSON.stringify({ kind: "receipt", fees: [], merchant: null, date: null, total_paid: 35, lines: [{ raw_name: "ข้าวปั้น", canonical_name: "ข้าวปั้น", quantity: 1, line_total: 35, category: null }] }) };
             },
           };
         },
@@ -141,5 +141,49 @@ describe("bills shared with people", () => {
     expect(schema).not.toContain("owners");
     expect(out.lines[0]).toMatchObject({ owners: { me: true, people: [] }, confident: true });
     vi.doUnmock("@google/genai");
+  });
+});
+
+describe("kinds and fees", () => {
+  async function parseWith(reply: unknown) {
+    vi.resetModules();
+    vi.doMock("@google/genai", async (orig) => {
+      const real = await orig<typeof import("@google/genai")>();
+      return { ...real, GoogleGenAI: class { models = { generateContent: async () => ({ text: JSON.stringify(reply) }) }; } };
+    });
+    const { createGeminiReceiptParser } = await import("./GeminiReceiptParser");
+    try {
+      return await createGeminiReceiptParser({ apiKey: "k", retryDelayMs: 0 }).parse(
+        { data: new Uint8Array([1]), mimeType: "image/jpeg" },
+        { people: [], knownNames: [], categoryNames: [] },
+      );
+    } finally {
+      vi.doUnmock("@google/genai");
+    }
+  }
+  const food = { raw_name: "ข้าวมันไก่", canonical_name: "ข้าวมันไก่", quantity: 1, line_total: 60, category: null };
+
+  it("reads a delivery order: fees in satang, discount-like and zero fees dropped", async () => {
+    const out = await parseWith({
+      kind: "delivery", merchant: "ร้าน A", date: null, total_paid: 80, lines: [food],
+      fees: [{ name: "ค่าส่ง", amount: 25 }, { name: "ส่วนลดค่าส่ง", amount: 10 }, { name: "ค่าบริการ", amount: 0 }],
+    });
+    expect(out.kind).toBe("delivery");
+    expect(out.fees).toEqual([{ name: "ค่าส่ง", amount: 2500 }]);
+  });
+
+  it("reads a transfer slip as one line", async () => {
+    const out = await parseWith({
+      kind: "transfer_slip", merchant: "นาย ก", date: null, total_paid: 60, fees: [],
+      lines: [{ ...food, raw_name: "โอนเงินให้ นาย ก", canonical_name: "โอนเงิน" }],
+    });
+    expect(out).toMatchObject({ kind: "transfer_slip", total: 6000, merchant: "นาย ก" });
+    expect(out.lines).toHaveLength(1);
+  });
+
+  it("a picture that is not a purchase becomes INVALID_RECEIPT", async () => {
+    await expect(parseWith({ kind: "unknown", merchant: null, date: null, total_paid: 0, lines: [], fees: [] })).rejects.toMatchObject({
+      code: "INVALID_RECEIPT",
+    });
   });
 });

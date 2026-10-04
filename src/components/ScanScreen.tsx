@@ -20,7 +20,14 @@ import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
 
-type Header = { merchant: string | null; date: string | null };
+type Header = { kind: ReceiptDraftDTO["kind"]; merchant: string | null; date: string | null };
+
+const KIND_LABEL: Record<Header["kind"], string> = {
+  receipt: "ใบเสร็จ",
+  delivery: "ออเดอร์เดลิเวอรี่",
+  online_order: "ออเดอร์ออนไลน์",
+  transfer_slip: "สลิปโอน",
+};
 
 /**
  * One scan button, two jobs: with nobody picked it just reads the lines off the receipt (all ours);
@@ -63,7 +70,7 @@ export function ScanScreen() {
     const paid = draft.total > 0 ? draft.total : draft.lines.reduce((sum, l) => sum + l.price, 0);
     setTotal(paid);
     setTotalText(formatBaht(paid).replace(/,/g, ""));
-    setHeader({ merchant: draft.merchant, date: draft.date });
+    setHeader({ kind: draft.kind, merchant: draft.merchant, date: draft.date });
   };
 
   const read = useMutation({
@@ -122,7 +129,7 @@ export function ScanScreen() {
         <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
           <Icon name="arrow_back" />
         </button>
-        <h1 className="font-display text-xl">{onBill.length ? "สแกนหารกัน" : "สแกนใบเสร็จ"}</h1>
+        <h1 className="font-display text-xl">{onBill.length ? "สแกนหารกัน" : "สแกน"}</h1>
       </header>
 
       {/* Two inputs: `capture` forces the camera on phones, so the album needs its own */}
@@ -132,7 +139,11 @@ export function ScanScreen() {
       {phase === "idle" && (
         <Center>
           <Icon name="receipt_long" size={56} className="text-ink-3" />
-          <p className="mt-3 text-ink-2">ถ่ายรูปหรือเลือกรูปใบเสร็จ</p>
+          <p className="mt-3 text-center text-ink-2">
+            ถ่ายรูปหรือเลือกรูป
+            <br />
+            <span className="text-sm text-ink-3">ใบเสร็จ · ออเดอร์เดลิเวอรี่/ช้อปออนไลน์ (แคปหน้าจอ) · สลิปโอน</span>
+          </p>
           <div className="mt-5 w-full max-w-xs rounded-2xl bg-card p-4">
             <p className="mb-2 text-sm text-ink-3">หารกับใคร? (ไม่เลือก = แค่แกะรายการ ของเราทั้งหมด)</p>
             <PeoplePicker people={people} selected={sharedWith} onChange={setSharedWith} label="หารกับใคร" />
@@ -164,7 +175,7 @@ export function ScanScreen() {
               : failCode === "RATE_LIMITED"
                 ? "สแกนครบโควตาของวันนี้แล้ว กรอกยอดรวมเองไปก่อนนะ"
                 : failCode === "INVALID_RECEIPT"
-                  ? "อ่านรายการจากรูปนี้ไม่ได้ ลองถ่ายใหม่ให้ชัดขึ้น"
+                  ? "อ่านรายการจากรูปนี้ไม่ได้ ลองถ่ายใหม่ให้ชัดขึ้น หรือรูปนี้อาจไม่ใช่ใบเสร็จ ออเดอร์ หรือสลิป"
                   : "สแกนไม่สำเร็จ ลองอีกครั้ง"}
           </p>
           <div className="mt-4 flex gap-3">
@@ -177,8 +188,11 @@ export function ScanScreen() {
       {phase === "review" && (
         <>
           <div className="px-5 pb-2">
-            <p className="truncate font-medium">{header?.merchant ?? "ใบเสร็จ"}</p>
-            <p className="text-xs text-ink-3">{onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · " : ""}แตะชื่อเพื่อแก้</p>
+            <p className="truncate font-medium">{header?.merchant ?? KIND_LABEL[header?.kind ?? "receipt"]}</p>
+            <p className="text-xs text-ink-3">
+              {header ? `${KIND_LABEL[header.kind]} · ` : ""}
+              {onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · ค่าส่ง/ค่าบริการหารเท่ากันทุกคน · " : ""}แตะชื่อเพื่อแก้
+            </p>
           </div>
 
           <ItemLines lines={lines} onChange={setLines} onBill={onBill} addLabel="เพิ่มรายการที่ AI อ่านตก" />

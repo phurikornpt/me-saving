@@ -40,6 +40,8 @@ function budget(): LoginAttemptRepo & { n: number } {
 }
 
 const RECEIPT: ParsedReceipt = {
+  kind: "receipt",
+  fees: [],
   merchant: "7-Eleven",
   date: "2026-10-03",
   total: 16400,
@@ -131,6 +133,42 @@ describe("ParseReceipt", () => {
     const { uc, b } = setupParse();
     await expect(uc.execute(img, ["ghost"])).rejects.toMatchObject({ code: "UNKNOWN_PERSON" });
     expect(b.n).toBe(0);
+  });
+
+  it("delivery: fees become lines everyone on the bill pays equally, in the priciest line's category", async () => {
+    const delivery: ParsedReceipt = {
+      kind: "delivery",
+      merchant: "ร้านข้าวมันไก่",
+      date: null,
+      total: 25000,
+      lines: [
+        { rawName: "ข้าวมันไก่", canonicalName: "ข้าวมันไก่", qty: 1, price: 12000, categoryName: "อาหาร", owners: ME, confident: true },
+        { rawName: "ชาเย็น", canonicalName: "ชาเย็น", qty: 1, price: 3000, categoryName: null, owners: own(FAN), confident: true },
+      ],
+      fees: [
+        { name: "ค่าส่ง", amount: 6000 },
+        { name: "ค่าบริการ", amount: 4000 },
+      ],
+    };
+    const { f, uc } = setupParse(delivery);
+    f.memory.set("ค่าส่ง", own(FAN)); // a remembered owner must not steer a fee
+    const draft = await uc.execute(img, [FAN]);
+    expect(draft.kind).toBe("delivery");
+    const fee = draft.lines.find((l) => l.canonicalName === "ค่าส่ง");
+    expect(fee).toMatchObject({ price: 6000, owners: shared(FAN), ownerSource: "default", lowConfidence: false, categoryName: "อาหาร" });
+    expect(draft.lines).toHaveLength(4);
+    expect(draft.sumMismatch).toBe(false); // 12000 + 3000 + 6000 + 4000 = 25000
+  });
+
+  it("delivery with nobody picked: fees are just ours", async () => {
+    const { uc } = setupParse({ ...RECEIPT, kind: "delivery", total: 16400 + 900, fees: [{ name: "ค่าส่ง", amount: 900 }] });
+    const fee = (await uc.execute(img)).lines.find((l) => l.canonicalName === "ค่าส่ง");
+    expect(fee?.owners).toEqual(ME);
+  });
+
+  it("a discounted order shows as a mismatch so the user sees it gets scaled", async () => {
+    const { uc } = setupParse({ ...RECEIPT, kind: "delivery", total: 16400 + 900 - 2000, fees: [{ name: "ค่าส่ง", amount: 900 }] });
+    expect((await uc.execute(img)).sumMismatch).toBe(true);
   });
 
   it("flags when printed lines don't add up to the paid total", async () => {
