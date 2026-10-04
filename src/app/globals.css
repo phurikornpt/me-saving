@@ -191,6 +191,37 @@ body {
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @keyframes top-progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
 @keyframes scan-line { 0%, 100% { top: 6%; } 50% { top: 90%; } }
+/* Intro on the first open of "/" per session; <html data-intro="play"> is set by INTRO_INIT_SCRIPT.
+   Total ~900ms: icon 0-500ms, overlay fades 500-800ms, header/[+] rise in behind it. */
+.app-intro { display: none; }
+html[data-intro="play"] .app-intro {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  animation: intro-out 300ms ease-in 500ms forwards;
+}
+.app-intro-icon {
+  width: 112px;
+  height: 112px;
+  border-radius: 26px;
+  background: url("/icons/icon-512.png") center / cover;
+  box-shadow: 0 6px 0 var(--line);
+  animation: intro-mark 500ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+html[data-intro="play"] .intro-rise { animation: rise-in 350ms ease-out 450ms both; }
+/* `scale`, not `transform`: the [+] button already uses transform (btn3d) and translate (centering) */
+html[data-intro="play"] .intro-pop { animation: intro-pop 450ms cubic-bezier(0.34, 1.56, 0.64, 1) 650ms both; }
+@keyframes intro-mark { from { opacity: 0; scale: 0.85; } to { opacity: 1; scale: 1; } }
+@keyframes intro-out { to { opacity: 0; visibility: hidden; } }
+@keyframes rise-in { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
+@keyframes intro-pop { from { opacity: 0; scale: 0.4; } to { opacity: 1; scale: 1; } }
+
 @media (prefers-reduced-motion: reduce) {
   .skeleton, .top-progress-bar, .scan-line { animation: none; }
+  html[data-intro="play"] .app-intro { display: none; }
+  html[data-intro="play"] .intro-rise, html[data-intro="play"] .intro-pop { animation: none; }
 }
