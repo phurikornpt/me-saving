@@ -1,5 +1,6 @@
 "use client";
 
+import { FORWARD } from "@/client/nav";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -169,7 +170,7 @@ export function ScanScreen() {
           </p>
           <div className="mt-4 flex gap-3">
             <button className="btn3d key" onClick={() => album.current?.click()}>เลือกรูปใหม่</button>
-            <Link href="/itemized" className="btn3d">กรอกเอง</Link>
+            <Link href="/itemized" transitionTypes={FORWARD} className="btn3d">กรอกเอง</Link>
           </div>
         </Center>
       )}

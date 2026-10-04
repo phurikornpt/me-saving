@@ -9,6 +9,7 @@ import { api } from "@/client/api";
 import { introPlaying } from "@/client/intro";
 import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
+import { FORWARD } from "@/client/nav";
 import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -72,6 +73,12 @@ export function Dashboard() {
   const afterLog = useAfterLog();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  // set once a pill is tapped, so the first load does not fade in; later switches do
+  const [switched, setSwitched] = useState(false);
+  const pickWallet = (id: string | null) => {
+    setSwitched(true);
+    setWalletFilter(id);
+  };
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
@@ -100,13 +107,13 @@ export function Dashboard() {
   ];
 
   const pick = (id: string) => {
-    if (id === "expense" || id === "income" || id === "front") router.push(`/new?mode=${id}`);
-    else if (id === "itemized") router.push("/itemized");
-    else if (id === "repay") router.push("/repay");
+    if (id === "expense" || id === "income" || id === "front") router.push(`/new?mode=${id}`, { transitionTypes: FORWARD });
+    else if (id === "itemized") router.push("/itemized", { transitionTypes: FORWARD });
+    else if (id === "repay") router.push("/repay", { transitionTypes: FORWARD });
     else if (id === "nospend") noSpend.mutate();
     // Mobile browsers only open a file picker from a real tap, which the wheel's pointer-up is not,
     // so the picker lives on /scan behind an ordinary button.
-    else if (id === "scan") router.push("/scan");
+    else if (id === "scan") router.push("/scan", { transitionTypes: FORWARD });
   };
 
   return (
@@ -117,7 +124,7 @@ export function Dashboard() {
           <button aria-label="แก้ dashboard" className="rounded-full p-2" onClick={() => setEditing(true)}>
             <Icon name="tune" />
           </button>
-          <Link aria-label="ตั้งค่า" href="/settings" className="rounded-full p-2">
+          <Link aria-label="ตั้งค่า" href="/settings" transitionTypes={FORWARD} className="rounded-full p-2">
             <Icon name="settings" />
           </Link>
         </div>
@@ -140,12 +147,12 @@ export function Dashboard() {
 
       {activeWallets.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4" role="group" aria-label="ดูตามกระเป๋า">
-          <button className="pill pill-slide relative shrink-0 text-sm" aria-pressed={wallet === null} onClick={() => setWalletFilter(null)}>
+          <button className="pill pill-slide relative shrink-0 text-sm" aria-pressed={wallet === null} onClick={() => pickWallet(null)}>
             {wallet === null && <PillBg />}
             <span className="relative">ทุกกระเป๋า</span>
           </button>
           {activeWallets.map((w) => (
-            <button key={w.id} className="pill pill-slide relative flex shrink-0 items-center gap-1 text-sm" aria-pressed={wallet === w.id} onClick={() => setWalletFilter(w.id)}>
+            <button key={w.id} className="pill pill-slide relative flex shrink-0 items-center gap-1 text-sm" aria-pressed={wallet === w.id} onClick={() => pickWallet(w.id)}>
               {wallet === w.id && <PillBg />}
               <span className="relative flex items-center gap-1"><Icon name={w.icon} size={16} /> {w.name}</span>
             </button>
@@ -153,7 +160,14 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className={`flex flex-col gap-3 transition-opacity ${wallet && filtered.isPlaceholderData ? "opacity-60" : ""}`}>
+      {/* New key per wallet: the old numbers are replaced, and the new ones ease in (dimmed while they load) */}
+      <motion.div
+        key={wallet ?? "all"}
+        className="flex flex-col gap-3"
+        initial={switched ? { opacity: 0, y: -6 } : false}
+        animate={{ opacity: wallet && filtered.isPlaceholderData ? 0.5 : 1, y: 0 }}
+        transition={{ duration: 0.24, ease: "easeOut" }}
+      >
         {data?.layout.filter((w) => w.enabled).map((w, i) => (
           // Rise in one by one only while the intro plays; `initial` is read at mount, so refetches never replay it.
           <motion.div
@@ -165,12 +179,12 @@ export function Dashboard() {
             {renderWidget(w.id, data)}
           </motion.div>
         ))}
-      </div>
+      </motion.div>
 
       <ModeWheel
         slots={slots}
         onPress={wake}
-        onTap={() => router.push("/new?mode=expense")}
+        onTap={() => router.push("/new?mode=expense", { transitionTypes: FORWARD })}
         onPick={pick}
       />
 

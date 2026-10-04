@@ -2,11 +2,14 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { FORWARD } from "@/client/nav";
 import { Icon } from "../Icon";
+import { PageTransition } from "../PageTransition";
 
 /** A settings sub-page: back arrow to the settings list, a title, and one optional action (usually "+ เพิ่ม"). */
 export function SettingsPage({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
+    <PageTransition>
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-16">
       <header className="safe-top flex items-center gap-2 pb-3">
         <Link href="/settings" className="rounded-full p-2" aria-label="กลับไปตั้งค่า">
@@ -17,6 +20,7 @@ export function SettingsPage({ title, action, children }: { title: string; actio
       </header>
       <div className="flex flex-col gap-3">{children}</div>
     </main>
+    </PageTransition>
   );
 }
 
@@ -54,7 +58,7 @@ const rowBody = (icon: string, title: string, summary?: string, tone?: string) =
 /** A row that opens a sub-page. */
 export function SettingsLink({ href, icon, title, summary }: { href: string; icon: string; title: string; summary?: string }) {
   return (
-    <Link href={href} className="flex items-center gap-3 py-3">
+    <Link href={href} transitionTypes={FORWARD} className="press flex items-center gap-3 py-3">
       {rowBody(icon, title, summary)}
       <Icon name="chevron_right" className="text-ink-3" />
     </Link>
@@ -67,7 +71,7 @@ export function SettingsItem({
 }: { icon: string; title: string; summary?: string; summaryTone?: string; trailing?: ReactNode; onClick?: () => void }) {
   const Tag = onClick ? "button" : "div";
   return (
-    <Tag className="flex w-full items-center gap-3 py-3 text-left" onClick={onClick}>
+    <Tag className={`flex w-full items-center gap-3 py-3 text-left ${onClick ? "press" : ""}`} onClick={onClick}>
       {rowBody(icon, title, summary, summaryTone)}
       {trailing}
       {onClick && <Icon name="edit" size={18} className="text-ink-3" />}

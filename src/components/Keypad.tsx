@@ -15,7 +15,8 @@ export function pressKey(current: string, key: string): string {
   return current + key;
 }
 
-export function Keypad({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+/** `onReject` fires when a key changes nothing (second ".", a third decimal, too many digits) so the screen can shake. */
+export function Keypad({ value, onChange, onReject }: { value: string; onChange: (v: string) => void; onReject?: () => void }) {
   return (
     <div className="grid grid-cols-3 gap-x-3 gap-y-4 px-2 pt-2">
       {KEYS.map((k) => (
@@ -24,7 +25,11 @@ export function Keypad({ value, onChange }: { value: string; onChange: (v: strin
           type="button"
           className="btn3d key h-14 text-2xl"
           aria-label={k === "⌫" ? "ลบ" : k}
-          onClick={() => onChange(pressKey(value, k))}
+          onClick={() => {
+            const next = pressKey(value, k);
+            if (next === value && k !== "⌫") onReject?.();
+            else onChange(next);
+          }}
         >
           {k === "⌫" ? <Icon name="backspace" /> : k}
         </button>

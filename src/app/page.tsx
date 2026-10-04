@@ -1,5 +1,10 @@
 import { Dashboard } from "@/components/Dashboard";
+import { PageTransition } from "@/components/PageTransition";
 
 export default function Home() {
-  return <Dashboard />;
+  return (
+    <PageTransition>
+      <Dashboard />
+    </PageTransition>
+  );
 }
