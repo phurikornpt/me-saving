@@ -110,7 +110,6 @@ export function Dashboard() {
     { id: "repay", icon: "currency_exchange", label: "รับเงินคืน", tone: "text-partner", disabled: !data?.balances.some((b) => b.balance > 0) },
     { id: "nospend", icon: "bedtime", label: "ไม่ได้ใช้เงิน", tone: "text-xp", disabled: !data || data.streak.loggedToday },
     { id: "scan", icon: "photo_camera", label: "สแกน", tone: "text-ink" },
-    { id: "say", icon: "mic", label: "ประโยคเดียว", tone: "text-ink" },
   ];
 
   const pick = (id: string) => {
@@ -192,6 +191,7 @@ export function Dashboard() {
 
       <ModeWheel
         slots={slots}
+        middle={{ id: "say", icon: "mic", label: "ประโยคเดียว", sub: "พูดหรือพิมพ์", tone: "text-ink" }}
         onPress={wake}
         onTap={() => router.push("/new?mode=expense", { transitionTypes: FORWARD })}
         onPick={pick}

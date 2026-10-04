@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { outerRadius, slotAt, targetAt } from "./ModeWheel";
+import { CENTRE_RADIUS, inCentre, outerRadius, slotAt, targetAt } from "./ModeWheel";
 
 // 6 slots, slot 0 at the top, clockwise
 describe("slotAt", () => {
@@ -36,5 +36,18 @@ describe("targetAt (outer slots)", () => {
   it("short screens pull the outer ring in, never onto the inner one", () => {
     expect(outerRadius(900)).toBe(215);
     expect(outerRadius(360)).toBe(172);
+  });
+});
+
+describe("centre slot", () => {
+  it("is the middle of the wheel, out to its own radius", () => {
+    expect(inCentre(0, 0)).toBe(true);
+    expect(inCentre(0, -(CENTRE_RADIUS - 1))).toBe(true);
+    expect(inCentre(0, -(CENTRE_RADIUS + 1))).toBe(false);
+  });
+  it("leaves the ring slots where they were: 6 around, first one still at the top", () => {
+    expect(slotAt(0, -112, 6)).toBe(0);
+    expect(slotAt(0, 112, 6)).toBe(3);
+    expect(CENTRE_RADIUS).toBeLessThan(112 - 40); // does not touch the slots around it
   });
 });
