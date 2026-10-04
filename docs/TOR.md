@@ -217,6 +217,7 @@
 - **v1.1:** ระบบเสนอปุ่มลัดเอง, FR-5 งบประมาณ, badges, streak freeze, export CSV (ยังไม่เริ่มทั้งหมด)
 - **v1.2+:** มาสคอต, challenge
 - **Backlog:** FR-8 noti (ต้องหาช่องทางที่ไม่ใช่ browser push ก่อน), คิวจด offline
+- **AI เพิ่มเติม:** แผนเฟส 0-3 และ idea backlog อยู่ใน [AI_ROADMAP.md](AI_ROADMAP.md) (ยังไม่เริ่ม)
 
 ## 6. Decision log
 | # | เรื่อง | ตัดสินใจ | ใครเลือก |
