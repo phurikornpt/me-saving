@@ -188,6 +188,34 @@ export interface ReceiptParser {
   ): Promise<ParsedReceipt>;
 }
 
+/**
+ * What the AI made of one sentence ("ข้าวมันไก่ 60 หารแฟน"). People and wallets are the short keys we
+ * handed out (p1, w1 ...), never ids; the use case maps them back and drops anything it didn't give.
+ */
+export interface ParsedEntryText {
+  kind: "expense" | "income";
+  /** Satang; null when no amount was said. */
+  amount: Satang | null;
+  categoryName: string | null;
+  note: string | null;
+  /** How an expense is split with `personKeys`. Always "none" for income. */
+  split: "none" | "equal" | "theirs";
+  personKeys: string[];
+  walletKey: string | null;
+  /** Fields the model is unsure about. */
+  uncertain: ("amount" | "category" | "person" | "wallet")[];
+}
+export interface TextEntryParser {
+  parse(
+    text: string,
+    context: {
+      categories: { name: string; kind: "expense" | "income" }[];
+      people: { key: string; name: string; note: string }[];
+      wallets: { key: string; name: string }[];
+    },
+  ): Promise<ParsedEntryText>;
+}
+
 export interface DailyTotal {
   day: DayKey;
   /** Our own spending only: other people's shares are excluded. */

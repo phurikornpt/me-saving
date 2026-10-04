@@ -6,6 +6,7 @@ import type {
   DashboardDTO,
   EntryDTO,
   EntryDetailDTO,
+  EntryTextDraftDTO,
   LineOwners,
   OutstandingDTO,
   PersonDTO,
@@ -88,6 +89,8 @@ export const api = {
     if (people.length) f.set("people", people.join(","));
     return request<ReceiptDraftDTO>("POST", "/api/receipt/parse", f);
   },
+  /** One typed or spoken sentence -> an unsaved draft entry. Counts against the daily AI budget. */
+  parseEntryText: (text: string) => request<EntryTextDraftDTO>("POST", "/api/entry/parse", { text }),
   saveReceipt: (b: {
     source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number; people?: string[];
     walletId?: string;
