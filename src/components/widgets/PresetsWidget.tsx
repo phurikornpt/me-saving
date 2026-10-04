@@ -3,9 +3,11 @@
 import { FORWARD } from "@/client/nav";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
+import { isBackdated, occurredAtOf, whenLabel, type WhenChoice } from "@/client/presetChoices";
+import { presetPricesKey } from "@/client/queries";
 import type { DashboardDTO } from "@/client/types";
 import { activeWallets } from "@/client/wallets";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -13,9 +15,14 @@ import { formatBaht } from "@/domain/money";
 import { sharesFor, type SplitMode } from "@/domain/split";
 import { useFeedback } from "../Feedback";
 import { PresetChip } from "./PresetChip";
+import { PresetPopover, type DragTarget } from "./PresetPopover";
 import { WidgetCard } from "./WidgetCard";
 
-const splitOf = (p: DashboardDTO["presets"][number]): SplitMode | undefined =>
+type Preset = DashboardDTO["presets"][number];
+/** One log from a preset: a tap (its own price, now) or a pick from its hold popup. */
+type Log = { preset: Preset; amount: number; when: WhenChoice };
+
+const splitOf = (p: Preset): SplitMode | undefined =>
   p.personId && p.splitKind ? { kind: p.splitKind, people: [p.personId] } : undefined;
 
 export function PresetsWidget({ data }: { data: DashboardDTO }) {
@@ -26,12 +33,15 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
   const fb = useFeedback();
   const afterLog = useAfterLog();
   const [failures, setFailures] = useState<Record<string, number>>({});
+  const [held, setHeld] = useState<{ preset: Preset; chip: DOMRect } | null>(null);
+  const drag = useRef<DragTarget | null>(null);
 
-  const tap = useMutation({
-    mutationFn: (p: DashboardDTO["presets"][number]) =>
+  const log = useMutation({
+    mutationFn: ({ preset: p, amount, when }: Log) =>
       api.recordEntry({
         kind: "expense",
-        total: p.amount,
+        total: amount,
+        occurredAt: occurredAtOf(when),
         categoryId: p.categoryId,
         note: p.label,
         source: "preset",
@@ -39,27 +49,31 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         split: splitOf(p),
         walletId: walletOf(p),
       }),
-    onMutate: (p) =>
-      applyOptimisticEntry(qc, {
-        kind: "expense", total: p.amount, categoryId: p.categoryId, note: p.label, source: "preset", walletId: walletOf(p),
-        shares: sharesFor(p.amount, splitOf(p) ?? { kind: "none" }),
-      }),
-    onSuccess: (out) => {
+    onMutate: ({ preset: p, amount, when }) =>
+      isBackdated(when, new Date())
+        ? undefined // a day before today doesn't belong in today's numbers
+        : applyOptimisticEntry(qc, {
+            kind: "expense", total: amount, categoryId: p.categoryId, note: p.label, source: "preset", walletId: walletOf(p),
+            shares: sharesFor(amount, splitOf(p) ?? { kind: "none" }),
+          }),
+    onSuccess: (out, { preset: p, when }) => {
       afterLog(out);
+      void qc.invalidateQueries({ queryKey: presetPricesKey(p.id) });
+      const at = when.kind === "now" ? "" : ` · ${whenLabel(when, new Date())}${isBackdated(when, new Date()) ? " (ไม่ต่อ streak)" : ""}`;
       fb.toast({
-        message: `จดแล้ว ฿${formatBaht(out.entry.total)}`,
+        message: `จดแล้ว ฿${formatBaht(out.entry.total)}${at}`,
         action: { label: "ย้อนกลับ", run: () => void api.deleteEntry(out.entry.id).then(() => qc.invalidateQueries()) },
       });
     },
-    onError: (_e, p, rollback) => {
+    onError: (_e, v, rollback) => {
       rollback?.();
-      setFailures((f) => ({ ...f, [p.id]: (f[p.id] ?? 0) + 1 }));
-      fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ", action: { label: "ลองใหม่", run: () => tap.mutate(p) } });
+      setFailures((f) => ({ ...f, [v.preset.id]: (f[v.preset.id] ?? 0) + 1 }));
+      fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ", action: { label: "ลองใหม่", run: () => log.mutate(v) } });
     },
   });
 
   return (
-    <WidgetCard title="ปุ่มลัด · แตะครั้งเดียวจด">
+    <WidgetCard title="ปุ่มลัด · แตะจด กดค้างเลือกราคา">
       {data.presets.length === 0 ? (
         <p className="text-sm text-ink-3">
           ยังไม่มีปุ่มลัด <Link href="/settings/presets" transitionTypes={FORWARD} className="underline">ตั้งที่การตั้งค่า</Link>
@@ -72,12 +86,28 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
               key={p.id}
               preset={p}
               people={data.people}
-              disabled={tap.isPending && tap.variables?.id === p.id}
+              disabled={log.isPending && log.variables?.preset.id === p.id}
               failed={failures[p.id] ?? 0}
-              onTap={() => tap.mutate(p)}
+              onTap={() => log.mutate({ preset: p, amount: p.amount, when: { kind: "now" } })}
+              onDown={() => void qc.prefetchQuery({ queryKey: presetPricesKey(p.id), queryFn: () => api.presetPrices(p.id), staleTime: 60_000 })}
+              onHold={(chip) => setHeld({ preset: p, chip })}
+              onDrag={(x, y) => drag.current?.move(x, y)}
+              onDrop={(x, y) => drag.current?.drop(x, y)}
             />
           ))}
         </div>
+      )}
+      {held && (
+        <PresetPopover
+          preset={held.preset}
+          anchor={held.chip}
+          dragRef={drag}
+          onClose={() => setHeld(null)}
+          onLog={(amount, when) => {
+            setHeld(null);
+            log.mutate({ preset: held.preset, amount, when });
+          }}
+        />
       )}
     </WidgetCard>
   );
