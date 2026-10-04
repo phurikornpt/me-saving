@@ -3,11 +3,13 @@ import type { Satang } from "@/domain/money";
 import { spendAiBudget, type AiLimit } from "../ai-budget";
 import type { CategoryRepo, Clock, LoginAttemptRepo, PersonRepo, TextEntryParser, WalletRepo } from "../ports";
 
-export const MAX_ENTRY_TEXT = 300;
+export const MAX_ENTRY_TEXT = 500;
 
 export type DraftField = "amount" | "category" | "person" | "wallet";
 
-export interface EntryTextDraft {
+/** One entry (an expense, or income) ready to edit. */
+export interface SingleDraft {
+  mode: "single";
   kind: "expense" | "income";
   /** Null when no amount was said: the user must type one. */
   amount: Satang | null;
@@ -22,8 +24,29 @@ export interface EntryTextDraft {
   uncertain: DraftField[];
 }
 
+export interface DraftLine {
+  note: string | null;
+  amount: Satang | null;
+  categoryId: string | null;
+  owners: { me: boolean; people: string[] };
+  uncertain: Exclude<DraftField, "wallet">[];
+}
+
+/** Several things bought together ("ค่า 7-11": นม, ไก่ ...), saved as one group. */
+export interface GroupDraft {
+  mode: "group";
+  name: string | null;
+  walletId: string | null;
+  /** Everyone named on a line. */
+  personIds: string[];
+  lines: DraftLine[];
+  uncertain: "wallet"[];
+}
+
+export type EntryDraft = SingleDraft | GroupDraft;
+
 /**
- * Turns one typed or spoken sentence into an editable draft entry. Nothing is saved.
+ * Turns one typed or spoken sentence into editable draft entries (one sentence can describe several). Nothing is saved.
  * Counts against the shared daily AI budget, like a receipt scan.
  */
 export class ParseEntryText {
@@ -37,7 +60,7 @@ export class ParseEntryText {
     private readonly limit: AiLimit,
   ) {}
 
-  async execute(rawText: string): Promise<EntryTextDraft> {
+  async execute(rawText: string): Promise<{ drafts: EntryDraft[] }> {
     const text = rawText.trim();
     if (text.length === 0) throw new DomainError("INVALID_TEXT", "say or type something first");
     if (text.length > MAX_ENTRY_TEXT) throw new DomainError("INVALID_TEXT", `text is longer than ${MAX_ENTRY_TEXT} characters`);
@@ -56,34 +79,70 @@ export class ParseEntryText {
       wallets: wallets.map(({ key, name }) => ({ key, name })),
     });
 
-    const uncertain = new Set<DraftField>(parsed.uncertain);
-    const amount = parsed.amount !== null && parsed.amount > 0 ? parsed.amount : null;
-    if (amount === null) uncertain.add("amount");
+    const drafts = parsed.entries.flatMap((entry): EntryDraft[] => {
+      const wallet = wallets.find((w) => w.key === entry.walletKey);
+      const walletUncertain = entry.uncertain.includes("wallet") || (entry.walletKey !== null && !wallet);
+      const walletId = wallet?.id ?? null;
 
-    // Anything that isn't a name/key we handed out is ignored, never trusted.
-    const category = usableCategories.find((c) => c.kind === parsed.kind && c.name === parsed.categoryName);
-    if (!category) uncertain.add("category");
+      // Anything that isn't a name/key we handed out is ignored, never trusted.
+      const items = entry.items.map((item) => {
+        const uncertain = new Set(item.uncertain);
+        const amount = item.amount !== null && item.amount > 0 ? item.amount : null;
+        if (amount === null) uncertain.add("amount");
+        const category = usableCategories.find((c) => c.kind === entry.kind && c.name === item.categoryName);
+        if (!category) uncertain.add("category");
+        const personIds = [...new Set(item.personKeys)].flatMap((k) => people.find((p) => p.key === k)?.id ?? []);
+        let me = item.me;
+        if (entry.kind === "income") {
+          personIds.length = 0;
+          me = true;
+          uncertain.delete("person");
+        } else if (personIds.length === 0) {
+          me = true; // nobody valid to share with: it's ours, the user picks the person
+          if (!item.me || item.personKeys.length > 0) uncertain.add("person");
+        }
+        return {
+          note: item.note?.trim().slice(0, 200) || null,
+          amount,
+          categoryId: category?.id ?? null,
+          me,
+          personIds,
+          uncertain: [...uncertain],
+        };
+      });
 
-    const personIds = [...new Set(parsed.personKeys)].flatMap((k) => people.find((p) => p.key === k)?.id ?? []);
-    let split = parsed.kind === "income" ? "none" : parsed.split;
-    if (split !== "none" && personIds.length === 0) {
-      split = "none"; // a split with nobody to split with: the user picks the person
-      uncertain.add("person");
-    }
-    if (split === "none") personIds.length = 0;
+      const single = (item: (typeof items)[number]): SingleDraft => ({
+        mode: "single",
+        kind: entry.kind,
+        amount: item.amount,
+        categoryId: item.categoryId,
+        note: item.note ?? (items.length === 1 ? entry.name?.trim().slice(0, 200) || null : null),
+        split: item.personIds.length === 0 ? "none" : item.me ? "equal" : "theirs",
+        personIds: item.personIds,
+        walletId,
+        uncertain: [...item.uncertain, ...(walletUncertain ? (["wallet"] as const) : [])],
+      });
 
-    const wallet = wallets.find((w) => w.key === parsed.walletKey);
-    if (parsed.walletKey && !wallet) uncertain.add("wallet");
+      if (entry.kind === "income" || items.length === 1) return items.map(single);
+      return [
+        {
+          mode: "group",
+          name: entry.name?.trim().slice(0, 100) || null,
+          walletId,
+          personIds: [...new Set(items.flatMap((i) => i.personIds))],
+          lines: items.map((i) => ({
+            note: i.note,
+            amount: i.amount,
+            categoryId: i.categoryId,
+            owners: { me: i.me, people: i.personIds },
+            uncertain: i.uncertain,
+          })),
+          uncertain: walletUncertain ? ["wallet"] : [],
+        },
+      ];
+    });
 
-    return {
-      kind: parsed.kind,
-      amount,
-      categoryId: category?.id ?? null,
-      note: parsed.note?.trim().slice(0, 200) || null,
-      split,
-      personIds,
-      walletId: wallet?.id ?? null,
-      uncertain: [...uncertain],
-    };
+    if (drafts.length === 0) throw new DomainError("AI_UNAVAILABLE", "nothing to read in the result");
+    return { drafts };
   }
 }

@@ -195,3 +195,17 @@ export const backfillBody = z.object({
 export const backfillCheckBody = z.object({
   rows: z.array(z.object({ day, total: satang, kind: z.enum(["expense", "income"]), description: clip(100) })).max(100),
 });
+
+/** What one sentence described, saved together: entries and groups, all or nothing. */
+export const batchBody = z.object({
+  walletId: z.uuid().nullish(),
+  items: z
+    .array(
+      z.discriminatedUnion("type", [
+        recordEntryBody.omit({ presetId: true, source: true }).extend({ type: z.literal("entry") }),
+        saveReceiptBody.extend({ type: z.literal("group") }),
+      ]),
+    )
+    .min(1)
+    .max(10),
+});

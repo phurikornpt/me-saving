@@ -41,31 +41,39 @@ export class SaveReceiptEntry {
   ) {}
 
   async execute(input: SaveReceiptInput): Promise<SaveReceiptOutput> {
-    const { people, lines } = prepareGroup(input);
     const now = this.clock.now();
-
     return this.tx.run(async (repos) => {
-      await assertKnownPeople(repos.people, people);
-      const walletId = await resolveWallet(repos.wallets, input.walletId);
-      const entry = await repos.entries.insert({
-        kind: "expense",
-        occurredAt: input.occurredAt ?? now,
-        createdAt: now,
-        total: input.total,
-        shares: sharesOfLines(lines),
-        personId: null,
-        categoryId: null, // per-line categories live on the lines
-        note: null,
-        merchant: input.merchant ?? null,
-        source: input.source ?? "receipt",
-        walletId,
-        toWalletId: null,
-      });
-      await repos.receiptLines.insertMany(entry.id, lines);
-      await rememberOwners(repos, people, lines, now);
+      const entry = await insertGroup(repos, input, now);
       return { entry, ...(await logActivity(repos, now, "entry")) };
     });
   }
+}
+
+/**
+ * Checks and saves one group inside a transaction that is already open. No streak / XP: the caller
+ * decides when pressing save counts as a log.
+ */
+export async function insertGroup(repos: Repos, input: SaveReceiptInput, now: Date): Promise<EntryRecord> {
+  const { people, lines } = prepareGroup(input);
+  await assertKnownPeople(repos.people, people);
+  const walletId = await resolveWallet(repos.wallets, input.walletId);
+  const entry = await repos.entries.insert({
+    kind: "expense",
+    occurredAt: input.occurredAt ?? now,
+    createdAt: now,
+    total: input.total,
+    shares: sharesOfLines(lines),
+    personId: null,
+    categoryId: null, // per-line categories live on the lines
+    note: null,
+    merchant: input.merchant ?? null,
+    source: input.source ?? "receipt",
+    walletId,
+    toWalletId: null,
+  });
+  await repos.receiptLines.insertMany(entry.id, lines);
+  await rememberOwners(repos, people, lines, now);
+  return entry;
 }
 
 /** Checks a group's lines and scales them to the paid total. Shared by saving and editing a group. */

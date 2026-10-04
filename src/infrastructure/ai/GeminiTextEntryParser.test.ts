@@ -6,7 +6,10 @@ const ctx = {
   wallets: [{ key: "w1", name: "เงินสด" }],
 };
 const reply = (o: object) => ({ text: JSON.stringify(o) });
-const GOOD = { kind: "expense", amount: 60, category: "อาหาร", note: "ข้าวมันไก่", split: "equal", people: ["p1"], wallet: null, uncertain: [] };
+const ITEM = { note: "ข้าวมันไก่", amount: 60, category: "อาหาร", me: true, people: ["p1"], uncertain: [] };
+const ENTRY = { kind: "expense", name: null, wallet: null, items: [ITEM], uncertain: [] };
+const GOOD = { entries: [ENTRY] };
+const withItem = (o: object, kind = "expense") => ({ entries: [{ ...ENTRY, kind, items: [{ ...ITEM, ...o }] }] });
 
 type Req = { contents: { parts: { text?: string }[] }[]; config: { responseJsonSchema: unknown; temperature: number } };
 
@@ -32,8 +35,12 @@ describe("GeminiTextEntryParser", () => {
     const { parser } = await load(async (r) => (reqs.push(r), reply(GOOD)));
     const out = await parser.parse("ข้าวมันไก่ 60 หารแฟน", ctx);
     expect(out).toEqual({
-      kind: "expense", amount: 6000, categoryName: "อาหาร", note: "ข้าวมันไก่",
-      split: "equal", personKeys: ["p1"], walletKey: null, uncertain: [],
+      entries: [
+        {
+          kind: "expense", name: null, walletKey: null, uncertain: [],
+          items: [{ note: "ข้าวมันไก่", amount: 6000, categoryName: "อาหาร", me: true, personKeys: ["p1"], uncertain: [] }],
+        },
+      ],
     });
     const prompt = reqs[0].contents[0].parts.map((p) => p.text).join("");
     expect(prompt).toContain('p1: name "แฟน", note "ชอบนมเปรี้ยว"');
@@ -44,11 +51,28 @@ describe("GeminiTextEntryParser", () => {
     vi.doUnmock("@google/genai");
   });
 
-  it("rounds fractional baht, allows no amount, and forces income to no split", async () => {
-    const { parser } = await load(async () => reply({ ...GOOD, kind: "income", amount: 12.345, split: "equal" }));
-    expect(await parser.parse("x", ctx)).toMatchObject({ amount: 1235, split: "none" });
-    const { parser: p2 } = await load(async () => reply({ ...GOOD, amount: null }));
-    expect((await p2.parse("x", ctx)).amount).toBeNull();
+  it("reads several entries, each with several items and its own owners", async () => {
+    const reqs: Req[] = [];
+    const two = {
+      entries: [
+        { ...ENTRY, kind: "income", items: [{ ...ITEM, note: "เงินเดือน", amount: 25000, people: [] }] },
+        { ...ENTRY, name: "7-11", items: [{ ...ITEM, note: "นม", amount: 30, me: false }, { ...ITEM, note: "ไก่", amount: 45, people: [] }] },
+      ],
+    };
+    const { parser } = await load(async (r) => (reqs.push(r), reply(two)));
+    const out = await parser.parse("เงินเดือนเข้า 25000 ซื้อนม ไก่ ที่ 7-11", ctx);
+    expect(out.entries).toHaveLength(2);
+    expect(out.entries[1]).toMatchObject({ name: "7-11" });
+    expect(out.entries[1].items.map((i) => [i.amount, i.me, i.personKeys])).toEqual([[3000, false, ["p1"]], [4500, true, []]]);
+    expect(reqs[0].contents[0].parts.map((p) => p.text).join("")).toContain("ONE entry with several");
+    vi.doUnmock("@google/genai");
+  });
+
+  it("rounds fractional baht, allows no amount, and forces income to ours only", async () => {
+    const { parser } = await load(async () => reply(withItem({ amount: 12.345 }, "income")));
+    expect((await parser.parse("x", ctx)).entries[0].items[0]).toMatchObject({ amount: 1235, me: true, personKeys: [] });
+    const { parser: p2 } = await load(async () => reply(withItem({ amount: null })));
+    expect((await p2.parse("x", ctx)).entries[0].items[0].amount).toBeNull();
     vi.doUnmock("@google/genai");
   });
 
@@ -57,7 +81,7 @@ describe("GeminiTextEntryParser", () => {
       if (n === 1) throw await apiError(503);
       return reply(GOOD);
     });
-    expect((await parser.parse("x", ctx)).amount).toBe(6000);
+    expect((await parser.parse("x", ctx)).entries[0].items[0].amount).toBe(6000);
     expect(calls()).toBe(2);
     vi.doUnmock("@google/genai");
   });
@@ -72,14 +96,16 @@ describe("GeminiTextEntryParser", () => {
   it("an unreadable or off-contract answer (invented person key) is AI_UNAVAILABLE", async () => {
     const bad = await load(async () => ({ text: "not json" }));
     await expect(bad.parser.parse("x", ctx)).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
-    const invented = await load(async () => reply({ ...GOOD, people: ["p7"] }));
+    const invented = await load(async () => reply(withItem({ people: ["p7"] })));
     await expect(invented.parser.parse("x", ctx)).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
+    const none = await load(async () => reply({ entries: [] }));
+    await expect(none.parser.parse("x", ctx)).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
     vi.doUnmock("@google/genai");
   });
 
   it("with nobody set up it asks for no people and no wallet", async () => {
     const reqs: Req[] = [];
-    const { parser } = await load(async (r) => (reqs.push(r), reply({ ...GOOD, split: "none", people: [] })));
+    const { parser } = await load(async (r) => (reqs.push(r), reply(withItem({ people: [] }))));
     await parser.parse("กาแฟ 55", { categories: ctx.categories, people: [], wallets: [] });
     expect(JSON.stringify(reqs[0].config.responseJsonSchema)).not.toContain('"p1"');
     vi.doUnmock("@google/genai");

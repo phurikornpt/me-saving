@@ -3,6 +3,7 @@ import type { Sequelize } from "sequelize";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
 import { DeleteEntry, UpdateEntry, UpdateGroupEntry } from "@/application/use-cases/change-entry";
+import { RecordBatch } from "@/application/use-cases/record-batch";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
@@ -352,6 +353,28 @@ describe("receipt save against real Postgres", () => {
     const bad = new SaveReceiptEntry(tx, new FixedClock(NOON));
     await expect(bad.execute({ total: 100, lines: [{ ...lines()[0], qty: 1.5 }] })).rejects.toThrow();
     expect(await createRepos(sequelize, USER).entries.recent(5)).toHaveLength(0);
+  });
+});
+
+describe("RecordBatch rolls back for real", () => {
+  it("saves nothing, not even the first item or the log, when item 2 is invalid", async () => {
+    const uc = new RecordBatch(createTransactionRunner(sequelize, USER), new FixedClock(NOON));
+    const group = {
+      type: "group" as const,
+      total: 100,
+      lines: [{ rawName: "x", canonicalName: "x", qty: 1, price: 100, owners: ME }],
+    };
+    await expect(
+      uc.execute({ items: [{ type: "entry", kind: "expense", total: 5000 }, { ...group, lines: [{ ...group.lines[0], qty: 1.5 }] }] }),
+    ).rejects.toThrow();
+    const repos = createRepos(sequelize, USER);
+    expect(await repos.entries.recent(5)).toHaveLength(0);
+    const [days] = await sequelize.query("SELECT 1 FROM logged_days");
+    expect(days).toHaveLength(0);
+
+    const ok = await uc.execute({ items: [{ type: "entry", kind: "expense", total: 5000 }, group] });
+    expect(ok.entries).toHaveLength(2);
+    expect(await repos.entries.recent(5)).toHaveLength(2);
   });
 });
 

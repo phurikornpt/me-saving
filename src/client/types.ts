@@ -92,7 +92,7 @@ export interface ActivityDTO { xpGained: number; streak: number; leveledUp: bool
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
 export interface TransactionDTO { date: string | null; description: string; amount: number; direction: "out" | "in"; categoryName: string | null }
 export interface ReceiptDraftDTO { kind: "receipt" | "delivery" | "online_order" | "transfer_slip" | "history"; transactions: TransactionDTO[]; merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
-/** A sentence turned into an unsaved entry. Amount is satang, null when none was said. `uncertain` fields get highlighted. */
+/** One editable entry. Amount is satang, null when none was said. `uncertain` fields get highlighted. */
 export interface EntryTextDraftDTO {
   kind: "expense" | "income";
   amount: number | null;
@@ -103,4 +103,22 @@ export interface EntryTextDraftDTO {
   walletId: string | null;
   uncertain: ("amount" | "category" | "person" | "wallet")[];
 }
+/** A sentence can give several drafts: single entries (income or expense) and groups of items bought together. */
+export type SingleDraftDTO = EntryTextDraftDTO & { mode: "single" };
+export interface TextDraftLineDTO {
+  note: string | null;
+  amount: number | null;
+  categoryId: string | null;
+  owners: { me: boolean; people: string[] };
+  uncertain: ("amount" | "category" | "person")[];
+}
+export interface GroupDraftDTO {
+  mode: "group";
+  name: string | null;
+  walletId: string | null;
+  personIds: string[];
+  lines: TextDraftLineDTO[];
+  uncertain: "wallet"[];
+}
+export type EntryDraftDTO = SingleDraftDTO | GroupDraftDTO;
 export interface SettingsDTO { dashboardLayout: LayoutItem[]; meNote: string }
