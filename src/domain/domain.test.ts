@@ -11,6 +11,9 @@ import {
   outstandingByEntry,
   type Ledger,
   type OwedShare,
+  assertRepaidUnchanged,
+  repaidBy,
+  repaidShares,
 } from "./ledger";
 import { lineShares, sharesFor, sharesOfLines } from "./split";
 import { computeStreak } from "./streak";
@@ -244,5 +247,28 @@ describe("dashboard layout", () => {
   it("appends widgets added in later versions as enabled", () => {
     const out = normalizeLayout([{ id: "streak", enabled: true }]);
     expect(out.find((i) => i.id === "calendar")).toEqual({ id: "calendar", enabled: true });
+  });
+});
+
+describe("what repayments already cover", () => {
+  const at = (d: number) => new Date(Date.UTC(2026, 9, d, 5));
+  const ledger = (repaid: number, shares = [{ entryId: "a", d: 1, amount: 5000 }, { entryId: "b", d: 2, amount: 3000 }]) => ({
+    shares: shares.map((s) => ({ entryId: s.entryId, personId: "fan", occurredAt: at(s.d), amount: s.amount })),
+    repayments: repaid ? [{ personId: "fan", total: repaid }] : [],
+  });
+
+  it("covers the oldest entries first, per person", () => {
+    expect([...repaidShares(ledger(6000))]).toEqual([["a:fan", 5000], ["b:fan", 1000]]);
+    expect(repaidBy(ledger(4000), "a")).toEqual(["fan"]);
+    expect(repaidBy(ledger(4000), "b")).toEqual([]);
+  });
+
+  it("refuses a change that moves paid-back money onto other entries", () => {
+    // b moved before a: the 4000 now pays b first
+    const moved = ledger(4000, [{ entryId: "a", d: 1, amount: 5000 }, { entryId: "b", d: 0, amount: 3000 }]);
+    expect(() => assertRepaidUnchanged(ledger(4000), moved)).toThrow(DomainError);
+    // a new, later entry changes nothing that was paid
+    const added = ledger(4000, [{ entryId: "a", d: 1, amount: 5000 }, { entryId: "b", d: 2, amount: 3000 }, { entryId: "c", d: 3, amount: 100 }]);
+    expect(() => assertRepaidUnchanged(ledger(4000), added)).not.toThrow();
   });
 });

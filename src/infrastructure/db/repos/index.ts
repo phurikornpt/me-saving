@@ -180,6 +180,10 @@ export function createRepos(sequelize: Sequelize, userId: string, transaction?: 
         t,
       );
     },
+    async replace(entryId, lines) {
+      await m.ReceiptLine.destroy({ where: { entryId }, ...t });
+      await receiptLines.insertMany(entryId, lines);
+    },
     async listByEntries(entryIds) {
       const out = new Map<string, NewReceiptLine[]>();
       if (entryIds.length === 0) return out;

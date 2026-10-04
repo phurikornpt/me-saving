@@ -115,6 +115,10 @@ export function createFakeRepos() {
     async insertMany(entryId, items) {
       items.forEach((l) => lines.push({ ...l, entryId }));
     },
+    async replace(entryId, items) {
+      for (let i = lines.length - 1; i >= 0; i--) if (lines[i].entryId === entryId) lines.splice(i, 1);
+      items.forEach((l) => lines.push({ ...l, entryId }));
+    },
     async listByEntries(entryIds) {
       const out = new Map<string, NewReceiptLine[]>();
       for (const { entryId, ...l } of lines) {
@@ -175,6 +179,20 @@ export function createFakeRepos() {
     },
   };
 
-  const tx: TransactionRunner = { run: (fn) => fn(repos) };
+  // Rolls back like a real transaction: a refused use case leaves nothing behind.
+  const tx: TransactionRunner = {
+    async run(fn) {
+      const snap = { entries: structuredClone(entries), lines: structuredClone(lines), memory: new Map(memory) };
+      try {
+        return await fn(repos);
+      } catch (e) {
+        entries.splice(0, entries.length, ...snap.entries);
+        lines.splice(0, lines.length, ...snap.lines);
+        memory.clear();
+        snap.memory.forEach((v, k) => memory.set(k, v));
+        throw e;
+      }
+    },
+  };
   return { repos, tx, entries, days, xp, lines, memory, people, wallets, settings };
 }

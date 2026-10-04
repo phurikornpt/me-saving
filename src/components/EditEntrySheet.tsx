@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
 import { useState } from "react";
 import { api, ApiError } from "@/client/api";
 import { describeShares } from "@/client/people";
@@ -17,6 +18,7 @@ import { WalletPicker } from "./Wallets";
 const ERRORS: Record<string, string> = {
   BALANCE_WOULD_GO_NEGATIVE: "แก้ไม่ได้: มีคนจ่ายคืนไปแล้วมากกว่ายอดที่จะค้างหลังแก้",
   ENTRY_LOCKED: "ใบเสร็จแก้ยอดไม่ได้ (แก้โน้ตได้)",
+  ENTRY_REPAID: "แก้ยอด การหาร หรือวันที่ไม่ได้ และลบไม่ได้: มีคนจ่ายคืนรายการนี้ไปแล้ว",
   INVALID_SPLIT: "ส่วนของคนอื่นต้องไม่เกินยอดรวม",
   INVALID_TRANSFER: "โอนเข้ากระเป๋าเดียวกันไม่ได้",
   UNKNOWN_WALLET: "ไม่พบกระเป๋าที่เลือก",
@@ -98,7 +100,12 @@ function EditForm({ entry, onClose }: { entry: EntryDTO; onClose: () => void }) 
             className="mt-1 w-full rounded-full border-2 border-line bg-card px-4 py-2 text-lg text-ink outline-none focus:border-ink disabled:opacity-50"
           />
         </label>
-        {locked && <p className="text-xs text-ink-3">รายการแบบกลุ่มแก้ยอดและการหารไม่ได้ เพราะมาจากรายการย่อยข้างใน</p>}
+        {locked && (
+          <Link href={`/entries/${entry.id}`} onClick={onClose} className="pill flex items-center justify-between text-sm text-ink">
+            <span className="flex items-center gap-2"><Icon name="list_alt" size={18} /> ดูรายการย่อย / แก้ไข</span>
+            <Icon name="chevron_right" size={18} />
+          </Link>
+        )}
 
         {entry.shares.length > 0 && <p className="text-xs text-partner">ตอนนี้: {describeShares(people, entry.shares)}</p>}
         {entry.kind === "expense" && !locked && (
