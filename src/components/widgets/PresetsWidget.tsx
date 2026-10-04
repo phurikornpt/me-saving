@@ -59,7 +59,7 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
     <WidgetCard title="ปุ่มลัด · แตะครั้งเดียวจด">
       {data.presets.length === 0 ? (
         <p className="text-sm text-ink-3">
-          ยังไม่มีปุ่มลัด <Link href="/settings" className="underline">ตั้งที่การตั้งค่า</Link>
+          ยังไม่มีปุ่มลัด <Link href="/settings/presets" className="underline">ตั้งที่การตั้งค่า</Link>
         </p>
       ) : (
         <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">

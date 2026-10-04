@@ -28,7 +28,7 @@ export function MeNoteField() {
   });
 
   return (
-    <div className="mb-4 flex flex-col gap-2 border-b border-line pb-4">
+    <div className="flex flex-col gap-2 py-4">
       <label htmlFor="me-note" className="text-sm">พฤติกรรมของเรา</label>
       <textarea
         id="me-note"
