@@ -3,17 +3,16 @@
 import { FORWARD } from "@/client/nav";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useState } from "react";
 import { api } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import type { DashboardDTO } from "@/client/types";
 import { activeWallets } from "@/client/wallets";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht } from "@/domain/money";
-import { personColor } from "@/client/people";
 import { sharesFor, type SplitMode } from "@/domain/split";
 import { useFeedback } from "../Feedback";
-import { Icon } from "../Icon";
-import { Spinner } from "../Loading";
+import { PresetChip } from "./PresetChip";
 import { WidgetCard } from "./WidgetCard";
 
 const splitOf = (p: DashboardDTO["presets"][number]): SplitMode | undefined =>
@@ -26,6 +25,7 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
+  const [failures, setFailures] = useState<Record<string, number>>({});
 
   const tap = useMutation({
     mutationFn: (p: DashboardDTO["presets"][number]) =>
@@ -35,6 +35,7 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         categoryId: p.categoryId,
         note: p.label,
         source: "preset",
+        presetId: p.id,
         split: splitOf(p),
         walletId: walletOf(p),
       }),
@@ -52,6 +53,7 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
     },
     onError: (_e, p, rollback) => {
       rollback?.();
+      setFailures((f) => ({ ...f, [p.id]: (f[p.id] ?? 0) + 1 }));
       fb.toast({ tone: "error", message: "บันทึกไม่สำเร็จ", action: { label: "ลองใหม่", run: () => tap.mutate(p) } });
     },
   });
@@ -63,23 +65,17 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
           ยังไม่มีปุ่มลัด <Link href="/settings/presets" transitionTypes={FORWARD} className="underline">ตั้งที่การตั้งค่า</Link>
         </p>
       ) : (
-        <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+        // the top padding is room for the "+฿x" a tap floats up; the scroller would clip it otherwise
+        <div className="-mx-1 -mt-8 flex gap-2 overflow-x-auto px-1 pb-1 pt-8">
           {data.presets.map((p) => (
-            <button
+            <PresetChip
               key={p.id}
-              disabled={tap.isPending}
-              onClick={() => tap.mutate(p)}
-              className="flex shrink-0 items-center gap-2 rounded-full bg-surface px-4 py-2 text-sm shadow-[0_3px_0_var(--line)] active:translate-y-0.5 active:shadow-none disabled:opacity-50"
-            >
-              <Icon name={p.icon} size={20} />
-              {p.label} <span className="text-ink-3">฿{formatBaht(p.amount)}</span>
-              {p.personId && (
-                <span style={{ color: personColor(data.people, p.personId) }}>
-                  <Icon name="group" size={16} />
-                </span>
-              )}
-              {tap.isPending && tap.variables?.id === p.id && <Spinner size={14} />}
-            </button>
+              preset={p}
+              people={data.people}
+              disabled={tap.isPending && tap.variables?.id === p.id}
+              failed={failures[p.id] ?? 0}
+              onTap={() => tap.mutate(p)}
+            />
           ))}
         </div>
       )}

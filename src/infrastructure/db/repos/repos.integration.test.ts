@@ -256,6 +256,25 @@ describe("categories, presets, settings", () => {
     expect(await repo.remove(p.id)).toBe(true);
     expect(await repo.remove(p.id)).toBe(false);
   });
+  it("a preset's prices: what its expenses were logged at, most used first, only since the given time", async () => {
+    const repo = createPresetRepo(sequelize, USER);
+    const rice = await repo.create({ label: "ข้าว", icon: "restaurant", amount: 5000, categoryId: null, personId: null, splitKind: null, walletId: null, sort: 0 });
+    const record = new RecordEntry(createTransactionRunner(sequelize, USER), new FixedClock(NOON), repo);
+    const log = (total: number, day: string) =>
+      record.execute({ kind: "expense", total, source: "preset", presetId: rice.id, occurredAt: new Date(`${day}T12:00:00+07:00`) });
+    await log(5000, "2026-06-01"); // too old
+    await log(5000, "2026-09-30");
+    await log(6000, "2026-10-01");
+    await log(6000, "2026-10-02");
+    await log(5500, "2026-10-03");
+    await record.execute({ kind: "expense", total: 9900, occurredAt: NOON }); // not from the preset
+    const out = await repo.prices(rice.id, new Date("2026-09-01T00:00:00Z"));
+    expect(out.map((p) => [p.amount, p.count])).toEqual([[6000, 2], [5500, 1], [5000, 1]]);
+    expect(out[0].lastAt).toEqual(new Date("2026-10-02T05:00:00Z"));
+    await repo.remove(rice.id); // entries stay, just unlinked
+    const [[left]] = (await sequelize.query("SELECT count(*)::int AS n FROM entries WHERE total = 6000 AND preset_id IS NULL")) as [{ n: number }[], unknown];
+    expect(left.n).toBe(2);
+  });
   it("settings: defaults to a normalised layout and persists changes", async () => {
     const repo = createSettingsRepo(sequelize, USER);
     const first = await repo.get();
@@ -562,6 +581,38 @@ describe("migrations 004 + 005 on data recorded before people and accounts exist
     } finally {
       await legacy.close();
       await dropLegacy();
+    }
+  });
+});
+
+describe("migration 009: entries learn which preset they came from", () => {
+  it("links old preset entries by label, skipping labels two presets share", async () => {
+    await sequelize.query("DROP DATABASE IF EXISTS legacy");
+    await sequelize.query("CREATE DATABASE legacy");
+    const legacy = createSequelize(container.getConnectionUri().replace(/\/[^/]+$/, "/legacy"));
+    try {
+      const migrator = createMigrator(legacy);
+      await migrator.up({ to: "008-monthly-summaries" });
+      await legacy.query(`
+        WITH u AS (INSERT INTO users (email, password_hash) VALUES ('m@x.com', 'h') RETURNING id),
+             w AS (INSERT INTO wallets (user_id, name, icon) SELECT id, 'เงินสด', 'payments' FROM u RETURNING id, user_id),
+             p AS (INSERT INTO presets (user_id, label, icon, amount) SELECT id, l, 'restaurant', 5000 FROM u, (VALUES ('ข้าว'), ('กาแฟ'), ('กาแฟ')) v(l) RETURNING id)
+        INSERT INTO entries (user_id, wallet_id, kind, occurred_at, total, note, source)
+        SELECT w.user_id, w.id, 'expense', now(), t, n, s FROM w,
+          (VALUES (6000, 'ข้าว', 'preset'), (6500, 'กาแฟ', 'preset'), (7000, 'ข้าว', 'manual')) v(t, n, s);
+      `);
+      await migrator.up();
+      const [rows] = (await legacy.query(
+        "SELECT e.total, p.label FROM entries e LEFT JOIN presets p ON p.id = e.preset_id ORDER BY e.total",
+      )) as [{ total: number; label: string | null }[], unknown];
+      expect(rows).toEqual([
+        { total: 6000, label: "ข้าว" },
+        { total: 6500, label: null }, // two presets are called กาแฟ: can't tell which
+        { total: 7000, label: null }, // typed by hand
+      ]);
+    } finally {
+      await legacy.close();
+      await sequelize.query("DROP DATABASE IF EXISTS legacy");
     }
   });
 });

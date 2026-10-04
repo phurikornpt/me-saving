@@ -32,6 +32,8 @@ export interface NewEntry {
   walletId: string;
   /** Where a transfer's money went. Transfers only. */
   toWalletId: string | null;
+  /** The preset it was logged from, if any (its price history). */
+  presetId?: string | null;
 }
 
 export interface EntryRecord extends NewEntry {
@@ -277,8 +279,17 @@ export interface PresetRecord {
   walletId: string | null;
   sort: number;
 }
+/** One price a preset was logged at: how often, and when last. */
+export interface PresetPrice {
+  amount: Satang;
+  count: number;
+  lastAt: Date;
+}
+
 export interface PresetRepo {
   list(): Promise<PresetRecord[]>;
+  /** The amounts this preset's expenses were logged at since `since`, most used first. */
+  prices(presetId: string, since: Date): Promise<PresetPrice[]>;
   create(p: Omit<PresetRecord, "id">): Promise<PresetRecord>;
   update(id: string, patch: Partial<Omit<PresetRecord, "id">>): Promise<PresetRecord | null>;
   remove(id: string): Promise<boolean>;

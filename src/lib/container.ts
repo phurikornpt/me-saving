@@ -94,7 +94,7 @@ function build() {
       getAiBudget: new GetAiBudget(attempts, systemClock, aiLimit(userId)),
       findDuplicates: new FindDuplicates(repos.entries),
       recordBackfill: new RecordBackfill(tx, systemClock),
-      recordEntry: new RecordEntry(tx, systemClock),
+      recordEntry: new RecordEntry(tx, systemClock, presets),
       recordRepayment: new RecordRepayment(tx, systemClock),
       recordTransfer: new RecordTransfer(tx, systemClock),
       markNoSpendDay: new MarkNoSpendDay(tx, systemClock),

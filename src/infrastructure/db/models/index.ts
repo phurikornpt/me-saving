@@ -65,6 +65,7 @@ export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes
   declare source: CreationOptional<"manual" | "preset" | "receipt" | "itemized" | "wheel">;
   declare walletId: ForeignKey<Wallet["id"]>;
   declare toWalletId: ForeignKey<Wallet["id"]> | null;
+  declare presetId: CreationOptional<string | null>;
   declare shares?: EntryShare[];
 }
 
@@ -252,6 +253,7 @@ export function initModels(sequelize: Sequelize): Models {
         source: { type: DataTypes.TEXT, allowNull: false, defaultValue: "manual" },
         walletId: { type: DataTypes.UUID, allowNull: false },
         toWalletId: { type: DataTypes.UUID, allowNull: true },
+        presetId: { type: DataTypes.UUID, allowNull: true },
       },
       opts("Entry", "entries"),
     );

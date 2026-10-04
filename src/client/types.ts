@@ -25,6 +25,8 @@ export interface EntryDTO {
   walletId: string;
   /** Where a transfer's money went. */
   toWalletId: string | null;
+  /** The preset it was logged from, if any. */
+  presetId?: string | null;
 }
 export interface WalletDTO {
   id: string;
@@ -40,6 +42,8 @@ export interface WalletDTO {
 }
 export interface PersonDTO { id: string; name: string; note: string; sort: number; archived: boolean }
 export interface CategoryDTO { id: string; name: string; icon: string; kind: "expense" | "income"; sort: number; archived: boolean }
+/** One price a preset was logged at lately: how often, and when last. */
+export interface PresetPriceDTO { amount: number; count: number; lastAt: string }
 export interface PresetDTO { id: string; label: string; icon: string; amount: number; categoryId: string | null; personId: string | null; splitKind: "equal" | "theirs" | null; walletId: string | null; sort: number }
 export interface DashboardDTO {
   today: string;

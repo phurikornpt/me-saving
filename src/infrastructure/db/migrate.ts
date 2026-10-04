@@ -8,6 +8,7 @@ import { migration as m005, type UsersMigrationContext } from "./migrations/005-
 import { migration as m006 } from "./migrations/006-me-note";
 import { migration as m007 } from "./migrations/007-wallets";
 import { migration as m008 } from "./migrations/008-monthly-summaries";
+import { migration as m009 } from "./migrations/009-entry-preset";
 
 const migrations = [
   { name: "001-initial", ...m001 },
@@ -18,6 +19,7 @@ const migrations = [
   { name: "006-me-note", ...m006 },
   { name: "007-wallets", ...m007 },
   { name: "008-monthly-summaries", ...m008 },
+  { name: "009-entry-preset", ...m009 },
 ];
 
 /** `accounts`: who owns the data recorded before accounts existed (only 005-users reads it). */
