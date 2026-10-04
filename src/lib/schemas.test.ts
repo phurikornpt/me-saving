@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { saveReceiptBody } from "./schemas";
+import { saveReceiptBody, settingsPatchBody } from "./schemas";
 
 const line = { rawName: "ข้าวปั้น", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, owners: { me: true, people: [] } };
 
@@ -23,5 +23,12 @@ describe("saveReceiptBody tolerates AI-produced text", () => {
     expect(() => saveReceiptBody.parse({ total: 1.5, lines: [line] })).toThrow();
     expect(() => saveReceiptBody.parse({ total: 100, lines: [] })).toThrow();
     expect(() => saveReceiptBody.parse({ total: 100, lines: [{ ...line, owners: { me: true, people: ["not-a-uuid"] } }] })).toThrow();
+  });
+});
+
+describe("settingsPatchBody", () => {
+  it("trims the buyer's note and caps it at 500 characters", () => {
+    expect(settingsPatchBody.parse({ meNote: "  ไม่ดื่มกาแฟ  " }).meNote).toBe("ไม่ดื่มกาแฟ");
+    expect(() => settingsPatchBody.parse({ meNote: "ก".repeat(501) })).toThrow();
   });
 });

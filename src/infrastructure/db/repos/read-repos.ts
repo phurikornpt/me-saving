@@ -121,7 +121,7 @@ export function createSettingsRepo(sequelize: Sequelize, userId: string): Settin
   const { Setting } = initModels(sequelize);
   const get = async () => {
     const [row] = await Setting.findOrCreate({ where: { userId }, defaults: { userId } });
-    return { dashboardLayout: normalizeLayout(row.dashboardLayout) };
+    return { dashboardLayout: normalizeLayout(row.dashboardLayout), meNote: row.meNote };
   };
   return {
     get,

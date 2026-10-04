@@ -134,6 +134,8 @@ export interface ReceiptParser {
     context: {
       /** Who shares this bill. Empty = just read the lines (no guessing who each is for). */
       people: Pick<PersonRecord, "id" | "name" | "note">[];
+      /** The buyer's own habits. Only sent when people share the bill. */
+      meNote?: string;
       knownNames: string[];
       categoryNames: string[];
     },
@@ -191,6 +193,8 @@ export interface PresetRepo {
 
 export interface SettingsRecord {
   dashboardLayout: LayoutItem[];
+  /** The buyer's own habits, for the receipt AI on shared bills. */
+  meNote: string;
 }
 export interface SettingsRepo {
   get(): Promise<SettingsRecord>;

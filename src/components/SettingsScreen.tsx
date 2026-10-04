@@ -11,6 +11,7 @@ import { readTheme, setTheme, subscribeTheme, type ThemePref } from "@/client/th
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { MeNoteField } from "./MeNoteField";
 import { PeoplePicker } from "./People";
 import { PeopleSettings } from "./PeopleSettings";
 
@@ -26,7 +27,8 @@ function IconPicker({ value, onChange }: { value: string; onChange: (v: string) 
   return (
     <div className="flex flex-wrap gap-2">
       {ICON_CHOICES.map((n) => (
-        <button key={n} type="button" aria-label={n} aria-pressed={value === n} onClick={() => onChange(n)} className="pill !p-2">
+        // Fixed square: the button's line-height would otherwise make it taller than wide (an oval)
+        <button key={n} type="button" aria-label={n} aria-pressed={value === n} onClick={() => onChange(n)} className="pill flex h-10 w-10 items-center justify-center !p-0">
           <Icon name={n} size={20} />
         </button>
       ))}
@@ -103,6 +105,7 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
         </Section>
 
         <Section title="คนที่หารด้วย (ออกก่อนให้ใครบ้าง)" id="people">
+          <MeNoteField />
           <PeopleSettings />
         </Section>
 

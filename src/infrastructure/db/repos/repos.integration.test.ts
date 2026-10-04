@@ -234,6 +234,9 @@ describe("categories, presets, settings", () => {
     expect(first.dashboardLayout.map((i) => i.id)).toContain("calendar");
     await repo.update({ dashboardLayout: [{ id: "calendar", enabled: true }] });
     expect((await repo.get()).dashboardLayout[0]).toEqual({ id: "calendar", enabled: true });
+    expect(first.meNote).toBe("");
+    await repo.update({ meNote: "ไม่ดื่มกาแฟ" });
+    expect(await repo.get()).toMatchObject({ meNote: "ไม่ดื่มกาแฟ", dashboardLayout: [{ id: "calendar", enabled: true }] });
   });
   it("people: listed in order, edited and archived", async () => {
     const repo = createRepos(sequelize, USER).people;

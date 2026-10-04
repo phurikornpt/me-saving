@@ -60,7 +60,7 @@ function build() {
       managePeople: new ManagePeople(repos.people),
       saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
       parseReceipt: () =>
-        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, attempts, systemClock, {
+        new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, {
           key: `receipt-parse:${userId}`,
           perDay: scanLimitPerDay(),
         }),

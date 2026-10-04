@@ -52,4 +52,4 @@ export type OutstandingDTO = { personId: string; balance: number; items: { entry
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
 export interface ReceiptDraftDTO { merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
-export interface SettingsDTO { dashboardLayout: LayoutItem[] }
+export interface SettingsDTO { dashboardLayout: LayoutItem[]; meNote: string }
