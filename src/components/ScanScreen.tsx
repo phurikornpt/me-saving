@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { activePeople, describeShares } from "@/client/people";
@@ -28,6 +29,7 @@ type Header = { merchant: string | null; date: string | null };
  */
 export function ScanScreen() {
   const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -119,7 +121,7 @@ export function ScanScreen() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">{onBill.length ? "สแกนหารกัน" : "สแกนใบเสร็จ"}</h1>

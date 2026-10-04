@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useState } from "react";
 import { api, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
@@ -20,6 +21,7 @@ import { WalletPicker } from "./Wallets";
 /** A group typed by hand ("ค่า 7-11": นม 10, ไก่ 50), each item with its own owners. Saved as one expense. */
 export function ItemizedScreen() {
   const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -89,7 +91,7 @@ export function ItemizedScreen() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">หลายรายการ</h1>

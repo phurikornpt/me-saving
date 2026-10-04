@@ -31,7 +31,7 @@ export function SettingsScreen({ logout }: { logout: () => Promise<void> }) {
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-16">
       <header className="safe-top flex items-center gap-2 pb-3">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.replace("/")}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">ตั้งค่า</h1>
