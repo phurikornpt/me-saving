@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { _createFlag, clearFirstLogToday, markFirstLogToday, readFirstLog, subscribeFirstLog } from "./justLogged";
-import { DUR, staggerDelay } from "./motion";
+import { createDelayedFlag, DUR, staggerDelay } from "./motion";
 
 describe("staggerDelay", () => {
   it("grows by one step per item", () => {
@@ -70,5 +70,58 @@ describe("self-clearing flags", () => {
     f.mark();
     vi.advanceTimersByTime(900);
     expect(f.read()).toBe(true);
+  });
+});
+
+describe("createDelayedFlag", () => {
+  afterEach(() => vi.useRealTimers());
+  const setup = () => {
+    vi.useFakeTimers();
+    const seen: boolean[] = [];
+    return { seen, flag: createDelayedFlag(150, 400, (v) => seen.push(v)) };
+  };
+
+  it("never shows for a wait shorter than the delay", () => {
+    const { seen, flag } = setup();
+    flag.set(true);
+    vi.advanceTimersByTime(100);
+    flag.set(false);
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
+  });
+  it("shows after the delay and stays for the minimum even if the wait ends at once", () => {
+    const { seen, flag } = setup();
+    flag.set(true);
+    vi.advanceTimersByTime(150);
+    expect(seen).toEqual([true]);
+    vi.advanceTimersByTime(50);
+    flag.set(false);
+    vi.advanceTimersByTime(349);
+    expect(seen).toEqual([true]);
+    vi.advanceTimersByTime(1);
+    expect(seen).toEqual([true, false]);
+  });
+  it("hides at once when it has already been shown long enough", () => {
+    const { seen, flag } = setup();
+    flag.set(true);
+    vi.advanceTimersByTime(1000);
+    flag.set(false);
+    expect(seen).toEqual([true, false]);
+  });
+  it("a new wait while it is waiting to hide keeps it on", () => {
+    const { seen, flag } = setup();
+    flag.set(true);
+    vi.advanceTimersByTime(150);
+    flag.set(false);
+    flag.set(true);
+    vi.advanceTimersByTime(2000);
+    expect(seen).toEqual([true]);
+  });
+  it("dispose cancels pending changes", () => {
+    const { seen, flag } = setup();
+    flag.set(true);
+    flag.dispose();
+    vi.advanceTimersByTime(1000);
+    expect(seen).toEqual([]);
   });
 });

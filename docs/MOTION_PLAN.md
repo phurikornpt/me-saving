@@ -143,7 +143,9 @@ Prototype ที่ตกลงแล้ว (artifact ส่วนตัวข�
 |---|---|---|---|
 | P1 | ปฏิทิน: เลื่อนเดือน/สลับตัวกรองเมื่อข้อมูลมาถึง, ตารางจางระหว่างรอ · สรุปตามหมวด: จางระหว่างรอ · prefetch เดือนก่อน/ถัดไป | `CalendarWidget.tsx`, `CategorySummaryWidget.tsx`, `queries.ts` | เขียนแล้ว |
 | P1.5 | หน้าตั้งค่า: เดิมหน้าเปิดก่อนข้อมูลมา → แถวสรุปบนหน้าแรกโผล่ทีหลังทำให้แถวสูงขึ้น และหน้าย่อยโชว์ "ยังไม่มีใคร/ยังไม่มีหมวด" ทั้งที่ยังโหลดไม่เสร็จ · แก้: แถวสรุปมี skeleton จองความสูง แล้วข้อความจางเข้า · `SettingsGroup loading` แสดงแถว skeleton แทน แล้วรายการจางเข้า (เฉพาะกรณีที่ต้องรอ) | `settings/ui.tsx`, `SettingsScreen.tsx`, หน้าย่อยทั้งหมด, `globals.css` (`.fade-in`) | เขียนแล้ว |
-| P2 | หน้าแรก: skeleton ค่อยๆ สลับเป็นเนื้อหา, วิดเจ็ตไหลเข้าเมื่อข้อมูลมาครั้งแรก (ไม่ผูกกับ intro 1.2 วินาที) เล่นครั้งเดียว | `Dashboard.tsx`, `Loading.tsx` | ยังไม่ทำ |
-| P3 | `useDelayedFlag(active, { delay, min })` ใน `motion.ts` ใช้กับ `TopProgress`, sheet ของวัน, `GroupEntryScreen` · sheet ของวัน: skeleton แถวแทนข้อความ, แถวไหลเข้าเมื่อข้อมูลมา, prefetch ตอน `pointerdown` | `motion.ts`, `Loading.tsx`, `CalendarWidget.tsx` | ยังไม่ทำ |
+| P1.6 | หน้าโอน/รับเงินคืน/จดรายการ: เดิมโชว์ "ต้องมีกระเป๋าอย่างน้อย 2 ใบ" / "ไม่มีใครติดเรา" ทั้งที่ยังโหลดไม่เสร็จ · แก้: skeleton จนกว่าข้อมูลมา · ตารางหมวดในหน้าจดมี skeleton แล้วจางเข้า (แป้นตัวเลขไม่ถูกหน่วง) | `TransferScreen.tsx`, `RepayScreen.tsx`, `NewEntryScreen.tsx` | เขียนแล้ว |
+| P2 | หน้าแรก: วิดเจ็ตไหลเข้าเมื่อข้อมูลชุดแรกมาถึงหลังรอ (เดิมเล่นเฉพาะช่วง intro 1.2 วินาที) ข้อมูลจาก cache ขึ้นทันทีไม่มี animation · skeleton ถูกแทนทันที ไม่ crossfade (ถ้าให้ skeleton ค้างจางออก วิดเจ็ตจะโดนดันลง) | `Dashboard.tsx` | เขียนแล้ว |
+| P3 | `createDelayedFlag` / `useDelayedFlag` (หน่วง 150 ms ค้างขั้นต่ำ 400 ms, มีเทสต์) ใช้กับ `TopProgress` · `useArrivedLate` บอกว่า "ข้อมูลเพิ่งมาหลังรอ" · sheet ของวัน: skeleton แทนข้อความ, แถวไหลเข้าทีละแถว, prefetch ตอนแตะช่องวัน | `motion.ts`, `useDelayedFlag.ts`, `Loading.tsx`, `CalendarWidget.tsx` | เขียนแล้ว |
+| ไม่ได้ทำ | `GroupEntryScreen` (มี skeleton อยู่แล้ว แค่ไม่จางเข้า) · ช่องพฤติกรรมของเราใน `MeNoteField` (ข้อความโผล่ตอนโหลดเสร็จ) | — | เว้นไว้ |
 
 ความเสี่ยง: prefetch เพิ่มจำนวนเรียก API (query เล็ก มี cache) · เน็ตช้าจะรู้สึกว่า motion ช้าลง แต่การจางบอกผู้ใช้ว่ากำลังโหลด · ตรวจด้วยตาบน preview ด้วย Slow 3G

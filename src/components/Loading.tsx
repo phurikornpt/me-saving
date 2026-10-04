@@ -3,6 +3,7 @@
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { SLOW_AFTER_MS } from "@/client/motion";
+import { useDelayedFlag } from "@/client/useDelayedFlag";
 import { AuroraCloud } from "./AuroraCloud";
 
 export function Spinner({ size = 18, className = "" }: { size?: number; className?: string }) {
@@ -32,18 +33,9 @@ export function DashboardSkeleton() {
   );
 }
 
-/** Thin indeterminate bar at the top while anything is fetching or saving. Waits 250ms so quick calls don't flash it. */
+/** Thin indeterminate bar at the top while anything is fetching or saving. Waits 250ms so quick calls don't flash it, then stays 400ms. */
 export function TopProgress() {
-  const busy = useIsFetching() + useIsMutating() > 0;
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    if (!busy) return;
-    const t = setTimeout(() => setShow(true), 250);
-    return () => {
-      clearTimeout(t);
-      setShow(false);
-    };
-  }, [busy]);
+  const show = useDelayedFlag(useIsFetching() + useIsMutating() > 0, 250, 400);
   if (!show) return null;
   return (
     <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden">

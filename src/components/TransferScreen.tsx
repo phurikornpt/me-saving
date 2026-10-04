@@ -11,6 +11,7 @@ import { activeWallets, defaultWalletId, walletName } from "@/client/wallets";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { Skeleton } from "./Loading";
 import { Keypad } from "./Keypad";
 import { WalletPicker } from "./Wallets";
 
@@ -68,7 +69,12 @@ export function TransferScreen() {
         <h1 className="font-display text-xl">โอนระหว่างกระเป๋า</h1>
       </header>
 
-      {active.length < 2 ? (
+      {!data ? (
+        <section className="flex flex-col gap-2 px-4 pt-2" aria-busy="true" aria-label="กำลังโหลด">
+          <Skeleton className="h-9 w-2/3" />
+          <Skeleton className="h-9 w-2/3" />
+        </section>
+      ) : active.length < 2 ? (
         <p className="px-6 pt-6 text-sm text-ink-3">ต้องมีกระเป๋าอย่างน้อย 2 ใบ เพิ่มได้ที่หน้าตั้งค่า</p>
       ) : (
         <>

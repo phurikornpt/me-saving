@@ -1,14 +1,15 @@
 "use client";
 
-import { DUR } from "@/client/motion";
+import { DUR, staggerDelay } from "@/client/motion";
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { AnimatePresence, motion, useAnimate } from "motion/react";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { readNoSpendLogged, subscribeNoSpendLogged } from "@/client/justLogged";
-import { calendarQuery, useCalendar, useCategories, useEntriesOn } from "@/client/queries";
+import { calendarQuery, entriesQuery, useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
 import type { EntryDTO } from "@/client/types";
 import { addDays } from "@/domain/day";
@@ -17,6 +18,7 @@ import { formatBaht, formatCompact } from "@/domain/money";
 import { EditEntrySheet } from "../EditEntrySheet";
 import { EntryRow } from "../EntryRow";
 import { Icon } from "../Icon";
+import { Skeleton } from "../Loading";
 import { Sheet } from "../Sheet";
 import { WidgetCard } from "./WidgetCard";
 
@@ -52,6 +54,7 @@ export function CalendarWidget({ today }: { today: string }) {
   }, [data, month, wallet, spend, qc]);
   const { data: categories = [] } = useCategories();
   const dayEntries = useEntriesOn(openDay);
+  const rowsArrivedLate = useArrivedLate(dayEntries.isLoading);
   const shown = dayEntries.data?.filter((e) => inWallet(e, wallet) && matchesSpend(e, spend));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
@@ -105,6 +108,8 @@ export function CalendarWidget({ today }: { today: string }) {
             return (
               <button
                 key={d.day}
+                // start fetching the day as the finger lands, so the list is often ready by the time the sheet is open
+                onPointerDown={() => void qc.prefetchQuery(entriesQuery(d.day))}
                 onClick={() => setOpenDay(d.day)}
                 className={`relative flex min-h-[3.6rem] flex-col items-center rounded-xl px-0.5 pt-1 text-[10px] leading-tight ${
                   d.day === today ? "ring-2 ring-ink" : ""
@@ -143,14 +148,21 @@ export function CalendarWidget({ today }: { today: string }) {
         onOpenChange={(o) => !o && setOpenDay(null)}
         title={openDay ? new Date(`${openDay}T12:00:00Z`).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" }) : ""}
       >
-        {dayEntries.isLoading && <p className="py-4 text-center text-ink-3">กำลังโหลด…</p>}
+        {dayEntries.isLoading && (
+          <div className="flex flex-col gap-3 py-3" aria-busy="true" aria-label="กำลังโหลด">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
         {shown?.length === 0 && <p className="py-4 text-center text-ink-3">ไม่มีรายการ</p>}
         <ul className="divide-y divide-line">
           <AnimatePresence initial={false}>
-            {shown?.map((e) => (
+            {shown?.map((e, i) => (
               <motion.li
                 key={e.id}
                 layout="position"
+                initial={rowsArrivedLate ? { opacity: 0, y: 8 } : false}
+                animate={{ opacity: 1, y: 0, transition: { duration: DUR.base, delay: rowsArrivedLate ? staggerDelay(i) : 0 } }}
                 className="overflow-hidden"
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: DUR.base }}

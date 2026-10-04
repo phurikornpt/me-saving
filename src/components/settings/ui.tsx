@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { FORWARD } from "@/client/nav";
 import { Icon } from "../Icon";
 import { Skeleton } from "../Loading";
@@ -52,12 +53,11 @@ function SkeletonRows({ n }: { n: number }) {
  * list is never claimed before the data is known); the real rows then fade in, but only if we had to wait.
  */
 export function SettingsGroup({ title, children, footer, loading = false }: { title?: string; children: ReactNode; footer?: ReactNode; loading?: boolean }) {
-  const [waited, setWaited] = useState(loading);
-  if (loading && !waited) setWaited(true);
+  const arrived = useArrivedLate(loading);
   return (
     <section>
       {title && <h2 className="mb-1 px-2 text-sm text-ink-3">{title}</h2>}
-      <div className={`divide-y divide-line rounded-[24px] bg-card px-4 ${waited && !loading ? "fade-in" : ""}`}>
+      <div className={`divide-y divide-line rounded-[24px] bg-card px-4 ${arrived ? "fade-in" : ""}`}>
         {loading ? <SkeletonRows n={2} /> : children}
       </div>
       {footer && <p className="mt-1 px-2 text-xs text-ink-3">{footer}</p>}

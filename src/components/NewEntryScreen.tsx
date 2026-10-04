@@ -13,12 +13,14 @@ import { activePeople, describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
 import type { Share, SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { sharesFor, sumShares } from "@/domain/split";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Keypad } from "./Keypad";
+import { Skeleton } from "./Loading";
 import { PeoplePicker, PersonDot } from "./People";
 import { WalletPicker } from "./Wallets";
 
@@ -39,7 +41,8 @@ export function NewEntryScreen() {
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
-  const { data: categories = [] } = useCategories();
+  const { data: categoryData } = useCategories();
+  const categoriesArrived = useArrivedLate(!categoryData);
   const { data: people = [] } = usePeople();
   const { data: wallets = [] } = useWallets();
   // null = the default wallet (decided by the server, so a stale list can't send a wrong one)
@@ -63,8 +66,8 @@ export function NewEntryScreen() {
   );
 
   const visible = useMemo(
-    () => sortByUsage(categories.filter((c) => c.kind === kind && !c.archived)),
-    [categories, kind],
+    () => sortByUsage((categoryData ?? []).filter((c) => c.kind === kind && !c.archived)),
+    [categoryData, kind],
   );
 
   const total = useMemo(() => {
@@ -261,7 +264,13 @@ export function NewEntryScreen() {
 
       <section className="px-4 pt-3">
         <p className="mb-2 text-sm text-ink-3">แตะหมวดเพื่อบันทึก</p>
-        <div className="grid grid-cols-4 gap-2">
+        {/* placeholders until the categories load, so the grid does not pop in under the keypad's thumb */}
+        {!categoryData && (
+          <div className="grid grid-cols-4 gap-2" aria-busy="true" aria-label="กำลังโหลด">
+            {Array.from({ length: 8 }, (_, i) => <Skeleton key={i} className="h-[4.5rem] !rounded-2xl" />)}
+          </div>
+        )}
+        <div className={`grid grid-cols-4 gap-2 ${categoriesArrived ? "fade-in" : ""}`}>
           {visible.map((c) => (
             <button
               key={c.id}

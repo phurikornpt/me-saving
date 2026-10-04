@@ -39,7 +39,8 @@ export const useMonthSummary = (month: string, enabled: boolean) => {
 };
 /** What is left of the shared daily AI allowance. Other screens invalidate ["aiBudget"] after an AI call. */
 export const useAiBudget = () => useQuery({ queryKey: ["aiBudget"], queryFn: api.aiBudget, staleTime: 30_000 });
-export const useEntriesOn =(day: string | null) =>
+export const entriesQuery = (day: string) => queryOptions({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day) });
+export const useEntriesOn = (day: string | null) =>
   useQuery({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day!), enabled: !!day });
 export const useOutstanding = () => useQuery({ queryKey: ["outstanding"], queryFn: api.outstanding });
 export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: api.people, staleTime: 5 * 60_000 });
