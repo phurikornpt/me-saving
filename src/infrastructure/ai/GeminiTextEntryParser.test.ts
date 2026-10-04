@@ -113,3 +113,22 @@ describe("GeminiTextEntryParser", () => {
     vi.doUnmock("@google/genai");
   });
 });
+
+describe("wire schema", () => {
+  // Gemini rejects schemas it dislikes with 400 INVALID_ARGUMENT. Keep to constructs the receipt parser already sends.
+  const risky = (json: string) => ({
+    bareNullType: /"type":"null"(?!\})/.test(json.replace(/\{"type":"null"\}/g, "")),
+    numericBounds: /"(minimum|maximum)"/.test(json),
+    maxItems: /"maxItems"/.test(json),
+    nullUnionWithEnum: /"anyOf":\[\{[^\]]*"enum"/.test(json),
+  });
+  it.each([
+    ["with people and wallets", ctx],
+    ["without people or wallets", { ...ctx, people: [], wallets: [] }],
+  ])("avoids bounds, maxItems and enum/null unions %s", async (_n, c) => {
+    const { wireSchema } = await import("./GeminiTextEntryParser");
+    const json = JSON.stringify(wireSchema(c));
+    expect(risky(json)).toEqual({ bareNullType: false, numericBounds: false, maxItems: false, nullUnionWithEnum: false });
+    expect(json).not.toContain("$schema");
+  });
+});
