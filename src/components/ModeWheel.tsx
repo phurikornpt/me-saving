@@ -96,6 +96,7 @@ export function ModeWheel({
         aria-label="เพิ่มรายการ (กดค้างเพื่อเลือกโหมด)"
         className="intro-pop btn3d fixed bottom-[max(1.75rem,env(safe-area-inset-bottom))] left-1/2 z-30 h-16 w-16 -translate-x-1/2 !p-0"
         style={{ touchAction: "none" }}
+        data-no-pull
         onContextMenu={(e) => e.preventDefault()}
         onPointerDown={(e) => {
           try {

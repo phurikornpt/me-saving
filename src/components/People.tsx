@@ -1,5 +1,6 @@
 "use client";
 
+import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { activePeople, personColor } from "@/client/people";
 import type { LineOwners, PersonDTO } from "@/client/types";
@@ -22,7 +23,7 @@ export function PeoplePicker({
   if (visible.length === 0) {
     return (
       <p className="text-sm text-ink-3">
-        ยังไม่มีคนที่หารด้วย <Link href="/settings/people" className="underline">เพิ่มที่การตั้งค่า</Link>
+        ยังไม่มีคนที่หารด้วย <Link href="/settings/people" transitionTypes={FORWARD} className="underline">เพิ่มที่การตั้งค่า</Link>
       </p>
     );
   }

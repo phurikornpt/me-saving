@@ -30,7 +30,7 @@ export function EntryRow({ entry, categories, onClick }: { entry: EntryDTO; cate
   const sign = entry.kind === "expense" ? "-" : "+";
 
   return (
-    <button onClick={onClick} disabled={!onClick} className={`flex w-full items-center gap-3 py-2 text-left ${pending ? "opacity-60" : ""}`}>
+    <button onClick={onClick} disabled={!onClick} className={`press flex w-full items-center gap-3 py-2 text-left ${pending ? "opacity-60" : ""}`}>
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface">
         <Icon name={icon} size={22} />
       </span>
@@ -51,7 +51,7 @@ export function EntryRow({ entry, categories, onClick }: { entry: EntryDTO; cate
 function TransferRow({ entry, wallets, onClick }: { entry: EntryDTO; wallets: WalletDTO[]; onClick?: () => void }) {
   const pending = isPendingEntry(entry);
   return (
-    <button onClick={onClick} disabled={!onClick} className={`flex w-full items-center gap-3 py-2 text-left ${pending ? "opacity-60" : ""}`}>
+    <button onClick={onClick} disabled={!onClick} className={`press flex w-full items-center gap-3 py-2 text-left ${pending ? "opacity-60" : ""}`}>
       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface">
         <Icon name="swap_horiz" size={22} />
       </span>

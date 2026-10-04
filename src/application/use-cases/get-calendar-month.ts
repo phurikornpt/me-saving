@@ -1,5 +1,6 @@
 import { monthDays, type DayKey } from "@/domain/day";
 import type { Satang } from "@/domain/money";
+import type { SpendFilter } from "@/domain/spend-filter";
 import type { StatsRepo } from "../ports";
 
 export interface CalendarDay {
@@ -21,10 +22,10 @@ export interface CalendarMonth {
 export class GetCalendarMonth {
   constructor(private readonly stats: StatsRepo) {}
 
-  async execute(month: string, walletId?: string): Promise<CalendarMonth> {
+  async execute(month: string, walletId?: string, spend?: SpendFilter): Promise<CalendarMonth> {
     const { days, nextMonthStart } = monthDays(month);
     const [totals, kinds] = await Promise.all([
-      this.stats.dailyTotals(days[0], nextMonthStart, walletId),
+      this.stats.dailyTotals(days[0], nextMonthStart, walletId, spend),
       this.stats.loggedKinds(days[0], nextMonthStart),
     ]);
     const byDay = new Map(totals.map((t) => [t.day, t]));

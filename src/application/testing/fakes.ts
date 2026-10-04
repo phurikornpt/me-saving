@@ -4,10 +4,12 @@ import { netFlows } from "@/domain/wallet";
 import type {
   Clock,
   EntryRecord,
+  MonthlySummaryRecord,
   NewEntry,
   NewReceiptLine,
   PersonRecord,
   Repos,
+  SummaryRepo,
   TransactionRunner,
   WalletRecord,
 } from "../ports";
@@ -196,4 +198,17 @@ export function createFakeRepos() {
     },
   };
   return { repos, tx, entries, days, xp, lines, memory, people, wallets, settings };
+}
+
+export function createFakeSummaryRepo(): SummaryRepo & { rows: Map<string, MonthlySummaryRecord> } {
+  const rows = new Map<string, MonthlySummaryRecord>();
+  return {
+    rows,
+    async get(month) {
+      return rows.get(month) ?? null;
+    },
+    async save(month, text, at) {
+      rows.set(month, { month, text, createdAt: at });
+    },
+  };
 }

@@ -182,6 +182,10 @@ body {
 .pill-slide { transition: color 120ms; }
 .pill-slide[aria-pressed="true"] { background: var(--card); border-color: transparent; }
 
+/* Pressable rows and cards sink a little while held */
+.press { transition: transform 140ms cubic-bezier(0.3, 1.4, 0.5, 1), opacity 140ms; touch-action: manipulation; }
+.press:active:not(:disabled) { transform: scale(0.97); opacity: 0.85; transition-duration: 70ms; }
+
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 .safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }
 
@@ -224,7 +228,18 @@ html[data-intro="play"] .intro-pop { animation: intro-pop 450ms cubic-bezier(0.3
 @keyframes rise-in { from { opacity: 0; translate: 0 12px; } to { opacity: 1; translate: 0 0; } }
 @keyframes intro-pop { from { opacity: 0; scale: 0.4; } to { opacity: 1; scale: 1; } }
 
+/* Screen slides (PageTransition): forward = new screen from the right, back = from the left */
+::view-transition { pointer-events: none; }
+::view-transition-old(.nav-forward) { --slide-offset: -48px; animation: 140ms ease-in both vt-fade reverse, 340ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide reverse; }
+::view-transition-new(.nav-forward) { --slide-offset: 48px; animation: 200ms ease-out 100ms both vt-fade, 340ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide; }
+::view-transition-old(.nav-back) { --slide-offset: 48px; animation: 140ms ease-in both vt-fade reverse, 340ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide reverse; }
+::view-transition-new(.nav-back) { --slide-offset: -48px; animation: 200ms ease-out 100ms both vt-fade, 340ms cubic-bezier(0.32, 0.72, 0, 1) both vt-slide; }
+@keyframes vt-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes vt-slide { from { translate: var(--slide-offset) 0; } to { translate: 0 0; } }
+
 @media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
+  .press, .press:active:not(:disabled) { transform: none; transition: none; }
   .skeleton, .top-progress-bar, .scan-line { animation: none; }
   html[data-intro="play"] .app-intro { display: none; }
   html[data-intro="play"] .intro-rise, html[data-intro="play"] .intro-pop { animation: none; }
