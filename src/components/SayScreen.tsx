@@ -145,7 +145,7 @@ export function SayScreen() {
   })();
   const problem = draftProblem(total, split, personIds, kind);
   const unsure = (f: EntryTextDraftDTO["uncertain"][number]) => draft?.uncertain.includes(f) ?? false;
-  const flag = (f: EntryTextDraftDTO["uncertain"][number]) => (unsure(f) ? "rounded-2xl ring-2 ring-streak" : "");
+  const flag = (f: EntryTextDraftDTO["uncertain"][number]) => (unsure(f) ? "flash-once rounded-2xl ring-2 ring-streak" : "");
   const visible = useMemo(() => sortByUsage(categories.filter((c) => c.kind === kind && !c.archived)), [categories, kind]);
 
   const save = useMutation({

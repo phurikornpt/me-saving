@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 
-export type CloudMode = "idle" | "listening" | "thinking";
+export type CloudMode = "idle" | "listening" | "thinking" | "done" | "error";
 
 const SIZE = 320; // canvas size in css px
 type Rgb = [number, number, number];
@@ -10,12 +10,24 @@ const GREEN: Rgb = [41, 204, 87];
 const BLUE: Rgb = [69, 109, 255];
 const VIOLET: Rgb = [139, 108, 255];
 const LIME: Rgb = [215, 242, 90];
+const GREY: Rgb = [120, 124, 134];
 
-/** Where each state settles: orbit speed, size, how far the blobs spread, 0..1 green->violet, brightness. */
-const LOOK: Record<CloudMode, { spin: number; size: number; spread: number; think: number; energy: number }> = {
-  idle: { spin: 0.4, size: 0.8, spread: 0.5, think: 0, energy: 0.35 },
-  listening: { spin: 1, size: 1, spread: 1, think: 0, energy: 1 },
-  thinking: { spin: 3.2, size: 0.72, spread: 0.35, think: 1, energy: 0.7 },
+export interface CloudLook {
+  spin: number; // orbit speed
+  size: number;
+  spread: number; // how far the blobs drift from the centre
+  think: number; // 0..1: green/lime -> blue/violet
+  energy: number; // brightness
+  grey: number; // 0..1: drained of colour (the AI failed)
+}
+
+/** Where each state settles. `done` is the calm after an answer; `error` is grey and almost still. */
+export const CLOUD_LOOK: Record<CloudMode, CloudLook> = {
+  idle: { spin: 0.4, size: 0.8, spread: 0.5, think: 0, energy: 0.35, grey: 0 },
+  listening: { spin: 1, size: 1, spread: 1, think: 0, energy: 1, grey: 0 },
+  thinking: { spin: 3.2, size: 0.72, spread: 0.35, think: 1, energy: 0.7, grey: 0 },
+  done: { spin: 0.6, size: 0.85, spread: 0.5, think: 0, energy: 0.6, grey: 0 },
+  error: { spin: 0.06, size: 0.66, spread: 0.22, think: 0, energy: 0.12, grey: 1 },
 };
 
 const BLOBS: { c: Rgb; fx: number; fy: number; ph: number; r: number }[] = [
@@ -35,7 +47,7 @@ const rgba = (c: Rgb, a: number) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${
  * flickers with every recognised word while listening (`pulse` goes up by one per word), and pulls in and spins
  * in cooler colours while thinking. Pure decoration: the screen reads fine without it.
  */
-export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; pulse: number; className?: string }) {
+export function AuroraCloud({ mode, pulse, blur = 10, className = "" }: { mode: CloudMode; pulse: number; blur?: number; className?: string }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const live = useRef({ mode, kick: 0 });
 
@@ -55,7 +67,7 @@ export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; 
     el.height = SIZE * dpr;
     ctx.scale(dpr, dpr);
     const slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.15 : 1;
-    const p = { spin: 0.4, size: 0.8, spread: 0.5, think: 0, energy: 0.35 };
+    const p: CloudLook = { ...CLOUD_LOOK.idle };
     let amp = 0;
     let ang = 0;
     let last = 0;
@@ -69,13 +81,14 @@ export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; 
       }
       const dt = Math.min((now - (last || now)) / 1000, 0.05);
       last = now;
-      const target = LOOK[live.current.mode];
+      const target = CLOUD_LOOK[live.current.mode];
       const k = 1 - Math.pow(0.001, dt); // ease toward the state's look
       p.spin += (target.spin - p.spin) * k;
       p.size += (target.size - p.size) * k;
       p.spread += (target.spread - p.spread) * k;
       p.think += (target.think - p.think) * k;
       p.energy += (target.energy - p.energy) * k;
+      p.grey += (target.grey - p.grey) * k;
       amp += (live.current.kick - amp) * (1 - Math.pow(0.0005, dt));
       live.current.kick *= Math.pow(0.02, dt); // each word is a pulse that fades
       ang += dt * p.spin * slow;
@@ -91,7 +104,7 @@ export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; 
         const rad = s * b.r * (1 + amp * 0.5 + 0.06 * Math.sin(t * 2 + b.ph));
         // blobs lean toward the state's colours: green/lime while listening, blue/violet while thinking
         const lean = i % 2 ? mix(LIME, VIOLET, p.think) : mix(GREEN, BLUE, p.think);
-        const col = mix(b.c, lean, p.think * 0.8);
+        const col = mix(mix(b.c, lean, p.think * 0.8), GREY, p.grey);
         const alpha = (0.35 + 0.55 * p.energy) * (i === 3 ? 1 - p.think : 1);
         const g = ctx.createRadialGradient(x, y, 0, x, y, rad);
         g.addColorStop(0, rgba(col, alpha));
@@ -102,7 +115,7 @@ export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; 
         ctx.fill();
       });
       const core = ctx.createRadialGradient(SIZE / 2, SIZE / 2, 0, SIZE / 2, SIZE / 2, s * (0.2 + amp * 0.12));
-      core.addColorStop(0, `rgba(255,255,255,${0.3 + amp * 0.4})`);
+      core.addColorStop(0, `rgba(255,255,255,${(0.3 + amp * 0.4) * (1 - p.grey * 0.8)})`);
       core.addColorStop(1, "rgba(255,255,255,0)");
       ctx.fillStyle = core;
       ctx.beginPath();
@@ -113,5 +126,5 @@ export function AuroraCloud({ mode, pulse, className = "" }: { mode: CloudMode; 
     return () => cancelAnimationFrame(raf);
   }, []);
 
-  return <canvas ref={canvas} aria-hidden className={className} style={{ filter: "blur(10px) saturate(1.25)" }} />;
+  return <canvas ref={canvas} aria-hidden className={className} style={{ filter: `blur(${blur}px) saturate(1.25)` }} />;
 }

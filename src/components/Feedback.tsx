@@ -90,13 +90,19 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
               <span>{toast.message}</span>
               {toast.action && (
                 <button
-                  className="font-medium underline underline-offset-2"
+                  className="relative overflow-hidden rounded-full bg-white/20 px-4 py-1.5 font-medium"
                   onClick={() => {
                     toast.action!.run();
                     setToast(null);
                   }}
                 >
-                  {toast.action.label}
+                  {/* the button is also the clock: this fill drains over the time the toast stays */}
+                  <span
+                    aria-hidden
+                    className="toast-drain absolute inset-0 bg-primary/60 motion-reduce:hidden"
+                    style={{ "--toast-ms": `${toast.ms ?? 5000}ms` } as React.CSSProperties}
+                  />
+                  <span className="relative">{toast.action.label}</span>
                 </button>
               )}
             </motion.div>
