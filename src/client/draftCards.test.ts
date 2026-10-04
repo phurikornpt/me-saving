@@ -52,12 +52,12 @@ describe("draft cards", () => {
     expect(groups(mergeCards(withGroup, withGroup[0].id, withGroup[1].id))[0].lines).toHaveLength(3);
   });
 
-  it("splits a group into one single per line, but never past 10 cards", () => {
+  it("splits a group into one single per line, but never past the card limit", () => {
     const cards = fromDrafts([group()]);
     const out = splitGroup(cards, cards[0].id);
     expect(out.map((c) => c.type)).toEqual(["single", "single"]);
     expect((out[0] as SingleCard).split).toBe("theirs");
-    const crowded = fromDrafts([group(), ...Array(9).fill(single())]);
+    const crowded = fromDrafts([group(), ...Array(59).fill(single())]);
     expect(splitGroup(crowded, crowded[0].id)).toBe(crowded);
   });
 
@@ -75,7 +75,7 @@ describe("draft cards", () => {
     const g = fromDrafts([group()]);
     expect(cardsProblem(updateLine(g, (g[0] as GroupCard).lines[0].id, { amount: "" }))).toContain("ราคา");
     expect(cardsProblem(updateLine(g, (g[0] as GroupCard).lines[0].id, { personIds: [] }))).toContain("เลือกคน");
-    expect(cardsProblem(fromDrafts(Array(11).fill(single())))).toContain("10");
+    expect(cardsProblem(fromDrafts(Array(61).fill(single())))).toContain("60");
   });
 
   it("shows the expense total in the headline, incomes only when that's all there is", () => {
@@ -93,5 +93,25 @@ describe("draft cards", () => {
         { canonicalName: "ไก่", price: 4500, owners: { me: true, people: [] } },
       ],
     });
+  });
+
+  it("sends each card's own time, and leaves unticked cards out of everything", () => {
+    const cards = fromDrafts([single(), group(), single({ amount: 1000 })]);
+    const at = { kind: "at" as const, day: "2026-10-01", hour: 9, minute: 30 };
+    const timed = cards.map((c, i) => (i === 0 ? { ...c, when: at } : i === 2 ? { ...c, selected: false } : c));
+    const items = toBatchItems(timed);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({ occurredAt: "2026-10-01T02:30:00.000Z" });
+    expect(items[1]).toMatchObject({ occurredAt: undefined });
+    expect(headlineTotal(timed)).toBe(6000 + 7500);
+    expect(cardsProblem(timed.map((c, i) => (i === 2 ? { ...c, amount: "" } : c)))).toBeNull(); // an unticked card needs no amount
+    expect(cardsProblem(timed.map((c) => ({ ...c, selected: false })))).toContain("ติ๊ก");
+  });
+
+  it("a line split out of a group keeps the group's time", () => {
+    const [g] = fromDrafts([group()]);
+    const at = { kind: "at" as const, day: "2026-10-01", hour: 9, minute: 0 };
+    const out = splitGroup([{ ...g, when: at } as GroupCard], g.id);
+    expect(out.every((c) => c.type === "single" && c.when === at)).toBe(true);
   });
 });

@@ -11,6 +11,7 @@ import { applyOptimisticEntry } from "@/client/optimistic";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { activePeople, describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
+import { isBackdated, occurredAtOf, whenOfDay, type WhenChoice } from "@/client/presetChoices";
 import type { Share, SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { useArrivedLate } from "@/client/useDelayedFlag";
@@ -23,6 +24,7 @@ import { Keypad } from "./Keypad";
 import { Skeleton } from "./Loading";
 import { PeoplePicker, PersonDot } from "./People";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 type SplitChoice = "equal" | "theirs" | "custom";
 const MESSAGES: Record<string, string> = {
@@ -61,9 +63,10 @@ export function NewEntryScreen() {
   const [note, setNote] = useState("");
   // ?day=YYYY-MM-DD comes from "add to this day" on the calendar; only past days count as backdated (today is a normal entry)
   const dayParam = params.get("day");
-  const [day, setDay] = useState(
-    dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) && dayParam < bangkokDay(new Date()) ? dayParam : "",
+  const [when, setWhen] = useState<WhenChoice>(() =>
+    whenOfDay(dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : null, bangkokDay(new Date())),
   );
+  const backdated = isBackdated(when, new Date());
 
   const visible = useMemo(
     () => sortByUsage((categoryData ?? []).filter((c) => c.kind === kind && !c.archived)),
@@ -113,13 +116,13 @@ export function NewEntryScreen() {
         note: note.trim() || null,
         split: split(),
         // a backdated entry still counts for money, never for the streak
-        occurredAt: day ? new Date(`${day}T12:00:00+07:00`).toISOString() : undefined,
+        occurredAt: occurredAtOf(when),
         source: "manual",
         walletId: walletId ?? undefined,
       }),
     onMutate: async (categoryId) => {
       // Skip the preview for backdated entries: they may not land in today's numbers
-      if (day) return undefined;
+      if (backdated) return undefined;
       return applyOptimisticEntry(qc, {
         kind, total, categoryId, note: note.trim() || null,
         shares: preview ?? [], walletId,
@@ -302,19 +305,9 @@ export function NewEntryScreen() {
           placeholder="โน้ต (ไม่ใส่ก็ได้)"
           className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
         />
-        <label className="pill flex items-center gap-1 text-sm">
-          <Icon name="calendar_month" size={18} />
-          <input
-            type="date"
-            value={day}
-            max={bangkokDay(new Date())}
-            onChange={(e) => setDay(e.target.value)}
-            className="w-[7.5rem] bg-transparent text-xs outline-none"
-            aria-label="วันที่ (ค่าเริ่มต้นคือวันนี้)"
-          />
-        </label>
+        <WhenField value={when} onChange={setWhen} />
       </section>
-      {day && <p className="px-6 pt-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
+      {backdated && <p className="px-6 pt-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
 
       <div className="safe-bottom mt-auto pt-4">
         <Keypad

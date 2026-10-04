@@ -5,25 +5,15 @@ import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { api, ApiError, describeFailure } from "@/client/api";
-import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
-import {
-  cardsProblem, fromDrafts, headlineTotal, mergeCards, moveLine, removeCard, removeLine, splitGroup, toBatchItems, update, updateLine, usedCategoryIds,
-  type Card,
-} from "@/client/draftCards";
+import { api, ApiError } from "@/client/api";
+import { fromDrafts, type Card } from "@/client/draftCards";
 import { parseFailureMessage } from "@/client/entryDraft";
-import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { speechErrorMessage, speechRecognitionCtor, transcriptOf, type SpeechRecognitionLike } from "@/client/speech";
-import { useAfterLog } from "@/client/useAfterLog";
-import { formatBaht } from "@/domain/money";
-import { motion } from "motion/react";
-import { DUR } from "@/client/motion";
 import { AiBudgetNote } from "./AiBudgetNote";
 import { AuroraCloud, type CloudMode } from "./AuroraCloud";
-import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Spinner } from "./Loading";
-import { GroupCardView, SingleCardView, type CardsCtx } from "./SayCards";
+import { CardsReview } from "./CardsReview";
 
 const MAX_LEN = 500; // same limit as the server
 /**
@@ -34,11 +24,6 @@ bought together), the user fixes them and saves all at once.
 export function SayScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const fb = useFeedback();
-  const afterLog = useAfterLog();
-  const { data: categories = [] } = useCategories();
-  const { data: people = [] } = usePeople();
-  const { data: wallets = [] } = useWallets();
 
   const [text, setText] = useState("");
   const [cards, setCards] = useState<Card[] | null>(null);
@@ -120,40 +105,6 @@ export function SayScreen() {
     endListening();
     read.mutate();
   };
-
-  const problem = cards ? cardsProblem(cards) : null;
-  const edit = (f: (c: Card[]) => Card[]) => setCards((c) => (c ? f(c) : c));
-  const ctx: CardsCtx | null = cards && {
-    cards,
-    categories: sortByUsage(categories),
-    people,
-    wallets,
-    patch: (id, p) => edit((c) => update(c, id, p)),
-    patchLine: (id, p) => edit((c) => updateLine(c, id, p)),
-    remove: (id) => edit((c) => removeCard(c, id)),
-    merge: (id, into) => edit((c) => mergeCards(c, id, into)),
-    split: (id) => edit((c) => splitGroup(c, id)),
-    moveLine: (id, to) => edit((c) => moveLine(c, id, to)),
-    removeLine: (id) => edit((c) => removeLine(c, id)),
-  };
-
-  const save = useMutation({
-    mutationFn: (all: Card[]) => api.recordBatch({ items: toBatchItems(all) }),
-    onSuccess: (out, all) => {
-      usedCategoryIds(all).forEach(bumpCategory);
-      afterLog(out);
-      void qc.invalidateQueries({ queryKey: ["entries"] });
-      fb.toast({
-        message: `จดแล้ว ${out.entries.length} รายการ · ฿${formatBaht(headlineTotal(all))}`,
-        action: {
-          label: "ย้อนกลับ",
-          run: () => void Promise.all(out.entries.map((e) => api.deleteEntry(e.id))).then(() => qc.invalidateQueries()),
-        },
-      });
-      router.replace("/");
-    },
-    onError: (e) => fb.toast({ tone: "error", ms: 9000, message: describeFailure("บันทึกไม่สำเร็จ", e) }),
-  });
 
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
@@ -247,35 +198,22 @@ export function SayScreen() {
         </section>
       )}
 
-      {cards && ctx && (
-        <motion.div
-          className="scope-night flex flex-1 flex-col"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: DUR.slow, ease: [0.32, 0.72, 0, 1] }}
-        >
-          <section className="px-5 pt-1">
-            <p className="truncate text-sm text-ink-3">&ldquo;{text.trim()}&rdquo;</p>
-            <p className="text-xs text-ink-3">
-              ตรวจและแก้ได้ก่อนบันทึก
-              {cards.some((c) => c.uncertain.length > 0 || (c.type === "group" && c.lines.some((l) => l.uncertain.length > 0))) && " · ช่องที่มีกรอบเหลือง AI ไม่แน่ใจ"}
-            </p>
-          </section>
-
-          {cards.map((c) => (c.type === "single" ? <SingleCardView key={c.id} card={c} ctx={ctx} /> : <GroupCardView key={c.id} card={c} ctx={ctx} />))}
-          {cards.length === 0 && <p className="mt-6 text-center text-ink-3">ลบหมดแล้ว กดกลับเพื่อพูดใหม่</p>}
-
-          <div className="safe-bottom sticky bottom-0 mt-auto border-t border-line bg-bg px-5 pt-3">
-            <button className="btn3d w-full py-4 text-lg" disabled={problem !== null || save.isPending} onClick={() => save.mutate(cards)}>
-              {save.isPending ? <><Spinner /> กำลังบันทึก…</> : `บันทึกทั้งหมด (${cards.length} รายการ · ฿${formatBaht(headlineTotal(cards))})`}
-            </button>
-            {problem && (
-              <p className="mt-1 text-center text-xs text-expense" role="status">
-                {problem}
+      {cards && (
+        <CardsReview
+          className="scope-night"
+          cards={cards}
+          onChange={setCards}
+          emptyHint="ลบหมดแล้ว กดกลับเพื่อพูดใหม่"
+          intro={
+            <>
+              <p className="truncate text-sm text-ink-3">&ldquo;{text.trim()}&rdquo;</p>
+              <p className="text-xs text-ink-3">
+                ตรวจและแก้ได้ก่อนบันทึก
+                {cards.some((c) => c.uncertain.length > 0 || (c.type === "group" && c.lines.some((l) => l.uncertain.length > 0))) && " · ช่องที่มีกรอบเหลือง AI ไม่แน่ใจ"}
               </p>
-            )}
-          </div>
-        </motion.div>
+            </>
+          }
+        />
       )}
     </main>
   );

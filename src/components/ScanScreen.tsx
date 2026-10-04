@@ -11,7 +11,8 @@ import { applyDuplicates, rowsFromDraft, type BackfillRow } from "@/client/backf
 import { activePeople, describeShares } from "@/client/people";
 import { useAiBudget, useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
-import { occurredAtFor, usableScanDay } from "@/client/occurredAt";
+import { isBackdated, occurredAtOf, whenOfDay, type WhenChoice } from "@/client/presetChoices";
+import { usableScanDay } from "@/client/occurredAt";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -27,6 +28,7 @@ import { ScanStrip, type PicState } from "./ScanStrip";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 const KIND_LABEL: Record<ReceiptDraftDTO["kind"], string> = {
   receipt: "ใบเสร็จ",
@@ -59,9 +61,9 @@ export function ScanScreen() {
   const [reviewing, setReviewing] = useState(false);
   const [kind, setKind] = useState<ReceiptDraftDTO["kind"]>("receipt");
   const [name, setName] = useState("");
-  const [day, setDay] = useState("");
+  const [when, setWhen] = useState<WhenChoice>({ kind: "now" });
   const today = bangkokDay(new Date());
-  const backdated = !!day && day < today;
+  const backdated = isBackdated(when, new Date());
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
   const [totalText, setTotalText] = useState("");
@@ -94,7 +96,7 @@ export function ScanScreen() {
     setTotalText(formatBaht(paid).replace(/,/g, ""));
     setKind(draft.kind);
     setName(draft.merchant ?? "");
-    setDay(usableScanDay(draft.date, today));
+    setWhen(whenOfDay(usableScanDay(draft.date, today), today));
     setReviewing(true);
   };
 
@@ -172,7 +174,7 @@ export function ScanScreen() {
     mutationFn: () => {
       return api.saveReceipt({
         merchant: name.trim() || null,
-        occurredAt: occurredAtFor(day, today),
+        occurredAt: occurredAtOf(when),
         total,
         people: onBill.map((p) => p.id),
         walletId: walletId ?? undefined,
@@ -288,17 +290,7 @@ export function ScanScreen() {
               aria-label="ชื่อกลุ่ม"
               className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
             />
-            <label className="pill flex items-center gap-1 text-sm">
-              <Icon name="calendar_month" size={18} />
-              <input
-                type="date"
-                value={day}
-                max={today}
-                onChange={(e) => setDay(e.target.value)}
-                className="w-[7.5rem] bg-transparent text-xs outline-none"
-                aria-label="วันที่จ่าย (ค่าเริ่มต้นคือวันนี้)"
-              />
-            </label>
+            <WhenField value={when} onChange={setWhen} />
           </section>
           {backdated && <p className="px-6 pb-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
           <p className="px-6 pb-2 text-xs text-ink-3">

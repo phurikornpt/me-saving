@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyDuplicates, canSave, clampDay, rowsFromDraft, summarizeRows, toSaveRows, type BackfillRow } from "./backfill";
+import { applyDuplicates, cardsFromRows, clampDay, rowsFromDraft, type BackfillRow } from "./backfill";
 import type { CategoryDTO, DraftLineDTO, ReceiptDraftDTO } from "./types";
 
 const TODAY = "2026-10-03";
@@ -71,21 +71,15 @@ describe("review state", () => {
     const out = applyDuplicates([row({ key: "a" }), row({ key: "b" })], [false, true]);
     expect(out.map((r) => [r.selected, r.duplicate])).toEqual([[true, false], [false, true]]);
   });
+});
 
-  it("cannot save with nothing ticked, or a ticked row without an amount", () => {
-    expect(canSave([row({ selected: false })])).toBe(false);
-    expect(canSave([row({ amount: 0 })])).toBe(false);
-    expect(canSave([row({ amount: 0, selected: false }), row()])).toBe(true);
-  });
-
-  it("sums only the ticked rows, per direction", () => {
-    expect(summarizeRows([row({ amount: 100 }), row({ amount: 50 }), row({ kind: "income", amount: 900 }), row({ amount: 7, selected: false })])).toEqual({ count: 3, out: 150, in: 900 });
-  });
-
-  it("saves only the ticked rows, at noon Bangkok of their own day, with a trimmed note", () => {
-    expect(toSaveRows([row({ description: "  กาแฟ ", categoryId: "food" }), row({ selected: false }), row({ description: " ", day: "2026-09-29" })])).toEqual([
-      { kind: "expense", total: 100, occurredAt: "2026-09-28T05:00:00.000Z", categoryId: "food", note: "กาแฟ" },
-      { kind: "expense", total: 100, occurredAt: "2026-09-29T05:00:00.000Z", categoryId: null, note: null },
-    ]);
+describe("cardsFromRows", () => {
+  it("turns rows into single cards: a past day at noon, today as now, baht as text, ticks kept", () => {
+    const cards = cardsFromRows(
+      [row({ key: "a", description: "กาแฟ", amount: 5550, categoryId: "food" }), row({ key: "b", day: TODAY, kind: "income", amount: 0, selected: false, duplicate: true })],
+      TODAY,
+    );
+    expect(cards[0]).toMatchObject({ type: "single", id: "a", kind: "expense", amount: "55.5", note: "กาแฟ", categoryId: "food", selected: true, when: { kind: "at", day: "2026-09-28", hour: 12, minute: 0 } });
+    expect(cards[1]).toMatchObject({ kind: "income", amount: "", selected: false, duplicate: true, when: { kind: "now" } });
   });
 });

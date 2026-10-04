@@ -6,9 +6,9 @@ import { useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { activePeople, personName } from "@/client/people";
 import { usePeople, useWallets } from "@/client/queries";
+import { occurredAtOf, sameWhen, whenOfInstant, type WhenChoice } from "@/client/presetChoices";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import type { EntryDetailDTO } from "@/client/types";
-import { bangkokDay } from "@/domain/day";
 import { formatBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
@@ -16,6 +16,7 @@ import { ItemLines } from "./ItemLines";
 import { Skeleton } from "./Loading";
 import { ownersLabel, PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
+import { WhenField } from "./WhenField";
 
 /** One group entry (a scanned receipt or items typed by hand): see its lines, and edit them until someone pays it back. */
 export function GroupEntryScreen({ id }: { id: string }) {
@@ -82,9 +83,9 @@ function Editor({ data }: { data: EntryDetailDTO }) {
   const { data: people = [] } = usePeople();
   const { data: wallets = [] } = useWallets();
   const { entry } = data;
-  const originalDay = bangkokDay(new Date(entry.occurredAt));
+  const [original] = useState<WhenChoice>(() => whenOfInstant(new Date(entry.occurredAt)));
   const [name, setName] = useState(entry.merchant ?? "");
-  const [day, setDay] = useState(originalDay);
+  const [when, setWhen] = useState<WhenChoice>(original);
   const [walletId, setWalletId] = useState<string | null>(entry.walletId);
   const [lines, setLines] = useState<DraftLine[]>(() => data.lines.map((l, i) => ({ ...l, key: `l${i}` })));
   const [sharedWith, setSharedWith] = useState<string[]>(() => [...new Set(data.lines.flatMap((l) => l.owners.people))]);
@@ -102,14 +103,13 @@ function Editor({ data }: { data: EntryDetailDTO }) {
   };
   const total = lines.reduce((s, l) => s + l.price, 0);
   const sum = summarize(lines, total);
-  const today = bangkokDay(new Date());
 
   const save = useMutation({
     mutationFn: () =>
       api.updateGroup(entry.id, {
         merchant: name.trim() || null,
-        // keep the exact time unless the day itself changed
-        occurredAt: day !== originalDay ? new Date(`${day}T12:00:00+07:00`).toISOString() : undefined,
+        // keep the exact time unless the user picked another one
+        occurredAt: sameWhen(when, original) ? undefined : (occurredAtOf(when) ?? new Date().toISOString()),
         total,
         people: onBill.map((p) => p.id),
         walletId: walletId ?? undefined,
@@ -139,10 +139,7 @@ function Editor({ data }: { data: EntryDetailDTO }) {
           placeholder="ชื่อกลุ่ม หรือร้าน"
           className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
         />
-        <label className="pill flex items-center gap-1 text-sm">
-          <Icon name="calendar_month" size={18} />
-          <input type="date" value={day} max={today} onChange={(e) => e.target.value && setDay(e.target.value)} className="w-[7.5rem] bg-transparent text-xs outline-none" aria-label="วันที่" />
-        </label>
+        <WhenField value={when} onChange={setWhen} />
       </section>
       <section className="px-5 pb-3">
         <p className="mb-2 text-xs text-ink-3">หารกับใคร? (ไม่เลือก = ของเราทั้งหมด)</p>

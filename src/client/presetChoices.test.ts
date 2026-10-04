@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isBackdated, isFuture, occurredAtOf, pickableDays, priceChoices, quickWhen, whenLabel } from "./presetChoices";
+import { isBackdated, isFuture, occurredAtOf, pickableDays, priceChoices, quickWhen, sameWhen, whenLabel, whenOfDay, whenOfInstant } from "./presetChoices";
 
 const NOW = new Date("2026-10-04T05:34:00Z"); // 12:34 Bangkok
 const at = (amount: number, count: number, lastAt: string) => ({ amount, count, lastAt });
@@ -45,5 +45,30 @@ describe("when it was paid", () => {
     expect(whenLabel({ kind: "at", day: "2026-10-01", hour: 8, minute: 0 }, NOW)).toBe("พฤ. 1 ต.ค. 08:00");
     const days = pickableDays(NOW);
     expect([days[0], days.length, days.at(-1)]).toEqual(["2026-10-04", 15, "2026-09-20"]);
+  });
+});
+
+describe("when helpers", () => {
+  it("reaches back to an older day when one is already set", () => {
+    const days = pickableDays(NOW, "2026-08-30");
+    expect([days[0], days.at(-1)]).toEqual(["2026-10-04", "2026-08-30"]);
+    expect(pickableDays(NOW, "2026-10-01")).toHaveLength(15);
+  });
+
+  it("reads an instant back as Bangkok wall clock, minute kept exact", () => {
+    expect(whenOfInstant(new Date("2026-10-03T10:37:00Z"))).toEqual({ kind: "at", day: "2026-10-03", hour: 17, minute: 37 });
+    expect(whenOfInstant(new Date("2026-10-03T18:30:00Z"))).toMatchObject({ day: "2026-10-04", hour: 1 });
+  });
+
+  it("a past day is noon, today or nothing is now", () => {
+    expect(whenOfDay("2026-10-01", "2026-10-04")).toEqual({ kind: "at", day: "2026-10-01", hour: 12, minute: 0 });
+    expect(whenOfDay("2026-10-04", "2026-10-04")).toEqual({ kind: "now" });
+    expect(whenOfDay(null, "2026-10-04")).toEqual({ kind: "now" });
+  });
+
+  it("compares choices", () => {
+    expect(sameWhen({ kind: "now" }, { kind: "now" })).toBe(true);
+    expect(sameWhen({ kind: "now" }, whenOfInstant(NOW))).toBe(false);
+    expect(sameWhen(whenOfInstant(NOW), whenOfInstant(NOW))).toBe(true);
   });
 });
