@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
+import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
 import type { EntryDTO } from "@/client/types";
 import { addDays } from "@/domain/day";
+import { SPEND_FILTERS, type SpendFilter } from "@/domain/spend-filter";
 import { formatBaht, formatCompact } from "@/domain/money";
 import { EditEntrySheet } from "../EditEntrySheet";
 import { EntryRow } from "../EntryRow";
@@ -14,6 +16,7 @@ import { Sheet } from "../Sheet";
 import { WidgetCard } from "./WidgetCard";
 
 const WEEKDAYS = ["อา", "จ", "อ", "พ", "พฤ", "ศ", "ส"];
+const SPEND_LABEL: Record<SpendFilter, string> = { all: "ทั้งหมด", mine: "ของฉัน", fronted: "ออกก่อน" };
 const shiftMonth = (month: string, by: number) => {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
@@ -25,10 +28,11 @@ export function CalendarWidget({ today }: { today: string }) {
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [editing, setEditing] = useState<EntryDTO | null>(null);
   const wallet = useWalletFilter();
-  const { data } = useCalendar(month, wallet);
+  const spend = useSpendFilter();
+  const { data } = useCalendar(month, wallet, spend);
   const { data: categories = [] } = useCategories();
   const dayEntries = useEntriesOn(openDay);
-  const shown = dayEntries.data?.filter((e) => inWallet(e, wallet));
+  const shown = dayEntries.data?.filter((e) => inWallet(e, wallet) && matchesSpend(e, spend));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
@@ -49,6 +53,13 @@ export function CalendarWidget({ today }: { today: string }) {
           </div>
         }
       >
+        <div className="mb-2 flex gap-2" role="group" aria-label="กรองรายจ่าย">
+          {SPEND_FILTERS.map((s) => (
+            <button key={s} className="pill text-sm" aria-pressed={spend === s} onClick={() => setSpendFilter(s)}>
+              {SPEND_LABEL[s]}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-7 gap-1 text-center text-[11px] text-ink-3">
           {WEEKDAYS.map((w) => (
             <div key={w}>{w}</div>
@@ -82,7 +93,12 @@ export function CalendarWidget({ today }: { today: string }) {
             );
           })}
         </div>
-        {data && (
+        {data && spend !== "all" && (
+          <p className="mt-3 text-center text-sm text-ink-2">
+            {spend === "mine" ? "จ่ายคนเดียว" : "ออกก่อน"} <span className="text-expense">฿{formatBaht(data.totals.spent)}</span>
+          </p>
+        )}
+        {data && spend === "all" && (
           <p className="mt-3 text-center text-sm text-ink-2">
             จ่าย <span className="text-expense">฿{formatBaht(data.totals.spent)}</span> · รับ{" "}
             <span className="text-income">฿{formatBaht(data.totals.earned)}</span> · คงเหลือ ฿{formatBaht(Math.abs(data.totals.net))}

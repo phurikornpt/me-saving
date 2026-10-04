@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import type { SpendFilter } from "@/domain/spend-filter";
 import { api } from "./api";
 
 /**
@@ -13,8 +14,8 @@ export const useDashboard = (wallet: string | null = null) =>
     queryFn: () => api.dashboard(wallet),
     placeholderData: (prev) => prev,
   });
-export const useCalendar = (month: string, wallet: string | null = null) =>
-  useQuery({ queryKey: ["calendar", month, wallet], queryFn: () => api.calendar(month, wallet), placeholderData: (prev) => prev });
+export const useCalendar = (month: string, wallet: string | null = null, spend: SpendFilter = "all") =>
+  useQuery({ queryKey: ["calendar", month, wallet, spend], queryFn: () => api.calendar(month, wallet, spend), placeholderData: (prev) => prev });
 export const useCategoryBreakdown = (month: string, wallet: string | null = null) =>
   useQuery({
     queryKey: ["breakdown", month, wallet],

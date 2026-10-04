@@ -218,6 +218,16 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
     ]);
   });
 
+  it("narrows to our own or fronted expenses at their full amount, without income", async () => {
+    await mk("expense", "2026-10-03T05:00:00Z", 10000, 5000); // fronted: we paid 10000, 5000 is theirs
+    await mk("expense", "2026-10-03T06:00:00Z", 2000); //        just ours
+    await mk("income", "2026-10-03T07:00:00Z", 1500000);
+    const stats = createStatsRepo(sequelize, USER);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "all")).toEqual([{ day: "2026-10-03", spent: 7000, earned: 1500000 }]);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "mine")).toEqual([{ day: "2026-10-03", spent: 2000, earned: 0 }]);
+    expect(await stats.dailyTotals("2026-10-03", "2026-10-04", undefined, "fronted")).toEqual([{ day: "2026-10-03", spent: 10000, earned: 0 }]);
+  });
+
   it("returns logged days with how they were logged", async () => {
     const repos = createRepos(sequelize, USER);
     await repos.loggedDays.add("2026-10-03", "entry", NOON);
