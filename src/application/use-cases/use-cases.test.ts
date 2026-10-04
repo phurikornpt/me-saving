@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { DomainError } from "@/domain/errors";
 import { addDays } from "@/domain/day";
 import { createFakeRepos, FixedClock } from "../testing/fakes";
+import type { PresetPrice, PresetRecord, PresetRepo } from "../ports";
+import { ManagePresets } from "./manage-settings";
 import { MarkNoSpendDay } from "./mark-no-spend-day";
 import { RecordEntry } from "./record-entry";
 import { RecordRepayment } from "./record-repayment";
@@ -106,6 +108,50 @@ describe("RecordEntry", () => {
     s.xp.push({ reason: "seed", amount: 95, at: new Date("2026-09-01T00:00:00Z") });
     const out = await s.recordEntry.execute({ kind: "expense", total: 100 });
     expect(out.leveledUp).toBe(true);
+  });
+
+  it("accepts any time today but not a later day", async () => {
+    const s = setup(); // 12:00 Bangkok
+    const tonight = new Date("2026-10-03T16:59:00Z"); // 23:59 Bangkok, still today
+    expect((await s.recordEntry.execute({ kind: "expense", total: 100, occurredAt: tonight })).entry.occurredAt).toEqual(tonight);
+    await expect(
+      s.recordEntry.execute({ kind: "expense", total: 100, occurredAt: new Date("2026-10-03T17:00:00Z") }),
+    ).rejects.toMatchObject({ code: "INVALID_DATE" });
+  });
+
+  it("links an entry to the preset it was logged from, and only to one of ours", async () => {
+    const fake = createFakeRepos();
+    const presets = { list: async () => [preset("pr-rice")] };
+    const record = new RecordEntry(fake.tx, new FixedClock(NOON), presets);
+    const out = await record.execute({ kind: "expense", total: 6000, source: "preset", presetId: "pr-rice" });
+    expect(out.entry.presetId).toBe("pr-rice");
+    await expect(record.execute({ kind: "expense", total: 6000, presetId: "pr-other" })).rejects.toMatchObject({ code: "UNKNOWN_PRESET" });
+    expect(fake.entries).toHaveLength(1);
+  });
+});
+
+function preset(id: string): PresetRecord {
+  return { id, label: "ข้าว", icon: "restaurant", amount: 5000, categoryId: null, personId: null, splitKind: null, walletId: null, sort: 0 };
+}
+
+describe("ManagePresets.prices", () => {
+  const history: PresetPrice[] = [5000, 6000, 5500, 7000, 4500].map((amount, i) => ({ amount, count: 5 - i, lastAt: NOON }));
+  const repo = (seen: unknown[]): PresetRepo => ({
+    list: async () => [preset("pr-rice")],
+    create: async () => { throw new Error("unused"); },
+    update: async () => null,
+    remove: async () => false,
+    prices: async (...args) => ((seen.push(...args)), history),
+  });
+
+  it("returns the four most used prices of the last 90 days", async () => {
+    const seen: unknown[] = [];
+    const out = await new ManagePresets(repo(seen), undefined as never).prices("pr-rice", NOON);
+    expect(out?.map((p) => p.amount)).toEqual([5000, 6000, 5500, 7000]);
+    expect(seen).toEqual(["pr-rice", new Date("2026-07-05T05:00:00Z")]);
+  });
+  it("is null for a preset that isn't ours", async () => {
+    expect(await new ManagePresets(repo([]), undefined as never).prices("pr-other", NOON)).toBeNull();
   });
 });
 

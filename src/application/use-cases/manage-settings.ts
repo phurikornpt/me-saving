@@ -6,6 +6,7 @@ import type {
   CategoryRepo,
   PersonRecord,
   PersonRepo,
+  PresetPrice,
   PresetRecord,
   PresetRepo,
   SettingsRecord,
@@ -62,7 +63,16 @@ export class ManagePresets {
   remove(id: string) {
     return this.presets.remove(id);
   }
+  /** What this preset was actually paid at lately (ข้าว 50 / 55 / 60), most used first; null if no such preset. */
+  async prices(id: string, now: Date): Promise<PresetPrice[] | null> {
+    if (!(await this.presets.list()).some((p) => p.id === id)) return null;
+    const since = new Date(now.getTime() - PRICE_HISTORY_DAYS * 86_400_000);
+    return (await this.presets.prices(id, since)).slice(0, MAX_PRICES);
+  }
 }
+
+const PRICE_HISTORY_DAYS = 90;
+const MAX_PRICES = 4;
 
 /** The people we front money for. Hidden (archived), never deleted: old entries keep their name. */
 export class ManagePeople {

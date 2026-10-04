@@ -32,7 +32,7 @@ describe("GetDashboard", () => {
     const view = await new GetDashboard(
       f.repos,
       stats([{ day: "2026-10-03", spent: 5000, earned: 0 }]),
-      { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false },
+      { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false, prices: async () => [] },
       { get: async () => ({ dashboardLayout: DEFAULT_LAYOUT, meNote: "" }), update: async () => { throw new Error(); } },
       clock,
     ).execute();
@@ -59,7 +59,7 @@ describe("GetDashboard", () => {
     const view = await new GetDashboard(
       f.repos,
       { ...s, dailyTotals: async (from, to, walletId) => (asked.push(walletId), s.dailyTotals(from, to)) },
-      { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false },
+      { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false, prices: async () => [] },
       { get: async () => ({ dashboardLayout: DEFAULT_LAYOUT, meNote: "" }), update: async () => { throw new Error(); } },
       clock,
     ).execute("w-bank");
@@ -100,7 +100,7 @@ describe("GetCalendarMonth", () => {
 describe("GetOutstanding", () => {
   it("applies repayments to the oldest fronted expenses first", async () => {
     const f = createFakeRepos();
-    const clock = new FixedClock(new Date("2026-10-01T05:00:00Z"));
+    const clock = new FixedClock(new Date("2026-10-02T05:00:00Z"));
     const rec = new RecordEntry(f.tx, clock);
     const a = await rec.execute({ kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] }, occurredAt: new Date("2026-10-01T05:00:00Z") });
     const b = await rec.execute({ kind: "expense", total: 10000, split: { kind: "theirs", people: [FAN] }, occurredAt: new Date("2026-10-02T05:00:00Z") });

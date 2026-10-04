@@ -10,6 +10,7 @@ import type {
   OutstandingDTO,
   PersonDTO,
   PresetDTO,
+  PresetPriceDTO,
   ReceiptDraftDTO,
   SettingsDTO,
   SplitMode,
@@ -62,7 +63,7 @@ export const api = {
 
   recordEntry: (b: {
     kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null;
-    occurredAt?: string; split?: SplitMode; source?: "manual" | "preset" | "wheel";
+    occurredAt?: string; split?: SplitMode; source?: "manual" | "preset" | "wheel"; presetId?: string;
     /** Omit for the default wallet. */
     walletId?: string;
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/entries", b),
@@ -104,6 +105,7 @@ export const api = {
 
   createPreset: (b: Omit<PresetDTO, "id" | "sort" | "walletId"> & { sort?: number; walletId?: string | null }) => request<PresetDTO>("POST", "/api/presets", b),
   deletePreset: (id: string) => request<void>("DELETE", `/api/presets/${id}`),
+  presetPrices: (id: string) => request<PresetPriceDTO[]>("GET", `/api/presets/${id}/prices`),
   createCategory: (b: { name: string; icon: string; kind: "expense" | "income" }) => request<CategoryDTO>("POST", "/api/categories", b),
   archiveCategory: (id: string) => request<void>("DELETE", `/api/categories/${id}`),
   createPerson: (b: { name: string; note?: string }) => request<PersonDTO>("POST", "/api/people", b),

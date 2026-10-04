@@ -69,7 +69,7 @@ function build() {
           key: `receipt-parse:${userId}`,
           perDay: scanLimitPerDay(),
         }),
-      recordEntry: new RecordEntry(tx, systemClock),
+      recordEntry: new RecordEntry(tx, systemClock, presets),
       recordRepayment: new RecordRepayment(tx, systemClock),
       recordTransfer: new RecordTransfer(tx, systemClock),
       markNoSpendDay: new MarkNoSpendDay(tx, systemClock),

@@ -118,6 +118,17 @@ export function createPresetRepo(sequelize: Sequelize, userId: string): PresetRe
     async remove(id) {
       return (await Preset.destroy({ where: { userId, id } })) > 0;
     },
+    async prices(presetId, since) {
+      const rows = await sequelize.query<{ amount: number; count: string; last_at: Date }>(
+        `SELECT total AS amount, count(*) AS count, max(occurred_at) AS last_at
+           FROM entries
+          WHERE user_id = :userId AND preset_id = :presetId AND kind = 'expense' AND occurred_at >= :since
+          GROUP BY total
+          ORDER BY count(*) DESC, max(occurred_at) DESC`,
+        { replacements: { userId, presetId, since }, type: QueryTypes.SELECT },
+      );
+      return rows.map((r) => ({ amount: Number(r.amount), count: Number(r.count), lastAt: new Date(r.last_at) }));
+    },
   };
 }
 

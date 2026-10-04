@@ -15,7 +15,9 @@ export type DomainErrorCode =
   | "UNKNOWN_WALLET"
   | "INVALID_TRANSFER"
   | "INVALID_WALLET"
-  | "LAST_WALLET";
+  | "LAST_WALLET"
+  | "UNKNOWN_PRESET"
+  | "INVALID_DATE";
 
 export class DomainError extends Error {
   constructor(

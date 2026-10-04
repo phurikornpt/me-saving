@@ -34,6 +34,7 @@ const toRecord = (e: Entry, shares: Share[] = (e.shares ?? []).map((s) => ({ per
   source: e.source,
   walletId: e.walletId,
   toWalletId: e.toWalletId,
+  presetId: e.presetId ?? null,
 });
 
 export const toPerson = (p: Person): PersonRecord => ({

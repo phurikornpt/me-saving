@@ -28,6 +28,7 @@ export const recordEntryBody = z.object({
   source: z.enum(["manual", "preset", "wheel"]).optional(),
   split: splitMode.optional(),
   walletId: z.uuid().nullish(),
+  presetId: z.uuid().nullish(),
 });
 
 export const updateEntryBody = z.object({
