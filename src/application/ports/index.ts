@@ -48,6 +48,7 @@ export interface EntryRepo {
   /** Entries that happened on a Bangkok calendar day, newest first. */
   onDay(day: DayKey): Promise<EntryRecord[]>;
   findById(id: string): Promise<EntryRecord | null>;
+  findByIds(ids: string[]): Promise<EntryRecord[]>;
   update(
     id: string,
     patch: Partial<
@@ -82,6 +83,10 @@ export interface NewReceiptLine {
 }
 export interface ReceiptLineRepo {
   insertMany(entryId: string, lines: NewReceiptLine[]): Promise<void>;
+  /** Swaps a group's lines for new ones (editing a group). */
+  replace(entryId: string, lines: NewReceiptLine[]): Promise<void>;
+  /** Each group entry's lines in their saved order. Entries without lines are absent. */
+  listByEntries(entryIds: string[]): Promise<Map<string, NewReceiptLine[]>>;
 }
 
 export interface OwnerMemoryRepo {

@@ -66,7 +66,15 @@ export interface CategoryBreakdownDTO {
   total: number;
   slices: { categoryId: string | null; name: string; icon: string; spent: number }[];
 }
-export type OutstandingDTO = { personId: string; balance: number; items: { entryId: string; occurredAt: string; amount: number; outstanding: number }[] }[];
+export interface GroupLineDTO { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId: string | null; lowConfidence: boolean }
+/** One entry with its lines (groups) and who already paid part of it back (then it's frozen). */
+export interface EntryDetailDTO { entry: EntryDTO; lines: GroupLineDTO[]; repaidBy: string[] }
+export interface OwedLineDTO { name: string; qty: number; amount: number; parts: number }
+export interface OwedItemDTO {
+  entryId: string; occurredAt: string; amount: number; outstanding: number;
+  title: string | null; categoryId: string | null; source: string; lines: OwedLineDTO[];
+}
+export type OutstandingDTO = { personId: string; balance: number; items: OwedItemDTO[] }[];
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
 export interface ReceiptDraftDTO { merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }

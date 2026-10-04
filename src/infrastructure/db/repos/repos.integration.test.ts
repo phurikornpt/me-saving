@@ -2,7 +2,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import type { Sequelize } from "sequelize";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
-import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
+import { DeleteEntry, UpdateEntry, UpdateGroupEntry } from "@/application/use-cases/change-entry";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
@@ -286,6 +286,17 @@ describe("receipt save against real Postgres", () => {
     expect(stored?.othersShare).toBe(out.entry.othersShare);
   });
 
+  it("reads lines back in order, only for this account's entries", async () => {
+    const tx = createTransactionRunner(sequelize, USER);
+    const out = await new SaveReceiptEntry(tx, new FixedClock(NOON)).execute({ merchant: "7-Eleven", total: 13900, lines: lines() });
+    const got = await createRepos(sequelize, USER).receiptLines.listByEntries([out.entry.id]);
+    expect(got.get(out.entry.id)?.map((l) => [l.canonicalName, l.owners])).toEqual(lines().map((l) => [l.canonicalName, l.owners]));
+    expect((await createRepos(sequelize, USER).entries.findByIds([out.entry.id])).map((e) => e.merchant)).toEqual(["7-Eleven"]);
+    const other = await createUser(sequelize, `lines-${Date.now()}@example.com`, await hashPassword("y".repeat(12), FAST));
+    expect((await createRepos(sequelize, other).receiptLines.listByEntries([out.entry.id])).size).toBe(0);
+    expect(await createRepos(sequelize, other).entries.findByIds([out.entry.id])).toEqual([]);
+  });
+
   it("upserts owner memory and a later choice overwrites the earlier one", async () => {
     const tx = createTransactionRunner(sequelize, USER);
     const uc = new SaveReceiptEntry(tx, new FixedClock(NOON));
@@ -315,26 +326,48 @@ describe("receipt save against real Postgres", () => {
 });
 
 describe("changing entries rolls back for real", () => {
-  it("a delete that would drive a balance negative leaves the row in place", async () => {
+  it("deleting a paid-back entry is refused and leaves the row in place", async () => {
     const u = useCases();
     const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: equalWith(FAN) });
     await u.recordRepayment.execute({ personId: FAN, amount: 5000 });
     await expect(new DeleteEntry(createTransactionRunner(sequelize, USER)).execute(entry.id)).rejects.toMatchObject({
-      code: "BALANCE_WOULD_GO_NEGATIVE",
+      code: "ENTRY_REPAID",
     });
     expect(await u.repos.entries.findById(entry.id)).not.toBeNull();
   });
 
-  it("an edit that would drive it negative keeps the old values", async () => {
+  it("re-splitting a paid-back entry is refused and keeps the old values", async () => {
     const u = useCases();
     const { entry } = await u.recordEntry.execute({ kind: "expense", total: 10000, split: equalWith(FAN) });
     await u.recordRepayment.execute({ personId: FAN, amount: 4000 });
     await expect(
       new UpdateEntry(createTransactionRunner(sequelize, USER)).execute(entry.id, { split: { kind: "none" } }),
-    ).rejects.toMatchObject({ code: "BALANCE_WOULD_GO_NEGATIVE" });
+    ).rejects.toMatchObject({ code: "ENTRY_REPAID" });
     const kept = await u.repos.entries.findById(entry.id);
     expect(kept?.othersShare).toBe(5000);
     expect(kept?.shares).toEqual([{ personId: FAN, amount: 5000 }]);
+  });
+
+  it("a group edit refused after writing (its new date would take a repayment) rolls back its lines too", async () => {
+    const u = useCases();
+    const tx = createTransactionRunner(sequelize, USER);
+    const clock = new FixedClock(NOON);
+    await u.recordEntry.execute({ kind: "expense", total: 10000, split: { kind: "theirs", people: [FAN] }, occurredAt: new Date("2026-10-01T05:00:00Z") });
+    await u.recordRepayment.execute({ personId: FAN, amount: 5000 });
+    const mine = { me: false, people: [FAN] };
+    const { entry } = await new SaveReceiptEntry(tx, clock).execute({
+      source: "itemized", total: 3000, occurredAt: new Date("2026-10-02T05:00:00Z"),
+      lines: [{ rawName: "นม", canonicalName: "นม", qty: 1, price: 3000, owners: mine }],
+    });
+    await expect(
+      new UpdateGroupEntry(tx, clock).execute(entry.id, {
+        total: 4000, occurredAt: new Date("2026-09-30T05:00:00Z"),
+        lines: [{ rawName: "ไก่", canonicalName: "ไก่", qty: 1, price: 4000, owners: mine }],
+      }),
+    ).rejects.toMatchObject({ code: "ENTRY_REPAID" });
+    const lines = await u.repos.receiptLines.listByEntries([entry.id]);
+    expect(lines.get(entry.id)?.map((l) => l.canonicalName)).toEqual(["นม"]);
+    expect((await u.repos.entries.findById(entry.id))?.total).toBe(3000);
   });
 
   it("re-splitting replaces the shares", async () => {

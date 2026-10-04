@@ -1,5 +1,5 @@
 import { AuthenticateUser } from "@/application/use-cases/authenticate-user";
-import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
+import { DeleteEntry, GetEntryDetail, UpdateEntry, UpdateGroupEntry } from "@/application/use-cases/change-entry";
 import { GetCalendarMonth } from "@/application/use-cases/get-calendar-month";
 import { GetCategoryBreakdown } from "@/application/use-cases/get-category-breakdown";
 import { GetDashboard } from "@/application/use-cases/get-dashboard";
@@ -56,6 +56,8 @@ function build() {
       listEntries: new ListEntries(repos),
       updateEntry: new UpdateEntry(tx),
       deleteEntry: new DeleteEntry(tx),
+      updateGroupEntry: new UpdateGroupEntry(tx, systemClock),
+      getEntryDetail: new GetEntryDetail(repos),
       manageCategories: new ManageCategories(categories),
       managePresets: new ManagePresets(presets, repos.wallets),
       manageWallets: new ManageWallets(tx),

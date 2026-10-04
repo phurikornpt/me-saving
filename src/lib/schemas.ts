@@ -91,6 +91,9 @@ export const saveReceiptBody = z.object({
     .max(100),
 });
 
+/** Editing a group: the same lines as saving, but it keeps its source and the wallet must be named. */
+export const updateGroupBody = saveReceiptBody.omit({ source: true, walletId: true }).extend({ walletId: z.uuid().optional() });
+
 const icon = z.string().regex(/^[a-z0-9_]{1,60}$/);
 export const categoryCreateBody = z.object({
   name: z.string().min(1).max(40),

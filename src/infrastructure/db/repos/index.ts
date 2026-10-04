@@ -8,6 +8,7 @@ import type {
   OwnerMemoryRepo,
   PersonRecord,
   PersonRepo,
+  NewReceiptLine,
   ReceiptLineRepo,
   Repos,
   TransactionRunner,
@@ -118,6 +119,11 @@ export function createRepos(sequelize: Sequelize, userId: string, transaction?: 
       const row = await m.Entry.findOne({ where: { ...mine, id }, ...withShares, ...t });
       return row ? toRecord(row) : null;
     },
+    async findByIds(ids) {
+      if (ids.length === 0) return [];
+      const rows = await m.Entry.findAll({ where: { ...mine, id: ids }, ...withShares, ...t });
+      return rows.map((r) => toRecord(r));
+    },
     async update(id, { shares, ...patch }) {
       const row = await m.Entry.findOne({ where: { ...mine, id }, ...withShares, ...t });
       if (!row) return null;
@@ -173,6 +179,35 @@ export function createRepos(sequelize: Sequelize, userId: string, transaction?: 
         lines.map(({ owners, ...l }, position) => ({ ...l, includesMe: owners.me, people: owners.people, entryId, position })),
         t,
       );
+    },
+    async replace(entryId, lines) {
+      await m.ReceiptLine.destroy({ where: { entryId }, ...t });
+      await receiptLines.insertMany(entryId, lines);
+    },
+    async listByEntries(entryIds) {
+      const out = new Map<string, NewReceiptLine[]>();
+      if (entryIds.length === 0) return out;
+      // Lines carry no user_id of their own: they belong to the account through their entry.
+      const rows = await m.ReceiptLine.findAll({
+        where: { entryId: entryIds },
+        include: [{ model: m.Entry, attributes: [], where: mine }],
+        order: [["entryId", "ASC"], ["position", "ASC"]],
+        ...t,
+      });
+      for (const r of rows) {
+        const list = out.get(r.entryId) ?? [];
+        list.push({
+          rawName: r.rawName,
+          canonicalName: r.canonicalName,
+          qty: r.qty,
+          price: r.price,
+          owners: { me: r.includesMe, people: r.people },
+          categoryId: r.categoryId,
+          lowConfidence: r.lowConfidence,
+        });
+        out.set(r.entryId, list);
+      }
+      return out;
     },
   };
 

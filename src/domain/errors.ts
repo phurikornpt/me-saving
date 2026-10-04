@@ -10,6 +10,7 @@ export type DomainErrorCode =
   | "NOT_FOUND"
   | "BALANCE_WOULD_GO_NEGATIVE"
   | "ENTRY_LOCKED"
+  | "ENTRY_REPAID"
   | "UNKNOWN_PERSON"
   | "UNKNOWN_WALLET"
   | "INVALID_TRANSFER"

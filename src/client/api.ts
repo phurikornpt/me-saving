@@ -1,6 +1,19 @@
 import type {
-  ActivityDTO, CalendarDTO, CategoryBreakdownDTO, CategoryDTO, DashboardDTO, EntryDTO, LineOwners, OutstandingDTO, PersonDTO,
-  PresetDTO, ReceiptDraftDTO, SettingsDTO, SplitMode, WalletDTO,
+  ActivityDTO,
+  CalendarDTO,
+  CategoryBreakdownDTO,
+  CategoryDTO,
+  DashboardDTO,
+  EntryDTO,
+  EntryDetailDTO,
+  LineOwners,
+  OutstandingDTO,
+  PersonDTO,
+  PresetDTO,
+  ReceiptDraftDTO,
+  SettingsDTO,
+  SplitMode,
+  WalletDTO,
 } from "./types";
 
 export const AUTH_EXPIRED_EVENT = "me-budget:auth-expired";
@@ -41,6 +54,7 @@ export const api = {
     request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month, wallet: wallet ?? undefined })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
   outstanding: () => request<OutstandingDTO>("GET", "/api/people/outstanding"),
+  entryDetail: (id: string) => request<EntryDetailDTO>("GET", `/api/entries/${id}`),
   people: () => request<PersonDTO[]>("GET", "/api/people"),
   categories: () => request<CategoryDTO[]>("GET", "/api/categories"),
   settings: () => request<SettingsDTO>("GET", "/api/settings"),
@@ -79,6 +93,14 @@ export const api = {
     walletId?: string;
     lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null; lowConfidence?: boolean }[];
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/receipts", b),
+  /** Replace a group's lines. Refused (ENTRY_REPAID) once someone paid part of it back. */
+  updateGroup: (
+    id: string,
+    b: {
+      merchant: string | null; occurredAt?: string; total: number; people: string[]; walletId?: string;
+      lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null }[];
+    },
+  ) => request<EntryDTO>("PUT", `/api/receipts/${id}`, b),
 
   createPreset: (b: Omit<PresetDTO, "id" | "sort" | "walletId"> & { sort?: number; walletId?: string | null }) => request<PresetDTO>("POST", "/api/presets", b),
   deletePreset: (id: string) => request<void>("DELETE", `/api/presets/${id}`),

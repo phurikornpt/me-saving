@@ -5,7 +5,7 @@ import { assertLineOwners, sharesOfLines, type LineOwners } from "@/domain/split
 import { assertKnownPeople } from "../known-people";
 import { resolveWallet } from "../known-wallets";
 import { logActivity } from "../log-activity";
-import type { Clock, EntryRecord, TransactionRunner } from "../ports";
+import type { Clock, EntryRecord, NewReceiptLine, Repos, TransactionRunner } from "../ports";
 import type { ActivityResult } from "../log-activity";
 
 export interface SaveReceiptInput {
@@ -41,29 +41,7 @@ export class SaveReceiptEntry {
   ) {}
 
   async execute(input: SaveReceiptInput): Promise<SaveReceiptOutput> {
-    assertSatang(input.total);
-    if (input.total === 0) throw new DomainError("INVALID_AMOUNT", "amount must be positive");
-    if (input.lines.length === 0) throw new DomainError("INVALID_RECEIPT", "a receipt needs at least one line");
-    input.lines.forEach((l) => {
-      if (!Number.isInteger(l.qty) || l.qty < 1) throw new DomainError("INVALID_RECEIPT", "bad quantity");
-      assertLineOwners(l.owners);
-    });
-    const named = new Set(input.lines.flatMap((l) => l.owners.people));
-    const people = new Set(input.people ?? named);
-    for (const id of named) {
-      if (!people.has(id)) throw new DomainError("INVALID_SPLIT", "a line names someone who isn't on the bill");
-    }
-
-    const prices = allocateToBillTotal(input.lines.map((l) => l.price), input.total);
-    const lines = input.lines.map((l, i) => ({
-      rawName: l.rawName,
-      canonicalName: l.canonicalName.trim(),
-      qty: l.qty,
-      price: prices[i],
-      owners: l.owners,
-      categoryId: l.categoryId ?? null,
-      lowConfidence: l.lowConfidence ?? false,
-    }));
+    const { people, lines } = prepareGroup(input);
     const now = this.clock.now();
 
     return this.tx.run(async (repos) => {
@@ -84,19 +62,55 @@ export class SaveReceiptEntry {
         toWalletId: null,
       });
       await repos.receiptLines.insertMany(entry.id, lines);
-      if (people.size > 0) {
-        // What the user saved is what the AI should remember next time. Only bills shared with someone
-        // teach: a plain scan says nothing about who things are for. And a choice made without the person
-        // we remember (say นมเปรี้ยว -> แฟน, on a bill without แฟน) doesn't overwrite what we know.
-        const known = await repos.ownerMemory.all();
-        await repos.ownerMemory.upsertMany(
-          lines
-            .filter((l) => (known.get(l.canonicalName)?.people ?? []).every((id) => people.has(id)))
-            .map((l) => ({ canonicalName: l.canonicalName, owners: l.owners })),
-          now,
-        );
-      }
+      await rememberOwners(repos, people, lines, now);
       return { entry, ...(await logActivity(repos, now, "entry")) };
     });
   }
+}
+
+/** Checks a group's lines and scales them to the paid total. Shared by saving and editing a group. */
+export function prepareGroup(input: Pick<SaveReceiptInput, "total" | "people" | "lines">): {
+  people: Set<string>;
+  lines: NewReceiptLine[];
+} {
+  assertSatang(input.total);
+  if (input.total === 0) throw new DomainError("INVALID_AMOUNT", "amount must be positive");
+  if (input.lines.length === 0) throw new DomainError("INVALID_RECEIPT", "a receipt needs at least one line");
+  input.lines.forEach((l) => {
+    if (!Number.isInteger(l.qty) || l.qty < 1) throw new DomainError("INVALID_RECEIPT", "bad quantity");
+    assertLineOwners(l.owners);
+  });
+  const named = new Set(input.lines.flatMap((l) => l.owners.people));
+  const people = new Set(input.people ?? named);
+  for (const id of named) {
+    if (!people.has(id)) throw new DomainError("INVALID_SPLIT", "a line names someone who isn't on the bill");
+  }
+
+  const prices = allocateToBillTotal(input.lines.map((l) => l.price), input.total);
+  const lines = input.lines.map((l, i) => ({
+    rawName: l.rawName,
+    canonicalName: l.canonicalName.trim(),
+    qty: l.qty,
+    price: prices[i],
+    owners: l.owners,
+    categoryId: l.categoryId ?? null,
+    lowConfidence: l.lowConfidence ?? false,
+  }));
+  return { people, lines };
+}
+
+/**
+ * What the user saved is what the AI should remember next time. Only bills shared with someone
+ * teach: a plain scan says nothing about who things are for. And a choice made without the person
+ * we remember (say นมเปรี้ยว -> แฟน, on a bill without แฟน) doesn't overwrite what we know.
+ */
+export async function rememberOwners(repos: Repos, people: Set<string>, lines: NewReceiptLine[], now: Date) {
+  if (people.size === 0) return;
+  const known = await repos.ownerMemory.all();
+  await repos.ownerMemory.upsertMany(
+    lines
+      .filter((l) => (known.get(l.canonicalName)?.people ?? []).every((id) => people.has(id)))
+      .map((l) => ({ canonicalName: l.canonicalName, owners: l.owners })),
+    now,
+  );
 }
