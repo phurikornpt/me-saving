@@ -101,6 +101,7 @@ export function ScanScreen() {
   // One picture of a shop receipt / order keeps the itemised review. A history page, or several
   // pictures at once, becomes a list of past entries to tick and save together (backfill).
   const read = useMutation({
+    meta: { ai: true }, // the aurora shows the wait; the top bar stays out
     mutationFn: async (files: File[]) => {
       const today = bangkokDay(new Date());
       const drafts: ReceiptDraftDTO[] = [];
