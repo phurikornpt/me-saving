@@ -66,6 +66,9 @@ export interface CategoryBreakdownDTO {
   total: number;
   slices: { categoryId: string | null; name: string; icon: string; spent: number }[];
 }
+export interface GroupLineDTO { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId: string | null; lowConfidence: boolean }
+/** One entry with its lines (groups) and who already paid part of it back (then it's frozen). */
+export interface EntryDetailDTO { entry: EntryDTO; lines: GroupLineDTO[]; repaidBy: string[] }
 export interface OwedLineDTO { name: string; qty: number; amount: number; parts: number }
 export interface OwedItemDTO {
   entryId: string; occurredAt: string; amount: number; outstanding: number;

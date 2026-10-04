@@ -69,3 +69,40 @@ export function outstandingByEntry(ledger: Ledger, personId: string): Outstandin
   }
   return result;
 }
+
+/**
+ * How much of each entry repayments already cover, per person (same oldest-first rule as
+ * outstandingByEntry). Key: `${entryId}:${personId}`. Entries nobody has paid towards are absent.
+ */
+export function repaidShares(ledger: Ledger): Map<string, Satang> {
+  const out = new Map<string, Satang>();
+  const pools = new Map<string, Satang>();
+  for (const r of ledger.repayments) pools.set(r.personId, (pools.get(r.personId) ?? 0) + r.total);
+  const oldestFirst = ledger.shares
+    .filter((s) => s.amount > 0)
+    .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime());
+  for (const s of oldestFirst) {
+    const pool = pools.get(s.personId) ?? 0;
+    const applied = Math.min(pool, s.amount);
+    if (applied <= 0) continue;
+    pools.set(s.personId, pool - applied);
+    out.set(`${s.entryId}:${s.personId}`, (out.get(`${s.entryId}:${s.personId}`) ?? 0) + applied);
+  }
+  return out;
+}
+
+/** People who have already paid back part of this entry. Empty = it can still change freely. */
+export function repaidBy(ledger: Ledger, entryId: string): string[] {
+  return [...repaidShares(ledger).keys()].filter((k) => k.startsWith(`${entryId}:`)).map((k) => k.slice(entryId.length + 1));
+}
+
+/**
+ * Money that was paid back must keep paying for the same things. An edit or delete that would move a
+ * repayment onto other entries (a changed amount, or a date that reorders who gets paid first) is refused.
+ */
+export function assertRepaidUnchanged(before: Ledger, after: Ledger): void {
+  const a = repaidShares(before);
+  const b = repaidShares(after);
+  const same = a.size === b.size && [...a].every(([k, v]) => b.get(k) === v);
+  if (!same) throw new DomainError("ENTRY_REPAID", "someone already paid this back");
+}
