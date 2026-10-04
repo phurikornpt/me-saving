@@ -14,13 +14,13 @@ function buildSchema(ctx: Ctx) {
     amount: z.number().min(0).max(20_000_000).nullable().describe("Amount in baht, or null if none was said"),
     category: z.string().nullable().describe("One of the provided category names of the same kind, or null"),
     me: z.boolean().describe("true if the speaker pays / uses a part of this item"),
-    people: (ctx.people.length ? z.array(keys(ctx.people)) : z.array(z.never())).max(10).describe("Keys of the people this item is shared with or is for"),
+    people: (ctx.people.length ? z.array(keys(ctx.people)) : z.array(z.string())).max(ctx.people.length ? 10 : 0).describe("Keys of the people this item is shared with or is for"),
     uncertain: z.array(z.enum(["amount", "category", "person"])).describe("Fields you are only guessing"),
   });
   const entry = z.object({
     kind: z.enum(["expense", "income"]),
     name: z.string().nullable().describe("A name for several items bought together, e.g. 'ค่า 7-11'; null if none"),
-    wallet: (ctx.wallets.length ? keys(ctx.wallets) : z.never()).nullable().describe("Key of the wallet if one was named, else null"),
+    wallet: (ctx.wallets.length ? keys(ctx.wallets).nullable() : z.null()).describe("Key of the wallet if one was named, else null"),
     items: z.array(item).min(1).max(20),
     uncertain: z.array(z.enum(["wallet"])).describe("Set if you are only guessing the wallet"),
   });
@@ -93,6 +93,7 @@ export function createGeminiTextEntryParser(opts: { apiKey: string; model?: stri
         }
       } catch (e) {
         const status = e instanceof ApiError ? e.status : undefined;
+        console.error("gemini text parse failed", status, e instanceof Error ? e.message : e); // the reason is only in the server log
         throw new DomainError("AI_UNAVAILABLE", status ? `gemini http ${status}` : "gemini request failed");
       }
 

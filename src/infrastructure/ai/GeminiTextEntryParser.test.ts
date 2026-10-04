@@ -107,7 +107,9 @@ describe("GeminiTextEntryParser", () => {
     const reqs: Req[] = [];
     const { parser } = await load(async (r) => (reqs.push(r), reply(withItem({ people: [] }))));
     await parser.parse("กาแฟ 55", { categories: ctx.categories, people: [], wallets: [] });
-    expect(JSON.stringify(reqs[0].config.responseJsonSchema)).not.toContain('"p1"');
+    const schema = JSON.stringify(reqs[0].config.responseJsonSchema);
+    expect(schema).not.toContain('"p1"');
+    expect(schema).not.toContain('"not"'); // Gemini rejects `not` (what z.never() becomes) with a 400
     vi.doUnmock("@google/genai");
   });
 });
