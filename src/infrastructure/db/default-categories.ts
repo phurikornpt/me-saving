@@ -36,7 +36,7 @@ export async function seedUserDefaults(sequelize: Sequelize, userId: string, tra
   });
 }
 
-/** A brand-new account's first wallet, "เงินสด", which is also its default. Needs migration 006. */
+/** A brand-new account's first wallet, "เงินสด", which is also its default. Needs migration 007. */
 export async function seedDefaultWallet(sequelize: Sequelize, userId: string, transaction?: Transaction): Promise<void> {
   await sequelize.query(
     `WITH w AS (INSERT INTO wallets (user_id, name, icon) VALUES (:userId, 'เงินสด', 'payments') RETURNING id)

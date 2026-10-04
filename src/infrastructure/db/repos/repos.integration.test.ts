@@ -251,6 +251,11 @@ describe("categories, presets, settings", () => {
     expect(first.dashboardLayout.map((i) => i.id)).toContain("calendar");
     await repo.update({ dashboardLayout: [{ id: "calendar", enabled: true }] });
     expect((await repo.get()).dashboardLayout[0]).toEqual({ id: "calendar", enabled: true });
+    expect(first.meNote).toBe("");
+    await repo.update({ meNote: "ไม่ดื่มกาแฟ" });
+    const saved = await repo.get();
+    expect(saved.meNote).toBe("ไม่ดื่มกาแฟ");
+    expect(saved.dashboardLayout[0]).toEqual({ id: "calendar", enabled: true });
   });
   it("people: listed in order, edited and archived", async () => {
     const repo = createRepos(sequelize, USER).people;
@@ -475,7 +480,7 @@ describe("migrations 004 + 005 on data recorded before people and accounts exist
       ]);
       expect((await createCategoryRepo(legacy, owner).list()).length).toBe(9);
 
-      // 006: everything recorded so far sits in one "เงินสด" wallet, which is the default
+      // 007: everything recorded so far sits in one "เงินสด" wallet, which is the default
       const [cash] = await repos.wallets.list();
       expect(cash).toMatchObject({ name: "เงินสด", openingBalance: 0, archived: false });
       expect(await repos.wallets.defaultId()).toBe(cash.id);

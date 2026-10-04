@@ -156,4 +156,5 @@ export const parsePeopleField = (raw: unknown) =>
 
 export const settingsPatchBody = z.object({
   dashboardLayout: z.array(z.object({ id: z.string(), enabled: z.boolean() })).optional(),
+  meNote: z.string().trim().max(500).optional(),
 });

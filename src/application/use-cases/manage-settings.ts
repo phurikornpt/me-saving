@@ -18,9 +18,10 @@ export class ManageSettings {
   get() {
     return this.settings.get();
   }
-  update(patch: { dashboardLayout?: unknown }): Promise<SettingsRecord> {
+  update(patch: { dashboardLayout?: unknown; meNote?: string }): Promise<SettingsRecord> {
     return this.settings.update({
       ...(patch.dashboardLayout !== undefined && { dashboardLayout: normalizeLayout(patch.dashboardLayout) }),
+      ...(patch.meNote !== undefined && { meNote: patch.meNote }),
     });
   }
 }

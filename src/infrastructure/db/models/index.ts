@@ -133,6 +133,7 @@ export class XpEvent extends Model<InferAttributes<XpEvent>, InferCreationAttrib
 export class Setting extends Model<InferAttributes<Setting>, InferCreationAttributes<Setting>> {
   declare userId: ForeignKey<User["id"]>;
   declare dashboardLayout: CreationOptional<LayoutItem[]>;
+  declare meNote: CreationOptional<string>;
   declare defaultWalletId: CreationOptional<ForeignKey<Wallet["id"]> | null>;
 }
 
@@ -318,6 +319,7 @@ export function initModels(sequelize: Sequelize): Models {
       {
         userId: { ...userId, primaryKey: true },
         dashboardLayout: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
+        meNote: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
         defaultWalletId: { type: DataTypes.UUID, allowNull: true },
       },
       opts("Setting", "settings"),
