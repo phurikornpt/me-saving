@@ -32,7 +32,10 @@ export interface DashboardView {
   wallets: WalletView[];
 }
 
-/** One request feeds every widget; queries run in parallel. */
+/**
+ * One request feeds every widget; queries run in parallel. `walletId` narrows the money views
+ * (today's totals, recent entries) to one wallet; streak, people and the rest stay whole.
+ */
 export class GetDashboard {
   constructor(
     private readonly repos: Repos,
@@ -42,14 +45,14 @@ export class GetDashboard {
     private readonly clock: Clock,
   ) {}
 
-  async execute(): Promise<DashboardView> {
+  async execute(walletId?: string): Promise<DashboardView> {
     const today = bangkokDay(this.clock.now());
     const [days, xpTotal, ledger, totals, recent, presets, settings, people, wallets] = await Promise.all([
       this.repos.loggedDays.allDays(),
       this.repos.xp.total(),
       this.repos.entries.ledger(),
-      this.stats.dailyTotals(today, addDays(today, 1)),
-      this.repos.entries.recent(5),
+      this.stats.dailyTotals(today, addDays(today, 1), walletId),
+      this.repos.entries.recent(5, walletId),
       this.presets.list(),
       this.settings.get(),
       this.repos.people.list(),

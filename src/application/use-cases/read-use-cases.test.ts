@@ -46,6 +46,27 @@ describe("GetDashboard", () => {
     expect(view.recent).toHaveLength(2);
     expect(view.layout).toBe(DEFAULT_LAYOUT);
   });
+
+  it("narrows today's totals and recent entries to one wallet; people and streak stay whole", async () => {
+    const f = createFakeRepos();
+    const clock = new FixedClock(NOON);
+    const rec = new RecordEntry(f.tx, clock);
+    await rec.execute({ kind: "expense", total: 10000, split: { kind: "equal", people: [FAN] } }); // cash
+    await rec.execute({ kind: "expense", total: 700, walletId: "w-bank" });
+    const asked: (string | undefined)[] = [];
+    const s = stats();
+    const view = await new GetDashboard(
+      f.repos,
+      { ...s, dailyTotals: async (from, to, walletId) => (asked.push(walletId), s.dailyTotals(from, to)) },
+      { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false },
+      { get: async () => ({ dashboardLayout: DEFAULT_LAYOUT, meNote: "" }), update: async () => { throw new Error(); } },
+      clock,
+    ).execute("w-bank");
+    expect(asked).toEqual(["w-bank"]);
+    expect(view.recent.map((e) => e.total)).toEqual([700]);
+    expect(view.balances).toEqual([{ personId: FAN, balance: 5000 }]);
+    expect(view.streak.loggedToday).toBe(true);
+  });
 });
 
 describe("GetCalendarMonth", () => {

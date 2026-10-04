@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
+import { inWallet, useWalletFilter } from "@/client/walletFilter";
 import type { EntryDTO } from "@/client/types";
 import { addDays } from "@/domain/day";
 import { formatBaht, formatCompact } from "@/domain/money";
@@ -23,9 +24,11 @@ export function CalendarWidget({ today }: { today: string }) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [editing, setEditing] = useState<EntryDTO | null>(null);
-  const { data } = useCalendar(month);
+  const wallet = useWalletFilter();
+  const { data } = useCalendar(month, wallet);
   const { data: categories = [] } = useCategories();
   const dayEntries = useEntriesOn(openDay);
+  const shown = dayEntries.data?.filter((e) => inWallet(e, wallet));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
@@ -94,9 +97,9 @@ export function CalendarWidget({ today }: { today: string }) {
         title={openDay ? new Date(`${openDay}T12:00:00Z`).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" }) : ""}
       >
         {dayEntries.isLoading && <p className="py-4 text-center text-ink-3">กำลังโหลด…</p>}
-        {dayEntries.data?.length === 0 && <p className="py-4 text-center text-ink-3">ไม่มีรายการ</p>}
+        {shown?.length === 0 && <p className="py-4 text-center text-ink-3">ไม่มีรายการ</p>}
         <ul className="divide-y divide-line">
-          {dayEntries.data?.map((e) => (
+          {shown?.map((e) => (
             <li key={e.id}>
               <EntryRow entry={e} categories={categories} onClick={() => setEditing(e)} />
             </li>

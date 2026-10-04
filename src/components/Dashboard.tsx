@@ -4,11 +4,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/client/api";
 import { introPlaying } from "@/client/intro";
 import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
+import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { wake } from "@/client/wake";
@@ -41,7 +42,20 @@ function renderWidget(id: WidgetId, data: DashboardDTO) {
 }
 
 export function Dashboard() {
-  const { data, isLoading, isError, refetch } = useDashboard();
+  const base = useDashboard();
+  const { isLoading, isError, refetch } = base;
+  // A wallet picked on this device narrows the money views (today, recent, calendar, categories).
+  const stored = useWalletFilter();
+  const activeWallets = (base.data?.wallets ?? []).filter((w) => !w.archived);
+  const wallet = stored && activeWallets.some((w) => w.id === stored) ? stored : null;
+  useEffect(() => {
+    // the remembered wallet was archived (or belongs to another account): back to every wallet
+    if (stored && base.data && !wallet) setWalletFilter(null);
+  }, [stored, base.data, wallet]);
+  const filtered = useDashboard(wallet);
+  const data = base.data && wallet && filtered.data
+    ? { ...base.data, todayTotals: filtered.data.todayTotals, recent: filtered.data.recent }
+    : base.data;
   const router = useRouter();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -113,7 +127,20 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="flex flex-col gap-3">
+      {activeWallets.length > 1 && (
+        <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4" role="group" aria-label="ดูตามกระเป๋า">
+          <button className="pill shrink-0 text-sm" aria-pressed={wallet === null} onClick={() => setWalletFilter(null)}>
+            ทุกกระเป๋า
+          </button>
+          {activeWallets.map((w) => (
+            <button key={w.id} className="pill flex shrink-0 items-center gap-1 text-sm" aria-pressed={wallet === w.id} onClick={() => setWalletFilter(w.id)}>
+              <Icon name={w.icon} size={16} /> {w.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className={`flex flex-col gap-3 transition-opacity ${wallet && filtered.isPlaceholderData ? "opacity-60" : ""}`}>
         {data?.layout.filter((w) => w.enabled).map((w, i) => (
           // Rise in one by one only while the intro plays; `initial` is read at mount, so refetches never replay it.
           <motion.div

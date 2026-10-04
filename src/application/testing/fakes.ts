@@ -59,8 +59,9 @@ export function createFakeRepos() {
             .map((e) => ({ personId: e.personId!, total: e.total })),
         };
       },
-      async recent(limit) {
-        return [...entries].reverse().slice(0, limit);
+      async recent(limit, walletId) {
+        const inWallet = (e: EntryRecord) => !walletId || e.walletId === walletId || e.toWalletId === walletId;
+        return [...entries].reverse().filter(inWallet).slice(0, limit);
       },
       async onDay(day) {
         return entries.filter((e) => bangkokDay(e.occurredAt) === day);

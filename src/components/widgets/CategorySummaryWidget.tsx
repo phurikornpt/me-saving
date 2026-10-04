@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useCategoryBreakdown } from "@/client/queries";
+import { useWalletFilter } from "@/client/walletFilter";
 import { formatBaht } from "@/domain/money";
 import { Icon } from "../Icon";
 import { Skeleton } from "../Loading";
@@ -24,7 +25,7 @@ interface Row { key: string; name: string; icon: string; spent: number; color: s
 export function CategorySummaryWidget({ today }: { today: string }) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [picked, setPicked] = useState<string | null>(null);
-  const { data } = useCategoryBreakdown(month);
+  const { data } = useCategoryBreakdown(month, useWalletFilter());
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 
   const rows: Row[] = [];

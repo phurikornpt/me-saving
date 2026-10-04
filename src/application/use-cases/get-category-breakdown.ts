@@ -22,9 +22,9 @@ export class GetCategoryBreakdown {
     private readonly categories: CategoryRepo,
   ) {}
 
-  async execute(month: string): Promise<CategoryBreakdown> {
+  async execute(month: string, walletId?: string): Promise<CategoryBreakdown> {
     const { days, nextMonthStart } = monthDays(month);
-    const [totals, cats] = await Promise.all([this.stats.categoryTotals(days[0], nextMonthStart), this.categories.list()]);
+    const [totals, cats] = await Promise.all([this.stats.categoryTotals(days[0], nextMonthStart, walletId), this.categories.list()]);
     const byId = new Map(cats.map((c) => [c.id, c]));
     const slices = totals.map((t): CategorySlice => {
       const c = t.categoryId ? byId.get(t.categoryId) : undefined; // archived categories still count in past months

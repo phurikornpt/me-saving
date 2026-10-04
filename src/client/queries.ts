@@ -3,11 +3,24 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "./api";
 
-export const useDashboard = () => useQuery({ queryKey: ["dashboard"], queryFn: api.dashboard });
-export const useCalendar = (month: string) =>
-  useQuery({ queryKey: ["calendar", month], queryFn: () => api.calendar(month), placeholderData: (prev) => prev });
-export const useCategoryBreakdown = (month: string) =>
-  useQuery({ queryKey: ["breakdown", month], queryFn: () => api.categoryBreakdown(month), placeholderData: (prev) => prev });
+/**
+ * The whole dashboard, or with `wallet` its money views narrowed to one wallet. The unfiltered one keeps
+ * the plain ["dashboard"] key: optimistic updates and the persisted cache work on that one.
+ */
+export const useDashboard = (wallet: string | null = null) =>
+  useQuery({
+    queryKey: wallet ? ["dashboard", "wallet", wallet] : ["dashboard"],
+    queryFn: () => api.dashboard(wallet),
+    placeholderData: (prev) => prev,
+  });
+export const useCalendar = (month: string, wallet: string | null = null) =>
+  useQuery({ queryKey: ["calendar", month, wallet], queryFn: () => api.calendar(month, wallet), placeholderData: (prev) => prev });
+export const useCategoryBreakdown = (month: string, wallet: string | null = null) =>
+  useQuery({
+    queryKey: ["breakdown", month, wallet],
+    queryFn: () => api.categoryBreakdown(month, wallet),
+    placeholderData: (prev) => prev,
+  });
 export const useEntriesOn = (day: string | null) =>
   useQuery({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day!), enabled: !!day });
 export const useOutstanding = () => useQuery({ queryKey: ["outstanding"], queryFn: api.outstanding });
