@@ -28,3 +28,13 @@ export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: api.peo
 export const useCategories = () => useQuery({ queryKey: ["categories"], queryFn: api.categories, staleTime: 5 * 60_000 });
 export const useWallets = () => useQuery({ queryKey: ["wallets"], queryFn: api.wallets, staleTime: 60_000 });
 export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api.settings });
+
+/** What a preset was actually paid at lately (for its hold-to-pick popup). */
+export const presetPricesKey = (presetId: string) => ["presetPrices", presetId];
+export const usePresetPrices = (presetId: string | null) =>
+  useQuery({
+    queryKey: presetPricesKey(presetId ?? ""),
+    queryFn: () => api.presetPrices(presetId!),
+    enabled: !!presetId,
+    staleTime: 60_000,
+  });
