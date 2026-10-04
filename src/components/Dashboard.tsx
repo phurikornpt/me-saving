@@ -1,10 +1,12 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/client/api";
+import { introPlaying } from "@/client/intro";
 import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
 import type { DashboardDTO } from "@/client/types";
@@ -82,7 +84,7 @@ export function Dashboard() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-36">
-      <header className="safe-top flex items-center justify-between pb-3">
+      <header className="intro-rise safe-top flex items-center justify-between pb-3">
         <h1 className="font-display text-2xl">me-budget</h1>
         <div className="flex gap-1">
           <button aria-label="แก้ dashboard" className="rounded-full p-2" onClick={() => setEditing(true)}>
@@ -101,7 +103,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {isLoading && <DashboardSkeleton />}
+      {isLoading && <div className="intro-rise"><DashboardSkeleton /></div>}
       {isError && !data && (
         <div className="py-20 text-center">
           <p className="mb-3 text-ink-2">โหลดข้อมูลไม่สำเร็จ</p>
@@ -110,7 +112,17 @@ export function Dashboard() {
       )}
 
       <div className="flex flex-col gap-3">
-        {data?.layout.filter((w) => w.enabled).map((w) => <div key={w.id}>{renderWidget(w.id, data)}</div>)}
+        {data?.layout.filter((w) => w.enabled).map((w, i) => (
+          // Rise in one by one only while the intro plays; `initial` is read at mount, so refetches never replay it.
+          <motion.div
+            key={w.id}
+            initial={introPlaying() ? { opacity: 0, y: 12 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, ease: "easeOut", delay: 0.45 + i * 0.05 }}
+          >
+            {renderWidget(w.id, data)}
+          </motion.div>
+        ))}
       </div>
 
       <ModeWheel
