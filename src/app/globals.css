@@ -258,6 +258,8 @@ html[data-intro="play"] .intro-pop { animation: intro-pop 450ms cubic-bezier(0.3
   100% { box-shadow: 0 0 0 0 transparent; }
 }
 /* the cloud settling in when the AI starts thinking */
+.fade-in { animation: fade-in 0.25s ease-out both; }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
 .aurora-in { animation: aurora-in 0.5s var(--ease-out, cubic-bezier(0.32, 0.72, 0, 1)) both; }
 @keyframes aurora-in { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: none; } }
 /* theme switch: the new colours grow as a circle (clip-path is animated from script); no crossfade underneath */
@@ -290,7 +292,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @keyframes flame-pop { 0% { transform: scale(1); } 35% { transform: scale(1.45) rotate(-6deg); filter: drop-shadow(0 0 12px color-mix(in srgb, var(--expense) 70%, transparent)); } 100% { transform: scale(1); } }
 
 @media (prefers-reduced-motion: reduce) {
-  .flash-once, .aurora-in, .dot-pop, .flame-pop, .fresh-row, .shake-once, .pic-reading::after, .pic-bad { animation: none; }
+  .flash-once, .fade-in, .aurora-in, .dot-pop, .flame-pop, .fresh-row, .shake-once, .pic-reading::after, .pic-bad { animation: none; }
   ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
   .press, .press:active:not(:disabled) { transform: none; transition: none; }
   .skeleton, .top-progress-bar, .scan-line { animation: none; }
@@ -299,7 +301,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 /* The same switches again for the in-app "reduce motion" setting (html[data-motion="reduce"]), which the system media query alone can't see */
-html[data-motion="reduce"] .shake-once, html[data-motion="reduce"] .fresh-row, html[data-motion="reduce"] .pic-reading::after, html[data-motion="reduce"] .pic-bad, html[data-motion="reduce"] .flash-once, html[data-motion="reduce"] .aurora-in, html[data-motion="reduce"] .dot-pop, html[data-motion="reduce"] .flame-pop,
+html[data-motion="reduce"] .shake-once, html[data-motion="reduce"] .fresh-row, html[data-motion="reduce"] .pic-reading::after, html[data-motion="reduce"] .pic-bad, html[data-motion="reduce"] .flash-once, html[data-motion="reduce"] .fade-in, html[data-motion="reduce"] .aurora-in, html[data-motion="reduce"] .dot-pop, html[data-motion="reduce"] .flame-pop,
 html[data-motion="reduce"] .wheel-hero::after { animation: none; }
 html[data-motion="reduce"] .toast-drain { display: none; }
 html[data-motion="reduce"] ::view-transition-old(*), html[data-motion="reduce"] ::view-transition-new(*), html[data-motion="reduce"] ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }

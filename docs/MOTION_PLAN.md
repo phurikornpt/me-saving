@@ -142,6 +142,7 @@ Prototype ที่ตกลงแล้ว (artifact ส่วนตัวข�
 | ขั้น | งาน | ไฟล์ | สถานะ |
 |---|---|---|---|
 | P1 | ปฏิทิน: เลื่อนเดือน/สลับตัวกรองเมื่อข้อมูลมาถึง, ตารางจางระหว่างรอ · สรุปตามหมวด: จางระหว่างรอ · prefetch เดือนก่อน/ถัดไป | `CalendarWidget.tsx`, `CategorySummaryWidget.tsx`, `queries.ts` | เขียนแล้ว |
+| P1.5 | หน้าตั้งค่า: เดิมหน้าเปิดก่อนข้อมูลมา → แถวสรุปบนหน้าแรกโผล่ทีหลังทำให้แถวสูงขึ้น และหน้าย่อยโชว์ "ยังไม่มีใคร/ยังไม่มีหมวด" ทั้งที่ยังโหลดไม่เสร็จ · แก้: แถวสรุปมี skeleton จองความสูง แล้วข้อความจางเข้า · `SettingsGroup loading` แสดงแถว skeleton แทน แล้วรายการจางเข้า (เฉพาะกรณีที่ต้องรอ) | `settings/ui.tsx`, `SettingsScreen.tsx`, หน้าย่อยทั้งหมด, `globals.css` (`.fade-in`) | เขียนแล้ว |
 | P2 | หน้าแรก: skeleton ค่อยๆ สลับเป็นเนื้อหา, วิดเจ็ตไหลเข้าเมื่อข้อมูลมาครั้งแรก (ไม่ผูกกับ intro 1.2 วินาที) เล่นครั้งเดียว | `Dashboard.tsx`, `Loading.tsx` | ยังไม่ทำ |
 | P3 | `useDelayedFlag(active, { delay, min })` ใน `motion.ts` ใช้กับ `TopProgress`, sheet ของวัน, `GroupEntryScreen` · sheet ของวัน: skeleton แถวแทนข้อความ, แถวไหลเข้าเมื่อข้อมูลมา, prefetch ตอน `pointerdown` | `motion.ts`, `Loading.tsx`, `CalendarWidget.tsx` | ยังไม่ทำ |
 

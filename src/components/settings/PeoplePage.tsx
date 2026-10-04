@@ -17,7 +17,8 @@ type Editing = PersonDTO | "new" | null;
 export function PeoplePage() {
   const qc = useQueryClient();
   const fb = useFeedback();
-  const { data: people = [] } = usePeople();
+  const { data, isPending } = usePeople();
+  const people = data ?? [];
   const [editing, setEditing] = useState<Editing>(null);
   const [showHidden, setShowHidden] = useState(false);
   const refresh = () => {
@@ -42,7 +43,7 @@ export function PeoplePage() {
         <MeNoteField />
       </SettingsGroup>
 
-      <SettingsGroup title="คนที่ออกก่อนให้">
+      <SettingsGroup title="คนที่ออกก่อนให้" loading={isPending}>
         {active.length === 0 && emptyHint("ยังไม่มีใคร กด “เพิ่มคน” ด้านบน")}
         {active.map((p) => (
           <button key={p.id} className="flex w-full items-center gap-3 py-3 text-left" onClick={() => setEditing(p)}>

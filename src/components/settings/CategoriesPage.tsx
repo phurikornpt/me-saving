@@ -14,7 +14,8 @@ import { AddButton, emptyHint, IconPicker, inputClass, SettingsGroup, SettingsIt
 export function CategoriesPage() {
   const qc = useQueryClient();
   const fb = useFeedback();
-  const { data: categories = [] } = useCategories();
+  const { data, isPending } = useCategories();
+  const categories = data ?? [];
   const [adding, setAdding] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ["categories"] });
   const hide = useMutation({
@@ -27,7 +28,7 @@ export function CategoriesPage() {
   const group = (kind: "expense" | "income", title: string) => {
     const rows = active.filter((c) => c.kind === kind);
     return (
-      <SettingsGroup title={title}>
+      <SettingsGroup title={title} loading={isPending}>
         {rows.length === 0 && emptyHint("ยังไม่มีหมวด")}
         {rows.map((c) => (
           <SettingsItem
