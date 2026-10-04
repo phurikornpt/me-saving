@@ -29,7 +29,6 @@ export interface DragTarget {
 }
 
 const WIDTH = 366;
-const MAX_BAHT = 1000; // the sideways price strip runs ฿1..฿1000; type anything beyond that
 const QUICK = [
   { id: "now", label: "ตอนนี้" },
   { id: "hourAgo", label: "1 ชม.ก่อน" },
@@ -276,7 +275,14 @@ function Main({
   );
 }
 
-/** "ราคาอื่น…": a big editable number over a sideways strip that moves ฿1 per notch. */
+/** What one notch of the price wheel adds: +1 to +100, one more per notch of the sideways strip. */
+const STEPS = Array.from({ length: 100 }, (_, i) => i + 1);
+const stepMax = (step: number) => Math.max(500, step * 30);
+
+/**
+ * "ราคาอื่น…": a wheel scrolled up and down picks the price; a sideways strip under it picks how
+ * much each notch adds (+1 to start; scroll across and it goes +2, +3 ... up to +100).
+ */
 function PricePanel({
   preset,
   start,
@@ -292,54 +298,46 @@ function PricePanel({
   onBack: () => void;
   onLog: (amount: number) => void;
 }) {
-  const [baht, setBaht] = useState(() => Math.min(MAX_BAHT, Math.max(1, Math.round(start / 100))));
-  const [text, setText] = useState(String(baht));
-  const counts = useMemo(() => new Map(paid.filter((p) => p.count > 0).map((p) => [p.amount, p.count])), [paid]);
+  const [step, setStep] = useState<number>(1);
+  const [baht, setBaht] = useState(() => Math.min(stepMax(1), Math.max(1, Math.round(start / 100))));
+  const counts = useMemo(() => new Map(paid.filter((p) => p.count > 0).map((p) => [p.amount / 100, p.count])), [paid]);
+  const values = useMemo(() => Array.from({ length: Math.floor(stepMax(step) / step) }, (_, i) => (i + 1) * step), [step]);
   const items = useMemo(
-    () =>
-      Array.from({ length: MAX_BAHT }, (_, i) => {
-        const n = counts.get((i + 1) * 100);
-        return { key: String(i + 1), label: String(i + 1), note: n ? `·` : undefined };
-      }),
-    [counts],
+    () => values.map((v) => ({ key: String(v), label: `฿${v.toLocaleString("th-TH")}`, note: counts.has(v) ? `${counts.get(v)}×` : undefined })),
+    [values, counts],
   );
-  const set = (b: number) => {
-    setBaht(b);
-    setText(String(b));
+  const index = Math.max(0, values.indexOf(baht));
+  const changeStep = (st: number) => {
+    // the price in the middle moves to the nearest multiple of the new step, so it never jumps far
+    const next = Math.min(stepMax(st), Math.max(st, Math.round(baht / st) * st));
+    setStep(st);
+    setBaht(next);
   };
-  const valid = baht >= 1;
   return (
     <>
-      <Header preset={preset} onBack={onBack} title={`${preset.label} · ราคาอื่น`} aside={<span className="text-xs text-white/55">ปัดซ้าย-ขวา ทีละ ฿1</span>} />
-      <label className="mb-2 flex items-baseline justify-center gap-1 font-display">
-        <span className="text-3xl text-white/60">฿</span>
-        <input
-          inputMode="numeric"
-          aria-label="ราคา (บาท)"
-          value={text}
-          onChange={(e) => {
-            const v = e.target.value.replace(/\D/g, "").slice(0, 6);
-            setText(v);
-            if (v) setBaht(Number(v)); // beyond ฿1000 the strip just stays at its end
-          }}
-          className="w-40 bg-transparent text-center text-5xl outline-none"
-        />
-      </label>
+      <Header preset={preset} onBack={onBack} title={`${preset.label} · ราคาอื่น`} aside={<span className="text-xs text-white/55">เลื่อนทีละ ฿{step}</span>} />
+      <WheelPicker
+        key={step}
+        size={44}
+        items={items}
+        index={index}
+        onChange={(i) => setBaht(values[i])}
+        label={`ราคา เลื่อนขึ้นลง ทีละ ${step} บาท`}
+        className="mb-1"
+      />
+      <p className="mb-1 mt-2 text-center text-xs text-white/55">ปัดซ้าย-ขวา เพื่อเปลี่ยนว่าเลื่อนทีละเท่าไหร่</p>
       <WheelPicker
         axis="x"
-        size={52}
-        items={items}
-        index={Math.min(baht, MAX_BAHT) - 1}
-        onChange={(i) => set(i + 1)}
-        label="ราคา ปัดซ้ายขวาทีละหนึ่งบาท"
+        size={68}
+        cross={40}
+        items={STEPS.map((st) => ({ key: String(st), label: `+${st}` }))}
+        index={step - 1}
+        onChange={(i) => changeStep(STEPS[i])}
+        label="เลื่อนทีละกี่บาท"
         className="mb-4"
       />
-      <button
-        disabled={!valid}
-        onClick={() => onLog(baht * 100)}
-        className="btn3d w-full py-3.5 text-base"
-      >
-        <Icon name="check" size={22} /> จด ฿{formatBaht(baht * 100)} · {whenText}
+      <button onClick={() => onLog(baht * 100)} className="btn3d w-full py-3.5 text-base">
+        <Icon name="check" size={22} /> จด ฿{baht.toLocaleString("th-TH")} · {whenText}
       </button>
     </>
   );

@@ -22,6 +22,7 @@ export function WheelPicker({
   label,
   axis = "y",
   size = 40,
+  cross,
   visible = 5,
   className = "",
 }: {
@@ -32,6 +33,8 @@ export function WheelPicker({
   axis?: "x" | "y";
   /** Height (or width, sideways) of one item in px. */
   size?: number;
+  /** Sideways only: how tall the strip is (default: as tall as an item is wide). */
+  cross?: number;
   /** How many items show at once (odd). */
   visible?: number;
   className?: string;
@@ -41,6 +44,7 @@ export function WheelPicker({
   const frame = useRef(0);
   const x = axis === "x";
   const pad = (size * (visible - 1)) / 2;
+  const thick = cross ?? size;
 
   // keep the scroll position on the value (when it changes from outside: a chip, typing, arrow keys)
   useEffect(() => {
@@ -77,12 +81,12 @@ export function WheelPicker({
   return (
     <div
       className={`relative ${className}`}
-      style={x ? { width: "100%", height: size } : { height: size * visible }}
+      style={x ? { width: "100%", height: thick } : { height: size * visible }}
     >
       <div
         aria-hidden
         className="pointer-events-none absolute rounded-full border border-white/25 bg-white/20"
-        style={x ? { left: "50%", top: 0, width: size, height: size, marginLeft: -size / 2 } : { left: 0, right: 0, top: pad, height: size }}
+        style={x ? { left: "50%", top: 0, width: size, height: thick, marginLeft: -size / 2 } : { left: 0, right: 0, top: pad, height: size }}
       />
       <div
         ref={el}
@@ -121,7 +125,7 @@ export function WheelPicker({
                 className={`flex shrink-0 snap-center items-center justify-center gap-1 tabular-nums transition-[opacity,font-size] ${
                   on ? "text-lg font-semibold" : "text-base opacity-50"
                 } ${it.disabled ? "line-through opacity-25" : ""}`}
-                style={x ? { width: size, height: size } : { height: size }}
+                style={x ? { width: size, height: thick } : { height: size }}
               >
                 {it.label}
                 {it.note && <span className="text-[11px] font-normal opacity-70">{it.note}</span>}
