@@ -13,7 +13,7 @@ export function DashboardPage() {
     <SettingsPage title="Dashboard">
       {data ? (
         <div className="rounded-[24px] bg-card p-4">
-          <LayoutEditor layout={data.layout} onDone={() => router.push("/settings")} />
+          <LayoutEditor layout={data.layout} onDone={() => router.replace("/settings")} />
         </div>
       ) : (
         <p className="py-8 text-center text-sm text-ink-3">กำลังโหลด…</p>
