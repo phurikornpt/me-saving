@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DomainError } from "@/domain/errors";
 import { createFakeRepos, FixedClock } from "../testing/fakes";
-import type { CategoryRecord, LoginAttemptRepo, ParsedEntryText, TextEntryParser } from "../ports";
+import type { CategoryRecord, LoginAttemptRepo, ParsedEntries, ParsedEntry, ParsedEntryItem, TextEntryParser } from "../ports";
 import { MAX_ENTRY_TEXT, ParseEntryText } from "./parse-entry-text";
 
 const NOON = new Date("2026-10-03T05:00:00Z");
@@ -11,10 +11,13 @@ const cats: CategoryRecord[] = [
   { id: "c-pay", name: "เงินเดือน", icon: "savings", kind: "income", sort: 2, archived: false },
 ];
 // createFakeRepos seeds people [p-fan, p-a] and wallets [w-cash (default), w-bank], so the keys are p1,p2 / w1,w2.
-const PARSED: ParsedEntryText = {
-  kind: "expense", amount: 6000, categoryName: "อาหาร", note: "ข้าวมันไก่",
-  split: "equal", personKeys: ["p1"], walletKey: null, uncertain: [],
-};
+const ITEM: ParsedEntryItem = { note: "ข้าวมันไก่", amount: 6000, categoryName: "อาหาร", me: true, personKeys: ["p1"], uncertain: [] };
+const ENTRY: ParsedEntry = { kind: "expense", name: null, walletKey: null, items: [ITEM], uncertain: [] };
+const PARSED: ParsedEntries = { entries: [ENTRY] };
+/** One entry with these overrides on its first item (and on the entry itself). */
+const one = (item: Partial<ParsedEntryItem> = {}, entry: Partial<ParsedEntry> = {}): ParsedEntries => ({
+  entries: [{ ...ENTRY, ...entry, items: [{ ...ITEM, ...item }] }],
+});
 
 function budget(): LoginAttemptRepo & { n: number; keys: string[] } {
   const log: Date[] = [];
@@ -28,7 +31,7 @@ function budget(): LoginAttemptRepo & { n: number; keys: string[] } {
   };
 }
 
-function setup(parsed: ParsedEntryText | Error = PARSED, perDay: number | null = 20) {
+function setup(parsed: ParsedEntries | Error = PARSED, perDay: number | null = 20) {
   const f = createFakeRepos();
   const seen: Parameters<TextEntryParser["parse"]>[1][] = [];
   const parser: TextEntryParser = {
@@ -53,12 +56,14 @@ function setup(parsed: ParsedEntryText | Error = PARSED, perDay: number | null =
 
 describe("ParseEntryText", () => {
   it("turns keys back into ids and gives the model only keys, names and active categories", async () => {
-    const { uc, seen } = setup({ ...PARSED, walletKey: "w2" });
-    const d = await uc.execute("  ข้าวมันไก่ 60 หารแฟน ");
-    expect(d).toEqual({
-      kind: "expense", amount: 6000, categoryId: "c-food", note: "ข้าวมันไก่",
-      split: "equal", personIds: ["p-fan"], walletId: "w-bank", uncertain: [],
-    });
+    const { uc, seen } = setup(one({}, { walletKey: "w2" }));
+    const { drafts } = await uc.execute("  ข้าวมันไก่ 60 หารแฟน ");
+    expect(drafts).toEqual([
+      {
+        mode: "single", kind: "expense", amount: 6000, categoryId: "c-food", note: "ข้าวมันไก่",
+        split: "equal", personIds: ["p-fan"], walletId: "w-bank", uncertain: [],
+      },
+    ]);
     expect(seen[0].people.map((p) => p.key)).toEqual(["p1", "p2"]);
     expect(JSON.stringify(seen[0])).not.toContain("p-fan"); // ids never reach the model
     expect(seen[0].categories).toEqual([
@@ -68,31 +73,96 @@ describe("ParseEntryText", () => {
   });
 
   it("ignores keys, wallets and categories the model invented, and marks them uncertain", async () => {
-    const { uc } = setup({ ...PARSED, categoryName: "ของที่ไม่มี", personKeys: ["p9"], walletKey: "w9" });
-    const d = await uc.execute("ข้าว 60 หารใครไม่รู้");
+    const { uc } = setup(one({ categoryName: "ของที่ไม่มี", personKeys: ["p9"] }, { walletKey: "w9" }));
+    const [d] = (await uc.execute("ข้าว 60 หารใครไม่รู้")).drafts;
     expect(d).toMatchObject({ categoryId: null, split: "none", personIds: [], walletId: null });
     expect(d.uncertain).toEqual(expect.arrayContaining(["category", "person", "wallet"]));
   });
 
   it("keeps valid people next to invented ones, once each", async () => {
-    const { uc } = setup({ ...PARSED, personKeys: ["p1", "p1", "pX", "p2"] });
-    expect((await uc.execute("x")).personIds).toEqual(["p-fan", "p-a"]);
+    const { uc } = setup(one({ personKeys: ["p1", "p1", "pX", "p2"] }));
+    expect((await uc.execute("x")).drafts[0]).toMatchObject({ personIds: ["p-fan", "p-a"] });
   });
 
   it("does not accept an archived category or one of the wrong kind", async () => {
-    expect((await setup({ ...PARSED, categoryName: "เก่า" }).uc.execute("x")).categoryId).toBeNull();
-    expect((await setup({ ...PARSED, categoryName: "เงินเดือน" }).uc.execute("x")).categoryId).toBeNull(); // expense named an income category
+    expect((await setup(one({ categoryName: "เก่า" })).uc.execute("x")).drafts[0]).toMatchObject({ categoryId: null });
+    expect((await setup(one({ categoryName: "เงินเดือน" })).uc.execute("x")).drafts[0]).toMatchObject({ categoryId: null }); // expense named an income category
   });
 
   it("an income has no split and takes income categories", async () => {
-    const d = await setup({ ...PARSED, kind: "income", categoryName: "เงินเดือน", amount: 2500000, split: "equal", personKeys: ["p1"] }).uc.execute("เงินเดือน 25000");
-    expect(d).toMatchObject({ kind: "income", categoryId: "c-pay", split: "none", personIds: [] });
+    const parsed = one({ categoryName: "เงินเดือน", amount: 2500000, me: false, personKeys: ["p1"] }, { kind: "income" });
+    const [d] = (await setup(parsed).uc.execute("เงินเดือน 25000")).drafts;
+    expect(d).toMatchObject({ mode: "single", kind: "income", categoryId: "c-pay", split: "none", personIds: [] });
   });
 
   it("a missing amount is flagged, and the model's own doubts are kept", async () => {
-    const d = await setup({ ...PARSED, amount: null, uncertain: ["category"] }).uc.execute("ข้าวมันไก่");
-    expect(d.amount).toBeNull();
+    const [d] = (await setup(one({ amount: null, uncertain: ["category"] })).uc.execute("ข้าวมันไก่")).drafts;
+    expect(d).toMatchObject({ amount: null });
     expect(d.uncertain).toEqual(expect.arrayContaining(["amount", "category"]));
+  });
+
+  it("single expense: people + me = equal, people without me = theirs, nobody = none", async () => {
+    const split = async (item: Partial<ParsedEntryItem>) => (await setup(one(item)).uc.execute("x")).drafts[0];
+    expect(await split({ me: true, personKeys: ["p1"] })).toMatchObject({ split: "equal", personIds: ["p-fan"] });
+    expect(await split({ me: false, personKeys: ["p1"] })).toMatchObject({ split: "theirs", personIds: ["p-fan"] });
+    expect(await split({ me: true, personKeys: [] })).toMatchObject({ split: "none", personIds: [] });
+  });
+
+  it("someone said to pay for, but nobody valid: ours, and the person is flagged", async () => {
+    const [d] = (await setup(one({ me: false, personKeys: ["p9"] })).uc.execute("x")).drafts;
+    expect(d).toMatchObject({ split: "none", personIds: [] });
+    expect(d.uncertain).toContain("person");
+  });
+
+  it("an expense with several items becomes one group with per-line owners", async () => {
+    const parsed: ParsedEntries = {
+      entries: [
+        {
+          ...ENTRY,
+          name: " ค่า 7-11 ",
+          walletKey: "w2",
+          items: [
+            { ...ITEM, note: "นม", amount: 3000, me: false, personKeys: ["p1"] },
+            { ...ITEM, note: "ไก่", amount: null, me: true, personKeys: [], categoryName: "ไม่มี" },
+            { ...ITEM, note: "น้ำ", amount: 2000, me: true, personKeys: ["p1", "p2"] },
+          ],
+        },
+      ],
+    };
+    const { drafts } = await setup(parsed).uc.execute("x");
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toEqual({
+      mode: "group", name: "ค่า 7-11", walletId: "w-bank", personIds: ["p-fan", "p-a"], uncertain: [],
+      lines: [
+        { note: "นม", amount: 3000, categoryId: "c-food", owners: { me: false, people: ["p-fan"] }, uncertain: [] },
+        { note: "ไก่", amount: null, categoryId: null, owners: { me: true, people: [] }, uncertain: expect.arrayContaining(["amount", "category"]) },
+        { note: "น้ำ", amount: 2000, categoryId: "c-food", owners: { me: true, people: ["p-fan", "p-a"] }, uncertain: [] },
+      ],
+    });
+  });
+
+  it("one sentence can give several drafts: income and expense apart, income items one each", async () => {
+    const parsed: ParsedEntries = {
+      entries: [
+        {
+          ...ENTRY, kind: "income", walletKey: "w9",
+          items: [
+            { ...ITEM, note: "เงินเดือน", amount: 2500000, categoryName: "เงินเดือน", personKeys: [] },
+            { ...ITEM, note: "โบนัส", amount: 100000, categoryName: null, personKeys: [] },
+          ],
+        },
+        ENTRY,
+      ],
+    };
+    const { drafts } = await setup(parsed).uc.execute("x");
+    expect(drafts.map((d) => d.mode)).toEqual(["single", "single", "single"]);
+    expect(drafts.map((d) => d.mode === "single" && d.kind)).toEqual(["income", "income", "expense"]);
+    expect(drafts[0].uncertain).toContain("wallet");
+    expect(drafts[2].uncertain).not.toContain("wallet");
+  });
+
+  it("a result with no entries is AI_UNAVAILABLE", async () => {
+    await expect(setup({ entries: [] }).uc.execute("x")).rejects.toMatchObject({ code: "AI_UNAVAILABLE" });
   });
 
   it("rejects empty and over-long text without spending any budget", async () => {

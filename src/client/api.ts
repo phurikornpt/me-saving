@@ -6,7 +6,7 @@ import type {
   DashboardDTO,
   EntryDTO,
   EntryDetailDTO,
-  EntryTextDraftDTO,
+  EntryDraftDTO,
   LineOwners,
   MonthSummaryDTO,
   OutstandingDTO,
@@ -81,6 +81,15 @@ export const api = {
     /** Omit for the default wallet. */
     walletId?: string;
   }) => request<ActivityDTO & { entry: EntryDTO }>("POST", "/api/entries", b),
+  /** Everything one sentence described, saved together (all or nothing). */
+  recordBatch: (b: {
+    walletId?: string;
+    items: (
+      | { type: "entry"; kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null; split?: SplitMode; walletId?: string }
+      | { type: "group"; merchant?: string | null; total: number; people?: string[]; walletId?: string;
+          lines: { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId?: string | null }[] }
+    )[];
+  }) => request<ActivityDTO & { entries: EntryDTO[] }>("POST", "/api/entries/batch", b),
   updateEntry: (
     id: string,
     b: Partial<{
@@ -104,7 +113,7 @@ export const api = {
     return request<ReceiptDraftDTO>("POST", "/api/receipt/parse", f);
   },
   /** One typed or spoken sentence -> an unsaved draft entry. Counts against the daily AI budget. */
-  parseEntryText: (text: string) => request<EntryTextDraftDTO>("POST", "/api/entry/parse", { text }),
+  parseEntryText: (text: string) => request<{ drafts: EntryDraftDTO[] }>("POST", "/api/entry/parse", { text }),
   saveReceipt: (b: {
     source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number; people?: string[];
     walletId?: string;
