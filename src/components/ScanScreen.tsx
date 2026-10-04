@@ -9,6 +9,7 @@ import { api, ApiError, describeFailure } from "@/client/api";
 import { activePeople, describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
+import { occurredAtFor, usableScanDay } from "@/client/occurredAt";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -20,8 +21,6 @@ import { ReadingReceipt, Spinner } from "./Loading";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
-
-type Header = { merchant: string | null; date: string | null };
 
 /**
  * One scan button, two jobs: with nobody picked it just reads the lines off the receipt (all ours);
@@ -39,7 +38,11 @@ export function ScanScreen() {
   const [walletId, setWalletId] = useState<string | null>(null);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
-  const [header, setHeader] = useState<Header | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [name, setName] = useState("");
+  const [day, setDay] = useState("");
+  const today = bangkokDay(new Date());
+  const backdated = !!day && day < today;
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
   const [totalText, setTotalText] = useState("");
@@ -65,7 +68,9 @@ export function ScanScreen() {
     const paid = draft.total > 0 ? draft.total : draft.lines.reduce((sum, l) => sum + l.price, 0);
     setTotal(paid);
     setTotalText(formatBaht(paid).replace(/,/g, ""));
-    setHeader({ merchant: draft.merchant, date: draft.date });
+    setName(draft.merchant ?? "");
+    setDay(usableScanDay(draft.date, today));
+    setReviewing(true);
   };
 
   const read = useMutation({
@@ -79,18 +84,16 @@ export function ScanScreen() {
     if (f) read.mutate(f);
   };
 
-  const phase = header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
+  const phase = reviewing ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
   const sum = useMemo(() => summarize(lines, total), [lines, total]);
 
   const save = useMutation({
     mutationFn: () => {
-      const date = header?.date ?? null;
-      const today = bangkokDay(new Date());
       return api.saveReceipt({
-        merchant: header?.merchant ?? null,
-        occurredAt: date && date <= today ? new Date(`${date}T12:00:00+07:00`).toISOString() : undefined,
+        merchant: name.trim() || null,
+        occurredAt: occurredAtFor(day, today),
         total,
         people: onBill.map((p) => p.id),
         walletId: walletId ?? undefined,
@@ -178,10 +181,29 @@ export function ScanScreen() {
 
       {phase === "review" && (
         <>
-          <div className="px-5 pb-2">
-            <p className="truncate font-medium">{header?.merchant ?? "ใบเสร็จ"}</p>
-            <p className="text-xs text-ink-3">{onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · " : ""}แตะชื่อเพื่อแก้</p>
-          </div>
+          <section className="flex items-center gap-2 px-5 pb-2">
+            <input
+              value={name}
+              maxLength={100}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ชื่อกลุ่ม เช่น ค่า 7-11 (ไม่ใส่ก็ได้)"
+              aria-label="ชื่อกลุ่ม"
+              className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
+            />
+            <label className="pill flex items-center gap-1 text-sm">
+              <Icon name="calendar_month" size={18} />
+              <input
+                type="date"
+                value={day}
+                max={today}
+                onChange={(e) => setDay(e.target.value)}
+                className="w-[7.5rem] bg-transparent text-xs outline-none"
+                aria-label="วันที่จ่าย (ค่าเริ่มต้นคือวันนี้)"
+              />
+            </label>
+          </section>
+          {backdated && <p className="px-6 pb-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
+          <p className="px-6 pb-2 text-xs text-ink-3">{onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · " : ""}แตะชื่อรายการเพื่อแก้</p>
 
           <ItemLines lines={lines} onChange={setLines} onBill={onBill} addLabel="เพิ่มรายการที่ AI อ่านตก" />
 

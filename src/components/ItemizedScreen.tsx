@@ -10,6 +10,7 @@ import { activePeople, describeShares } from "@/client/people";
 import { usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
 import { useAfterLog } from "@/client/useAfterLog";
+import { occurredAtFor } from "@/client/occurredAt";
 import { bangkokDay } from "@/domain/day";
 import { formatBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
@@ -54,7 +55,7 @@ export function ItemizedScreen() {
       api.saveReceipt({
         source: "itemized",
         merchant: v.name.trim() || null,
-        occurredAt: v.day && v.day < today ? new Date(`${v.day}T12:00:00+07:00`).toISOString() : undefined,
+        occurredAt: occurredAtFor(v.day, today),
         total: v.total,
         people: v.people,
         walletId: v.walletId ?? undefined,
