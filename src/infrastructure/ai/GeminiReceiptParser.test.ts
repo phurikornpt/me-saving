@@ -99,6 +99,7 @@ describe("bills shared with people", () => {
           { id: "uuid-fan", name: "แฟน", note: "ชอบนมเปรี้ยว" },
           { id: "uuid-mom", name: "แม่", note: "" },
         ],
+        meNote: "ไม่ดื่มกาแฟ",
         knownNames: [],
         categoryNames: [],
       },
@@ -109,6 +110,7 @@ describe("bills shared with people", () => {
     ]);
     const prompt = requests[0].contents[0].parts.map((p) => p.text ?? "").join("");
     expect(prompt).toContain('p1: name "แฟน", note "ชอบนมเปรี้ยว"');
+    expect(prompt).toContain('me: the buyer, note "ไม่ดื่มกาแฟ"');
     expect(prompt).not.toContain("uuid-fan"); // ids never reach the model
     expect(JSON.stringify(requests[0].config.responseJsonSchema)).toContain('"p2"');
     vi.doUnmock("@google/genai");

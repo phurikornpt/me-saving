@@ -8,6 +8,7 @@ import type {
   OwnerMemoryRepo,
   PersonRepo,
   ReceiptParser,
+  SettingsRepo,
 } from "../ports";
 
 /** The limit used before accounts existed; pass it as `scanLimit.perDay` to enforce it again. */
@@ -54,6 +55,7 @@ export class ParseReceipt {
     private readonly memory: OwnerMemoryRepo,
     private readonly categories: CategoryRepo,
     private readonly people: PersonRepo,
+    private readonly settings: Pick<SettingsRepo, "get">,
     /** Reuses the generic attempt log as a daily AI budget. */
     private readonly budget: LoginAttemptRepo,
     private readonly clock: Clock,
@@ -77,9 +79,14 @@ export class ParseReceipt {
     }
     await this.budget.record(key, now); // failed calls count too: they still cost quota
 
-    const [known, categories] = await Promise.all([this.memory.all(), this.categories.list()]);
+    const [known, categories, meNote] = await Promise.all([
+      this.memory.all(),
+      this.categories.list(),
+      people.length ? this.settings.get().then((s) => s.meNote) : "", // only a shared bill needs to know what's ours
+    ]);
     const parsed = await this.parser.parse(image, {
       people: people.map(({ id, name, note }) => ({ id, name, note })),
+      ...(meNote && { meNote }),
       knownNames: [...known.keys()],
       categoryNames: categories.filter((c) => c.kind === "expense" && !c.archived).map((c) => c.name),
     });

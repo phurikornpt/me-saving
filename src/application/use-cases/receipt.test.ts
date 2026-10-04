@@ -16,6 +16,7 @@ const ME = { me: true, people: [] };
 const own = (...people: string[]) => ({ me: false, people });
 const shared = (...people: string[]) => ({ me: true, people });
 const img = { data: new Uint8Array([1, 2, 3]), mimeType: "image/jpeg" };
+const NO_SETTINGS = { get: async () => ({ dashboardLayout: [], meNote: "" }) };
 
 const cats: CategoryRecord[] = [
   { id: "c1", name: "อาหาร", icon: "restaurant", kind: "expense", sort: 0, archived: false },
@@ -50,7 +51,7 @@ const RECEIPT: ParsedReceipt = {
   ],
 };
 
-function setupParse(parsed: ParsedReceipt = RECEIPT) {
+function setupParse(parsed: ParsedReceipt = RECEIPT, meNote = "") {
   const f = createFakeRepos();
   const seen: Parameters<ReceiptParser["parse"]>[1][] = [];
   const parser: ReceiptParser = {
@@ -65,6 +66,7 @@ function setupParse(parsed: ParsedReceipt = RECEIPT) {
     f.repos.ownerMemory,
     { list: async () => cats, create: async () => cats[0], update: async () => null },
     f.repos.people,
+    { get: async () => ({ dashboardLayout: [], meNote }) },
     b,
     new FixedClock(NOON),
   );
@@ -117,6 +119,14 @@ describe("ParseReceipt", () => {
     });
   });
 
+  it("sends the buyer's own note only when people share the bill", async () => {
+    const { uc, seen } = setupParse(RECEIPT, "ไม่ดื่มนมเปรี้ยว");
+    await uc.execute(img);
+    await uc.execute(img, [FAN]);
+    expect(seen[0].meNote).toBeUndefined();
+    expect(seen[1].meNote).toBe("ไม่ดื่มนมเปรี้ยว");
+  });
+
   it("refuses an unknown person before spending quota", async () => {
     const { uc, b } = setupParse();
     await expect(uc.execute(img, ["ghost"])).rejects.toMatchObject({ code: "UNKNOWN_PERSON" });
@@ -148,7 +158,7 @@ describe("ParseReceipt", () => {
     const uc = new ParseReceipt(
       failing, f.repos.ownerMemory,
       { list: async () => [], create: async () => cats[0], update: async () => null },
-      f.repos.people,
+      f.repos.people, NO_SETTINGS,
       b, new FixedClock(NOON),
     );
     for (let i = 0; i < MAX_PARSES_PER_DAY; i++) await expect(uc.execute(img)).rejects.toThrow("quota");
@@ -165,7 +175,7 @@ describe("scan limit per account", () => {
     const uc = new ParseReceipt(
       { parse: async () => RECEIPT }, f.repos.ownerMemory,
       { list: async () => cats, create: async () => cats[0], update: async () => null },
-      f.repos.people, counting, new FixedClock(NOON), { key: "receipt-parse:u1", perDay: null },
+      f.repos.people, NO_SETTINGS, counting, new FixedClock(NOON), { key: "receipt-parse:u1", perDay: null },
     );
     for (let i = 0; i < MAX_PARSES_PER_DAY + 5; i++) await uc.execute(img);
     expect(keys).toHaveLength(MAX_PARSES_PER_DAY + 5);

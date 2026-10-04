@@ -32,7 +32,7 @@ describe("GetDashboard", () => {
       f.repos,
       stats([{ day: "2026-10-03", spent: 5000, earned: 0 }]),
       { list: async () => [], create: async () => { throw new Error(); }, update: async () => null, remove: async () => false },
-      { get: async () => ({ dashboardLayout: DEFAULT_LAYOUT }), update: async () => { throw new Error(); } },
+      { get: async () => ({ dashboardLayout: DEFAULT_LAYOUT, meNote: "" }), update: async () => { throw new Error(); } },
       clock,
     ).execute();
 
