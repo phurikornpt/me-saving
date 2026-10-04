@@ -13,6 +13,7 @@ import { FORWARD } from "@/client/nav";
 import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { usePullToRefresh } from "@/client/usePullToRefresh";
 import { wake } from "@/client/wake";
 import type { WidgetId } from "@/domain/dashboard-layout";
 import { EditLayoutSheet } from "./EditLayoutSheet";
@@ -20,8 +21,10 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
+import { PullIndicator } from "./PullIndicator";
 import { CategorySummaryWidget } from "./widgets/CategorySummaryWidget";
 import { CalendarWidget } from "./widgets/CalendarWidget";
+import { MonthSummaryWidget } from "./widgets/MonthSummaryWidget";
 import { PeopleWidget } from "./widgets/PeopleWidget";
 import { PresetsWidget } from "./widgets/PresetsWidget";
 import { RecentWidget } from "./widgets/RecentWidget";
@@ -39,6 +42,7 @@ function renderWidget(id: WidgetId, data: DashboardDTO) {
     case "calendar": return <CalendarWidget today={data.today} />;
     case "summary": return <CategorySummaryWidget today={data.today} />;
     case "recent": return <RecentWidget data={data} />;
+    case "monthSummary": return <MonthSummaryWidget today={data.today} />;
   }
 }
 
@@ -79,6 +83,8 @@ export function Dashboard() {
     setSwitched(true);
     setWalletFilter(id);
   };
+  // refetches whatever is on screen (dashboard, calendar, breakdown, ...); the rest goes stale and loads when next opened
+  const { pull, refreshing } = usePullToRefresh(() => qc.invalidateQueries());
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
@@ -103,7 +109,8 @@ export function Dashboard() {
     { id: "front", icon: "group", label: "ออกก่อน", tone: "text-partner" },
     { id: "repay", icon: "currency_exchange", label: "รับเงินคืน", tone: "text-partner", disabled: !data?.balances.some((b) => b.balance > 0) },
     { id: "nospend", icon: "bedtime", label: "ไม่ได้ใช้เงิน", tone: "text-xp", disabled: !data || data.streak.loggedToday },
-    { id: "scan", icon: "photo_camera", label: "สแกนใบเสร็จ", tone: "text-ink" },
+    { id: "scan", icon: "photo_camera", label: "สแกน", tone: "text-ink" },
+    { id: "say", icon: "mic", label: "ประโยคเดียว", tone: "text-ink" },
   ];
 
   const pick = (id: string) => {
@@ -114,10 +121,12 @@ export function Dashboard() {
     // Mobile browsers only open a file picker from a real tap, which the wheel's pointer-up is not,
     // so the picker lives on /scan behind an ordinary button.
     else if (id === "scan") router.push("/scan", { transitionTypes: FORWARD });
+    else if (id === "say") router.push("/say", { transitionTypes: FORWARD });
   };
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-36">
+      <PullIndicator pull={pull} refreshing={refreshing} />
       <header className="intro-rise safe-top flex items-center justify-between pb-3">
         <h1 className="font-display text-2xl">me-budget</h1>
         <div className="flex gap-1">

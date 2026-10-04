@@ -18,6 +18,7 @@ const NAMES: Record<WidgetId, string> = {
   calendar: "ปฏิทิน",
   summary: "สรุปรายเดือนตามหมวด",
   recent: "รายการล่าสุด",
+  monthSummary: "สรุปเดือนนี้ (AI)",
 };
 
 /** Toggle widgets on/off and drag to reorder. Saved to the server so every device matches. */

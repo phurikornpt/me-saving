@@ -66,6 +66,13 @@ export interface CategoryBreakdownDTO {
   total: number;
   slices: { categoryId: string | null; name: string; icon: string; spent: number }[];
 }
+export interface MonthSummaryDTO {
+  month: string;
+  /** A few short Thai lines. */
+  text: string;
+  /** ISO time the AI wrote it; null for the fixed "no spending" message. */
+  generatedAt: string | null;
+}
 export interface GroupLineDTO { rawName: string; canonicalName: string; qty: number; price: number; owners: LineOwners; categoryId: string | null; lowConfidence: boolean }
 /** One entry with its lines (groups) and who already paid part of it back (then it's frozen). */
 export interface EntryDetailDTO { entry: EntryDTO; lines: GroupLineDTO[]; repaidBy: string[] }
@@ -75,7 +82,21 @@ export interface OwedItemDTO {
   title: string | null; categoryId: string | null; source: string; lines: OwedLineDTO[];
 }
 export type OutstandingDTO = { personId: string; balance: number; items: OwedItemDTO[] }[];
+/** Shared daily AI allowance. `limit`/`remaining` are null when there is no limit. */
+export interface AiBudgetDTO { used: number; limit: number | null; remaining: number | null }
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
-export interface ReceiptDraftDTO { merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
+export interface TransactionDTO { date: string | null; description: string; amount: number; direction: "out" | "in"; categoryName: string | null }
+export interface ReceiptDraftDTO { kind: "receipt" | "delivery" | "online_order" | "transfer_slip" | "history"; transactions: TransactionDTO[]; merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
+/** A sentence turned into an unsaved entry. Amount is satang, null when none was said. `uncertain` fields get highlighted. */
+export interface EntryTextDraftDTO {
+  kind: "expense" | "income";
+  amount: number | null;
+  categoryId: string | null;
+  note: string | null;
+  split: "none" | "equal" | "theirs";
+  personIds: string[];
+  walletId: string | null;
+  uncertain: ("amount" | "category" | "person" | "wallet")[];
+}
 export interface SettingsDTO { dashboardLayout: LayoutItem[]; meNote: string }

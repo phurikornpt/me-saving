@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useMemo, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
@@ -33,6 +34,7 @@ export function NewEntryScreen() {
   const params = useSearchParams();
   const mode = params.get("mode"); // expense | income | front
   const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -152,7 +154,7 @@ export function NewEntryScreen() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <div className="flex gap-2">
