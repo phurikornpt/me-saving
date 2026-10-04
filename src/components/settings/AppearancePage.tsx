@@ -3,7 +3,8 @@
 import { useSyncExternalStore } from "react";
 import { useMotionPref } from "@/client/motionPref";
 import { setMotionPref } from "@/client/motionPref";
-import { readTheme, setTheme, subscribeTheme, type ThemePref } from "@/client/theme";
+import { readTheme, subscribeTheme, type ThemePref } from "@/client/theme";
+import { setThemeWithReveal } from "@/client/themeReveal";
 import { SettingsGroup, SettingsPage } from "./ui";
 
 /** Theme is remembered per device (localStorage), not per account. */
@@ -15,7 +16,7 @@ export function AppearancePage() {
       <SettingsGroup title="ธีม" footer="ตั้งไว้เฉพาะเครื่องนี้">
         <div className="flex gap-2 py-3">
           {([["system", "ตามระบบ"], ["light", "สว่าง"], ["dark", "มืด"]] as const).map(([k, label]) => (
-            <button key={k} className="pill flex-1" aria-pressed={theme === k} onClick={() => setTheme(k)}>
+            <button key={k} className="pill flex-1" aria-pressed={theme === k} onClick={(e) => setThemeWithReveal(k, e.clientX, e.clientY)}>
               {label}
             </button>
           ))}

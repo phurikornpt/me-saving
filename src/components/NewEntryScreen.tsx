@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useBackOr } from "@/client/useBackOr";
 import { useMemo, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
+import { buzz } from "@/client/haptics";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { activePeople, describeShares } from "@/client/people";
@@ -264,13 +265,18 @@ export function NewEntryScreen() {
           {visible.map((c) => (
             <button
               key={c.id}
-              disabled={!canSave}
+              aria-disabled={!canSave}
               onClick={() => {
+                if (!canSave) {
+                  setShake((n) => n + 1); // same shake as a rejected key: the amount is what is missing
+                  buzz("error");
+                  return;
+                }
                 // leave right away: the dashboard already shows the new entry as pending
                 save.mutate(c.id);
                 router.replace("/");
               }}
-              className="flex flex-col items-center gap-1 rounded-2xl bg-card px-1 py-3 text-xs shadow-[0_3px_0_var(--line)] transition active:translate-y-0.5 active:shadow-none disabled:opacity-40"
+              className="flex flex-col items-center gap-1 rounded-2xl bg-card px-1 py-3 text-xs shadow-[0_3px_0_var(--line)] transition active:translate-y-0.5 active:shadow-none aria-disabled:opacity-40"
             >
               <Icon name={c.icon} size={28} className={kind === "income" ? "text-income" : "text-ink"} />
               <span className="line-clamp-1">{c.name}</span>
