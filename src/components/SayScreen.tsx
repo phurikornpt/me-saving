@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
-import { draftProblem, parseFailureMessage, splitOf } from "@/client/entryDraft";
+import { collapseToSingle, draftProblem, parseFailureMessage, splitOf } from "@/client/entryDraft";
 import { describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { speechErrorMessage, speechRecognitionCtor, transcriptOf, type SpeechRecognitionLike } from "@/client/speech";
@@ -110,7 +110,8 @@ export function SayScreen() {
     mutationFn: () => api.parseEntryText(text.trim()),
     // Whether it worked or not, it may have used one of today's AI calls.
     onSettled: () => void qc.invalidateQueries({ queryKey: ["aiBudget"] }),
-    onSuccess: (d) => {
+    onSuccess: ({ drafts }) => {
+      const d = collapseToSingle(drafts);
       setDraft(d);
       setKind(d.kind);
       setAmount(d.amount ? formatBaht(d.amount).replace(/,/g, "") : "");

@@ -15,6 +15,7 @@ import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
 import { RecordBackfill } from "@/application/use-cases/record-backfill";
+import { RecordBatch } from "@/application/use-cases/record-batch";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
 import { RecordTransfer } from "@/application/use-cases/record-transfer";
@@ -94,6 +95,7 @@ function build() {
       getAiBudget: new GetAiBudget(attempts, systemClock, aiLimit(userId)),
       findDuplicates: new FindDuplicates(repos.entries),
       recordBackfill: new RecordBackfill(tx, systemClock),
+      recordBatch: new RecordBatch(tx, systemClock),
       recordEntry: new RecordEntry(tx, systemClock, presets),
       recordRepayment: new RecordRepayment(tx, systemClock),
       recordTransfer: new RecordTransfer(tx, systemClock),
