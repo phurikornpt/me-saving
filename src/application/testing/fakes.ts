@@ -1,5 +1,6 @@
 import { bangkokDay, type DayKey } from "@/domain/day";
 import { sumShares, type LineOwners } from "@/domain/split";
+import { netFlows } from "@/domain/wallet";
 import type {
   Clock,
   EntryRecord,
@@ -8,6 +9,7 @@ import type {
   PersonRecord,
   Repos,
   TransactionRunner,
+  WalletRecord,
 } from "../ports";
 
 export class FixedClock implements Clock {
@@ -28,10 +30,17 @@ export function createFakeRepos() {
     { id: "p-fan", name: "แฟน", note: "ชอบนมเปรี้ยว", sort: 0, archived: false },
     { id: "p-a", name: "A", note: "", sort: 1, archived: false },
   ];
+  // Two wallets: "w-cash" is the default.
+  const wallets: WalletRecord[] = [
+    { id: "w-cash", name: "เงินสด", icon: "payments", openingBalance: 0, sort: 0, archived: false },
+    { id: "w-bank", name: "ธนาคาร", icon: "account_balance", openingBalance: 0, sort: 1, archived: false },
+  ];
+  const settings = { defaultWalletId: "w-cash" as string | null };
   let seq = 0;
 
   const repos: Repos = {
     receiptLines: undefined as never,
+    wallets: undefined as never,
     ownerMemory: undefined as never,
     people: undefined as never,
     entries: {
@@ -129,6 +138,33 @@ export function createFakeRepos() {
     },
   };
 
+  repos.wallets = {
+    async list() {
+      return [...wallets].sort((a, b) => a.sort - b.sort);
+    },
+    async create(w) {
+      const rec = { ...w, id: `w${++seq}`, archived: false };
+      wallets.push(rec);
+      return rec;
+    },
+    async update(id, patch) {
+      const i = wallets.findIndex((w) => w.id === id);
+      if (i < 0) return null;
+      wallets[i] = { ...wallets[i], ...patch };
+      return wallets[i];
+    },
+    async netFlows() {
+      return netFlows(entries);
+    },
+    async defaultId() {
+      const active = (await repos.wallets.list()).filter((w) => !w.archived);
+      return (active.find((w) => w.id === settings.defaultWalletId) ?? active[0])?.id ?? null;
+    },
+    async setDefault(id) {
+      settings.defaultWalletId = id;
+    },
+  };
+
   const tx: TransactionRunner = { run: (fn) => fn(repos) };
-  return { repos, tx, entries, days, xp, lines, memory, people };
+  return { repos, tx, entries, days, xp, lines, memory, people, wallets, settings };
 }

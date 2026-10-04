@@ -2,6 +2,7 @@ import { assertSatang, type Satang } from "@/domain/money";
 import { assertRepaymentAllowed, balanceOf } from "@/domain/ledger";
 import { XP_BALANCE_CLEARED } from "@/domain/xp";
 import { assertKnownPeople } from "../known-people";
+import { resolveWallet } from "../known-wallets";
 import { logActivity, type ActivityResult } from "../log-activity";
 import type { Clock, EntryRecord, TransactionRunner } from "../ports";
 
@@ -17,7 +18,13 @@ export class RecordRepayment {
     private readonly clock: Clock,
   ) {}
 
-  async execute(input: { personId: string; amount: Satang; note?: string | null }): Promise<RecordRepaymentOutput> {
+  /** `walletId`: where the money came in. Default: the default wallet. */
+  async execute(input: {
+    personId: string;
+    amount: Satang;
+    note?: string | null;
+    walletId?: string | null;
+  }): Promise<RecordRepaymentOutput> {
     assertSatang(input.amount);
     const now = this.clock.now();
 
@@ -25,6 +32,7 @@ export class RecordRepayment {
       await assertKnownPeople(repos.people, [input.personId]);
       const balance = balanceOf(await repos.entries.ledger(), input.personId);
       assertRepaymentAllowed(balance, input.amount);
+      const walletId = await resolveWallet(repos.wallets, input.walletId);
 
       const entry = await repos.entries.insert({
         kind: "repayment",
@@ -37,6 +45,8 @@ export class RecordRepayment {
         note: input.note ?? null,
         merchant: null,
         source: "wheel",
+        walletId,
+        toWalletId: null,
       });
       const balanceAfter = balance - input.amount;
       const bonus = balanceAfter === 0 ? XP_BALANCE_CLEARED : 0;

@@ -5,6 +5,7 @@ import { migration as m002 } from "./migrations/002-seed-categories";
 import { migration as m003 } from "./migrations/003-itemized-source";
 import { migration as m004 } from "./migrations/004-people";
 import { migration as m005, type UsersMigrationContext } from "./migrations/005-users";
+import { migration as m006 } from "./migrations/006-wallets";
 
 const migrations = [
   { name: "001-initial", ...m001 },
@@ -12,6 +13,7 @@ const migrations = [
   { name: "003-itemized-source", ...m003 },
   { name: "004-people", ...m004 },
   { name: "005-users", ...m005 },
+  { name: "006-wallets", ...m006 },
 ];
 
 /** `accounts`: who owns the data recorded before accounts existed (only 005-users reads it). */

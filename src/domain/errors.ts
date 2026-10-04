@@ -10,7 +10,11 @@ export type DomainErrorCode =
   | "NOT_FOUND"
   | "BALANCE_WOULD_GO_NEGATIVE"
   | "ENTRY_LOCKED"
-  | "UNKNOWN_PERSON";
+  | "UNKNOWN_PERSON"
+  | "UNKNOWN_WALLET"
+  | "INVALID_TRANSFER"
+  | "INVALID_WALLET"
+  | "LAST_WALLET";
 
 export class DomainError extends Error {
   constructor(

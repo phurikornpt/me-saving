@@ -1,4 +1,4 @@
-import { Op, type Sequelize, type Transaction } from "sequelize";
+import { Op, QueryTypes, type Sequelize, type Transaction } from "sequelize";
 import { bangkokDayRange } from "@/domain/day";
 import type {
   EntryRecord,
@@ -11,10 +11,12 @@ import type {
   ReceiptLineRepo,
   Repos,
   TransactionRunner,
+  WalletRecord,
+  WalletRepo,
   XpRepo,
 } from "@/application/ports";
 import { sumShares, type Share } from "@/domain/split";
-import { initModels, type Entry, type Person } from "../models";
+import { initModels, type Entry, type Person, type Wallet } from "../models";
 
 const toRecord = (e: Entry, shares: Share[] = (e.shares ?? []).map((s) => ({ personId: s.personId, amount: s.amount }))): EntryRecord => ({
   id: e.id,
@@ -29,6 +31,8 @@ const toRecord = (e: Entry, shares: Share[] = (e.shares ?? []).map((s) => ({ per
   note: e.note,
   merchant: e.merchant,
   source: e.source,
+  walletId: e.walletId,
+  toWalletId: e.toWalletId,
 });
 
 export const toPerson = (p: Person): PersonRecord => ({
@@ -37,6 +41,15 @@ export const toPerson = (p: Person): PersonRecord => ({
   note: p.note,
   sort: p.sort,
   archived: p.archived,
+});
+
+export const toWallet = (w: Wallet): WalletRecord => ({
+  id: w.id,
+  name: w.name,
+  icon: w.icon,
+  openingBalance: w.openingBalance,
+  sort: w.sort,
+  archived: w.archived,
 });
 
 /**
@@ -192,7 +205,47 @@ export function createRepos(sequelize: Sequelize, userId: string, transaction?: 
     },
   };
 
-  return { entries, loggedDays, xp, receiptLines, ownerMemory, people };
+  const wallets: WalletRepo = {
+    async list() {
+      return (await m.Wallet.findAll({ where: mine, order: [["sort", "ASC"], ["name", "ASC"]], ...t })).map(toWallet);
+    },
+    async create(w) {
+      return toWallet(await m.Wallet.create({ ...w, userId }, t));
+    },
+    async update(id, patch) {
+      const row = await m.Wallet.findOne({ where: { ...mine, id }, ...t });
+      return row ? toWallet(await row.update(patch, t)) : null;
+    },
+    async netFlows() {
+      // Mirrors domain walletDeltas: expenses and transfers take money out of wallet_id, income and
+      // repayments bring it in, and a transfer adds to to_wallet_id.
+      const rows = await sequelize.query<{ wallet_id: string; net: string }>(
+        `SELECT wallet_id, SUM(delta) AS net FROM (
+           SELECT wallet_id, CASE WHEN kind IN ('income', 'repayment') THEN total ELSE -total END AS delta
+             FROM entries WHERE user_id = :userId
+           UNION ALL
+           SELECT to_wallet_id, total FROM entries WHERE user_id = :userId AND kind = 'transfer'
+         ) t GROUP BY wallet_id`,
+        { replacements: { userId }, type: QueryTypes.SELECT, transaction },
+      );
+      return new Map(rows.map((r) => [r.wallet_id, Number(r.net)]));
+    },
+    async defaultId() {
+      const [row] = await sequelize.query<{ id: string }>(
+        `SELECT w.id FROM wallets w LEFT JOIN settings s ON s.user_id = w.user_id
+          WHERE w.user_id = :userId AND NOT w.archived
+          ORDER BY (w.id = s.default_wallet_id) IS TRUE DESC, w.sort, w.name LIMIT 1`,
+        { replacements: { userId }, type: QueryTypes.SELECT, transaction },
+      );
+      return row?.id ?? null;
+    },
+    async setDefault(id) {
+      await m.Setting.findOrCreate({ where: mine, defaults: { userId }, ...t });
+      await m.Setting.update({ defaultWalletId: id }, { where: mine, ...t });
+    },
+  };
+
+  return { entries, wallets, loggedDays, xp, receiptLines, ownerMemory, people };
 }
 
 export function createTransactionRunner(sequelize: Sequelize, userId: string): TransactionRunner {

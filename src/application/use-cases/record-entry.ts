@@ -2,6 +2,7 @@ import { DomainError } from "@/domain/errors";
 import { assertSatang, type Satang } from "@/domain/money";
 import { sharesFor, type SplitMode } from "@/domain/split";
 import { assertKnownPeople } from "../known-people";
+import { resolveWallet } from "../known-wallets";
 import { logActivity, type ActivityResult } from "../log-activity";
 import type { Clock, EntryRecord, EntrySource, TransactionRunner } from "../ports";
 
@@ -13,6 +14,8 @@ export interface RecordEntryInput {
   note?: string | null;
   merchant?: string | null;
   source?: EntrySource;
+  /** Default: the default wallet. */
+  walletId?: string | null;
   /** Only meaningful for expenses ("ออกก่อน"). */
   split?: SplitMode;
 }
@@ -36,6 +39,7 @@ export class RecordEntry {
 
     return this.tx.run(async (repos) => {
       await assertKnownPeople(repos.people, shares.map((s) => s.personId));
+      const walletId = await resolveWallet(repos.wallets, input.walletId);
       const entry = await repos.entries.insert({
         kind: input.kind,
         occurredAt: input.occurredAt ?? now,
@@ -47,6 +51,8 @@ export class RecordEntry {
         note: input.note ?? null,
         merchant: input.merchant ?? null,
         source: input.source ?? "manual",
+        walletId,
+        toWalletId: null,
       });
       return { entry, ...(await logActivity(repos, now, "entry")) };
     });

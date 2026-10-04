@@ -6,11 +6,13 @@ import { GetDashboard } from "@/application/use-cases/get-dashboard";
 import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
+import { ManageWallets } from "@/application/use-cases/manage-wallets";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
+import { RecordTransfer } from "@/application/use-cases/record-transfer";
 import { systemClock } from "@/infrastructure/clock/SystemClock";
 import { createLoginAttemptRepo } from "@/infrastructure/db/repos/login-attempt-repo";
 import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos";
@@ -55,7 +57,8 @@ function build() {
       updateEntry: new UpdateEntry(tx),
       deleteEntry: new DeleteEntry(tx),
       manageCategories: new ManageCategories(categories),
-      managePresets: new ManagePresets(presets),
+      managePresets: new ManagePresets(presets, repos.wallets),
+      manageWallets: new ManageWallets(tx),
       manageSettings: new ManageSettings(settings),
       managePeople: new ManagePeople(repos.people),
       saveReceiptEntry: new SaveReceiptEntry(tx, systemClock),
@@ -66,6 +69,7 @@ function build() {
         }),
       recordEntry: new RecordEntry(tx, systemClock),
       recordRepayment: new RecordRepayment(tx, systemClock),
+      recordTransfer: new RecordTransfer(tx, systemClock),
       markNoSpendDay: new MarkNoSpendDay(tx, systemClock),
     };
   };

@@ -6,6 +6,9 @@ import { DeleteEntry, UpdateEntry } from "@/application/use-cases/change-entry";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
+import { RecordTransfer } from "@/application/use-cases/record-transfer";
+import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { GetDashboard } from "@/application/use-cases/get-dashboard";
 import { FixedClock } from "@/application/testing/fakes";
 import { createMigrator } from "../migrate";
 import { createSequelize } from "../sequelize";
@@ -25,6 +28,7 @@ beforeAll(async () => {
   sequelize = createSequelize(container.getConnectionUri());
   await createMigrator(sequelize).up();
   USER = await createUser(sequelize, "me@example.com", await hashPassword("correct horse battery", FAST));
+  CASH = (await createRepos(sequelize, USER).wallets.defaultId())!;
 }, 120_000);
 
 afterAll(async () => {
@@ -33,11 +37,19 @@ afterAll(async () => {
 });
 
 let USER: string;
+let CASH: string;
 let FAN: string;
 let A: string;
 
 beforeEach(async () => {
   await sequelize.query("TRUNCATE entries, logged_days, xp_events, owner_memory, people RESTART IDENTITY CASCADE");
+  // back to the one "เงินสด" wallet every new account starts with
+  await sequelize.query(
+    `DELETE FROM wallets WHERE user_id = :USER AND id <> :CASH;
+     UPDATE wallets SET opening_balance = 0, archived = false WHERE id = :CASH;
+     UPDATE settings SET default_wallet_id = :CASH WHERE user_id = :USER;`,
+    { replacements: { USER, CASH } },
+  );
   const people = createRepos(sequelize, USER).people;
   FAN = (await people.create({ name: "แฟน", note: "ชอบนมเปรี้ยว", sort: 0 })).id;
   A = (await people.create({ name: "A", note: "", sort: 1 })).id;
@@ -128,6 +140,8 @@ describe("Sequelize repos against real Postgres", () => {
           note: null,
           merchant: null,
           source: "manual",
+          walletId: CASH,
+          toWalletId: null,
         });
         await repos.xp.add("first_log", 0, NOON); // violates CHECK (amount > 0)
       }),
@@ -184,6 +198,8 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
       note: null,
       merchant: null,
       source: "manual",
+      walletId: CASH,
+      toWalletId: null,
     });
 
   it("groups by Bangkok day, excludes others' shares, ignores repayments", async () => {
@@ -193,6 +209,7 @@ describe("stats (raw SQL) at the Bangkok midnight boundary", () => {
     await createRepos(sequelize, USER).entries.insert({
       kind: "repayment", occurredAt: new Date("2026-10-04T06:00:00Z"), createdAt: new Date("2026-10-04T06:00:00Z"),
       total: 500, shares: [], personId: FAN, categoryId: null, note: null, merchant: null, source: "wheel",
+      walletId: CASH, toWalletId: null,
     });
     const out = await createStatsRepo(sequelize, USER).dailyTotals("2026-10-03", "2026-10-05");
     expect(out).toEqual([
@@ -220,10 +237,10 @@ describe("categories, presets, settings", () => {
   });
   it("creates, updates and removes presets", async () => {
     const repo = createPresetRepo(sequelize, USER);
-    const p = await repo.create({ label: "BTS", icon: "train", amount: 4700, categoryId: null, personId: null, splitKind: null, sort: 0 });
+    const p = await repo.create({ label: "BTS", icon: "train", amount: 4700, categoryId: null, personId: null, splitKind: null, walletId: null, sort: 0 });
     expect((await repo.update(p.id, { amount: 5000 }))?.amount).toBe(5000);
-    const fronted = await repo.create({ label: "ข้าว", icon: "restaurant", amount: 6000, categoryId: null, personId: FAN, splitKind: "equal", sort: 1 });
-    expect(fronted).toMatchObject({ personId: FAN, splitKind: "equal" });
+    const fronted = await repo.create({ label: "ข้าว", icon: "restaurant", amount: 6000, categoryId: null, personId: FAN, splitKind: "equal", walletId: CASH, sort: 1 });
+    expect(fronted).toMatchObject({ personId: FAN, splitKind: "equal", walletId: CASH });
     await repo.remove(fronted.id);
     expect(await repo.remove(p.id)).toBe(true);
     expect(await repo.remove(p.id)).toBe(false);
@@ -458,6 +475,14 @@ describe("migrations 004 + 005 on data recorded before people and accounts exist
       ]);
       expect((await createCategoryRepo(legacy, owner).list()).length).toBe(9);
 
+      // 006: everything recorded so far sits in one "เงินสด" wallet, which is the default
+      const [cash] = await repos.wallets.list();
+      expect(cash).toMatchObject({ name: "เงินสด", openingBalance: 0, archived: false });
+      expect(await repos.wallets.defaultId()).toBe(cash.id);
+      expect((await repos.entries.recent(10)).every((e) => e.walletId === cash.id && e.toWalletId === null)).toBe(true);
+      expect(await repos.wallets.netFlows()).toEqual(new Map([[cash.id, -10000 - 3000 + 2000]]));
+      expect((await createRepos(legacy, friend).wallets.list()).map((w) => w.name)).toEqual(["เงินสด"]);
+
       // the extra account starts empty, with its own default categories
       const theirs = createRepos(legacy, friend);
       expect(await theirs.entries.recent(10)).toEqual([]);
@@ -533,5 +558,98 @@ describe("accounts", () => {
     expect(await createStatsRepo(sequelize, USER).dailyTotals("2026-10-01", "2026-11-01")).toEqual([
       { day: "2026-10-03", spent: 5000, earned: 0 },
     ]);
+  });
+});
+
+describe("wallets against real Postgres", () => {
+  function setup() {
+    const tx = createTransactionRunner(sequelize, USER);
+    const clock = new FixedClock(NOON);
+    return {
+      repos: createRepos(sequelize, USER),
+      recordEntry: new RecordEntry(tx, clock),
+      recordRepayment: new RecordRepayment(tx, clock),
+      recordTransfer: new RecordTransfer(tx, clock),
+      updateEntry: new UpdateEntry(tx),
+      wallets: new ManageWallets(tx),
+    };
+  }
+  const balances = async (w: ManageWallets) => Object.fromEntries((await w.list()).map((x) => [x.name, x.balance]));
+
+  it("a new account starts with a default เงินสด wallet", async () => {
+    const list = await setup().wallets.list();
+    expect(list).toEqual([expect.objectContaining({ id: CASH, name: "เงินสด", icon: "payments", balance: 0, isDefault: true })]);
+  });
+
+  it("balances: full expense out, income and repayment in, transfers between; totals ignore transfers", async () => {
+    const s = setup();
+    const bank = await s.wallets.create({ name: "ธนาคาร", icon: "account_balance", balance: 100000 });
+    await s.recordEntry.execute({ kind: "expense", total: 10000, split: equalWith(FAN) }); // default: cash
+    await s.recordEntry.execute({ kind: "income", total: 50000, walletId: bank.id });
+    await s.recordRepayment.execute({ personId: FAN, amount: 5000 });
+    await s.recordTransfer.execute({ fromWalletId: bank.id, toWalletId: CASH, amount: 20000 });
+    expect(await balances(s.wallets)).toEqual({ เงินสด: -10000 + 5000 + 20000, ธนาคาร: 100000 + 50000 - 20000 });
+    expect(await createStatsRepo(sequelize, USER).dailyTotals("2026-10-03", "2026-10-04")).toEqual([
+      { day: "2026-10-03", spent: 5000, earned: 50000 },
+    ]);
+    expect(await createStatsRepo(sequelize, USER).categoryTotals("2026-10-01", "2026-11-01")).toEqual([
+      { categoryId: null, spent: 5000 },
+    ]);
+
+    // "what I really have now" sets the opening balance backwards
+    expect(await s.wallets.update(CASH, { balance: 1234 })).toMatchObject({ balance: 1234, openingBalance: 1234 - 15000 });
+  });
+
+  it("dashboard carries the wallets with their balances", async () => {
+    const s = setup();
+    await s.recordEntry.execute({ kind: "expense", total: 700 });
+    const dash = await new GetDashboard(
+      s.repos, createStatsRepo(sequelize, USER), createPresetRepo(sequelize, USER), createSettingsRepo(sequelize, USER), new FixedClock(NOON),
+    ).execute();
+    expect(dash.wallets).toEqual([expect.objectContaining({ id: CASH, balance: -700, isDefault: true })]);
+  });
+
+  it("default and archive: archiving the default falls back to the next active wallet; the last one stays", async () => {
+    const s = setup();
+    const bank = await s.wallets.create({ name: "ธนาคาร", icon: "account_balance" });
+    await s.wallets.setDefault(bank.id);
+    expect((await s.recordEntry.execute({ kind: "expense", total: 100 })).entry.walletId).toBe(bank.id);
+    await s.wallets.update(bank.id, { archived: true });
+    expect(await s.repos.wallets.defaultId()).toBe(CASH);
+    await expect(s.wallets.update(CASH, { archived: true })).rejects.toMatchObject({ code: "LAST_WALLET" });
+  });
+
+  it("moving an entry to another wallet and editing a transfer", async () => {
+    const s = setup();
+    const bank = await s.wallets.create({ name: "ธนาคาร", icon: "account_balance" });
+    const { entry } = await s.recordEntry.execute({ kind: "expense", total: 100 });
+    expect((await s.updateEntry.execute(entry.id, { walletId: bank.id })).walletId).toBe(bank.id);
+    expect((await s.repos.entries.findById(entry.id))?.walletId).toBe(bank.id);
+    const { entry: t } = await s.recordTransfer.execute({ fromWalletId: bank.id, toWalletId: CASH, amount: 500 });
+    await expect(s.updateEntry.execute(t.id, { toWalletId: bank.id })).rejects.toMatchObject({ code: "INVALID_TRANSFER" });
+    expect(await balances(s.wallets)).toEqual({ เงินสด: 500, ธนาคาร: -600 });
+  });
+
+  it("another account's wallet is unknown here, and the database refuses it too", async () => {
+    const other = await createUser(sequelize, `w-${Date.now()}@example.com`, await hashPassword("z".repeat(12), FAST));
+    const theirWallet = (await createRepos(sequelize, other).wallets.defaultId())!;
+    const s = setup();
+    await expect(s.recordEntry.execute({ kind: "expense", total: 100, walletId: theirWallet })).rejects.toMatchObject({
+      code: "UNKNOWN_WALLET",
+    });
+    expect(await createRepos(sequelize, other).wallets.update(CASH, { name: "hacked" })).toBeNull();
+    await expect(
+      sequelize.query(
+        "INSERT INTO entries (user_id, wallet_id, kind, occurred_at, total) VALUES (:USER, :w, 'expense', now(), 100)",
+        { replacements: { USER, w: theirWallet } },
+      ),
+    ).rejects.toThrow(/entries_wallet_fk/);
+    // and a transfer must name two different wallets
+    await expect(
+      sequelize.query(
+        "INSERT INTO entries (user_id, wallet_id, to_wallet_id, kind, occurred_at, total) VALUES (:USER, :CASH, :CASH, 'transfer', now(), 100)",
+        { replacements: { USER, CASH } },
+      ),
+    ).rejects.toThrow(/entries_transfer_check/);
   });
 });

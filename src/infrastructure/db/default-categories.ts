@@ -15,7 +15,10 @@ export const DEFAULT_INCOME = [
   ["รายได้อื่น", "savings"],
 ] as const;
 
-/** Default categories + the settings row for a brand-new account. */
+/**
+ * Default categories + the settings row for a brand-new account. Migration 005 calls this before wallets
+ * exist, so the wallet is seeded separately (seedDefaultWallet).
+ */
 export async function seedUserDefaults(sequelize: Sequelize, userId: string, transaction?: Transaction): Promise<void> {
   const rows = [
     ...DEFAULT_EXPENSE.map(([name, icon], i) => ({ name, icon, kind: "expense", sort: i })),
@@ -31,4 +34,13 @@ export async function seedUserDefaults(sequelize: Sequelize, userId: string, tra
     replacements: { userId },
     transaction,
   });
+}
+
+/** A brand-new account's first wallet, "เงินสด", which is also its default. Needs migration 006. */
+export async function seedDefaultWallet(sequelize: Sequelize, userId: string, transaction?: Transaction): Promise<void> {
+  await sequelize.query(
+    `WITH w AS (INSERT INTO wallets (user_id, name, icon) VALUES (:userId, 'เงินสด', 'payments') RETURNING id)
+     UPDATE settings SET default_wallet_id = (SELECT id FROM w) WHERE user_id = :userId`,
+    { replacements: { userId }, transaction },
+  );
 }

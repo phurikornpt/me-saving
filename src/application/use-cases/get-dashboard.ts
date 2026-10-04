@@ -14,6 +14,7 @@ import type {
   SettingsRepo,
   StatsRepo,
 } from "../ports";
+import { walletViews, type WalletView } from "./manage-wallets";
 
 export interface DashboardView {
   today: DayKey;
@@ -27,6 +28,8 @@ export interface DashboardView {
   recent: EntryRecord[];
   presets: PresetRecord[];
   layout: LayoutItem[];
+  /** Every wallet with its balance; `isDefault` marks where new entries go. */
+  wallets: WalletView[];
 }
 
 /** One request feeds every widget; queries run in parallel. */
@@ -41,7 +44,7 @@ export class GetDashboard {
 
   async execute(): Promise<DashboardView> {
     const today = bangkokDay(this.clock.now());
-    const [days, xpTotal, ledger, totals, recent, presets, settings, people] = await Promise.all([
+    const [days, xpTotal, ledger, totals, recent, presets, settings, people, wallets] = await Promise.all([
       this.repos.loggedDays.allDays(),
       this.repos.xp.total(),
       this.repos.entries.ledger(),
@@ -50,6 +53,7 @@ export class GetDashboard {
       this.presets.list(),
       this.settings.get(),
       this.repos.people.list(),
+      walletViews(this.repos.wallets),
     ]);
     const t = totals.find((x) => x.day === today);
     return {
@@ -63,6 +67,7 @@ export class GetDashboard {
       recent,
       presets,
       layout: settings.dashboardLayout,
+      wallets,
     };
   }
 }

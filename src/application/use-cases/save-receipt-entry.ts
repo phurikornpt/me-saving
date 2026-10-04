@@ -3,6 +3,7 @@ import { DomainError } from "@/domain/errors";
 import { assertSatang, type Satang } from "@/domain/money";
 import { assertLineOwners, sharesOfLines, type LineOwners } from "@/domain/split";
 import { assertKnownPeople } from "../known-people";
+import { resolveWallet } from "../known-wallets";
 import { logActivity } from "../log-activity";
 import type { Clock, EntryRecord, TransactionRunner } from "../ports";
 import type { ActivityResult } from "../log-activity";
@@ -15,6 +16,8 @@ export interface SaveReceiptInput {
   occurredAt?: Date;
   /** Final amount paid; lines are scaled to add up to exactly this (discount / VAT allocation). */
   total: Satang;
+  /** Default: the default wallet. */
+  walletId?: string | null;
   /** Who shares this bill. Default: everyone named on a line. Empty = all ours (a plain scan). */
   people?: string[];
   lines: {
@@ -65,6 +68,7 @@ export class SaveReceiptEntry {
 
     return this.tx.run(async (repos) => {
       await assertKnownPeople(repos.people, people);
+      const walletId = await resolveWallet(repos.wallets, input.walletId);
       const entry = await repos.entries.insert({
         kind: "expense",
         occurredAt: input.occurredAt ?? now,
@@ -76,6 +80,8 @@ export class SaveReceiptEntry {
         note: null,
         merchant: input.merchant ?? null,
         source: input.source ?? "receipt",
+        walletId,
+        toWalletId: null,
       });
       await repos.receiptLines.insertMany(entry.id, lines);
       if (people.size > 0) {

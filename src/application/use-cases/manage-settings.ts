@@ -1,5 +1,6 @@
 import { normalizeLayout } from "@/domain/dashboard-layout";
 import { DomainError } from "@/domain/errors";
+import { assertActiveWallets } from "../known-wallets";
 import type {
   CategoryRecord,
   CategoryRepo,
@@ -9,6 +10,7 @@ import type {
   PresetRepo,
   SettingsRecord,
   SettingsRepo,
+  WalletRepo,
 } from "../ports";
 
 export class ManageSettings {
@@ -41,14 +43,19 @@ export class ManageCategories {
 }
 
 export class ManagePresets {
-  constructor(private readonly presets: PresetRepo) {}
+  constructor(
+    private readonly presets: PresetRepo,
+    private readonly wallets: WalletRepo,
+  ) {}
   list() {
     return this.presets.list();
   }
-  create(p: Omit<PresetRecord, "id">) {
+  async create(p: Omit<PresetRecord, "id">) {
+    if (p.walletId) await assertActiveWallets(this.wallets, [p.walletId]);
     return this.presets.create(p);
   }
-  update(id: string, patch: Partial<Omit<PresetRecord, "id">>) {
+  async update(id: string, patch: Partial<Omit<PresetRecord, "id">>) {
+    if (patch.walletId) await assertActiveWallets(this.wallets, [patch.walletId]);
     return this.presets.update(id, patch);
   }
   remove(id: string) {
