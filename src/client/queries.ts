@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SpendFilter } from "@/domain/spend-filter";
 import { api } from "./api";
 
@@ -14,14 +14,14 @@ export const useDashboard = (wallet: string | null = null) =>
     queryFn: () => api.dashboard(wallet),
     placeholderData: (prev) => prev,
   });
+export const calendarQuery = (month: string, wallet: string | null = null, spend: SpendFilter = "all") =>
+  queryOptions({ queryKey: ["calendar", month, wallet, spend], queryFn: () => api.calendar(month, wallet, spend) });
 export const useCalendar = (month: string, wallet: string | null = null, spend: SpendFilter = "all") =>
-  useQuery({ queryKey: ["calendar", month, wallet, spend], queryFn: () => api.calendar(month, wallet, spend), placeholderData: (prev) => prev });
+  useQuery({ ...calendarQuery(month, wallet, spend), placeholderData: (prev) => prev });
+export const breakdownQuery = (month: string, wallet: string | null = null) =>
+  queryOptions({ queryKey: ["breakdown", month, wallet], queryFn: () => api.categoryBreakdown(month, wallet) });
 export const useCategoryBreakdown = (month: string, wallet: string | null = null) =>
-  useQuery({
-    queryKey: ["breakdown", month, wallet],
-    queryFn: () => api.categoryBreakdown(month, wallet),
-    placeholderData: (prev) => prev,
-  });
+  useQuery({ ...breakdownQuery(month, wallet), placeholderData: (prev) => prev });
 /**
  * The AI summary of a month. Only fetched once `enabled` (the person asked for it): a fetch can spend AI quota,
  * so it never retries on its own. The server caches it, so asking again is free.

@@ -4,9 +4,10 @@ import { DUR } from "@/client/motion";
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { AnimatePresence, motion, useAnimate } from "motion/react";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { readNoSpendLogged, subscribeNoSpendLogged } from "@/client/justLogged";
-import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
+import { calendarQuery, useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
 import type { EntryDTO } from "@/client/types";
@@ -35,16 +36,29 @@ export function CalendarWidget({ today }: { today: string }) {
   const wallet = useWalletFilter();
   const [grid, animateGrid] = useAnimate<HTMLDivElement>();
   const spend = useSpendFilter();
-  const { data } = useCalendar(month, wallet, spend);
+  const { data, isPlaceholderData } = useCalendar(month, wallet, spend);
+  const qc = useQueryClient();
+  // What to play once the numbers for the new month/filter are really on screen (dir 0 = fade only).
+  const [pending, setPending] = useState<{ dir: 1 | -1 | 0 } | null>(null);
+  useEffect(() => {
+    if (!pending || isPlaceholderData || !data || !grid.current) return;
+    void animateGrid(grid.current, pending.dir ? { x: [pending.dir * 28, 0], opacity: [0.2, 1] } : { opacity: [0.25, 1] }, { duration: DUR.base + 0.05 });
+    setPending(null);
+  }, [pending, isPlaceholderData, data, animateGrid, grid]);
+  // Warm the neighbouring months so a press usually finds its numbers ready.
+  useEffect(() => {
+    if (!data) return;
+    for (const by of [-1, 1]) void qc.prefetchQuery(calendarQuery(shiftMonth(month, by), wallet, spend));
+  }, [data, month, wallet, spend, qc]);
   const { data: categories = [] } = useCategories();
   const dayEntries = useEntriesOn(openDay);
   const shown = dayEntries.data?.filter((e) => inWallet(e, wallet) && matchesSpend(e, spend));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
-  // The month slides in from the side you pressed; the numbers behind it may still be the old month's for a moment.
+  // The month slides in from the side you pressed, but only once its numbers have arrived (see the effect above).
   const go = (dir: 1 | -1) => {
     setMonth(shiftMonth(month, dir));
-    void animateGrid(grid.current, { x: [dir * 28, 0], opacity: [0.2, 1] }, { duration: DUR.base + 0.05 });
+    setPending({ dir });
   };
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 
@@ -67,7 +81,7 @@ export function CalendarWidget({ today }: { today: string }) {
         <div className="mb-2 flex gap-2" role="group" aria-label="กรองรายจ่าย">
           {SPEND_FILTERS.map((s) => (
             <button key={s} className="pill text-sm" aria-pressed={spend === s} onClick={() => {
-                if (s !== spend) void animateGrid(grid.current, { opacity: [0.25, 1] }, { duration: DUR.base });
+                if (s !== spend) setPending({ dir: 0 });
                 setSpendFilter(s);
               }}>
               {SPEND_LABEL[s]}
@@ -79,6 +93,8 @@ export function CalendarWidget({ today }: { today: string }) {
             <div key={w}>{w}</div>
           ))}
         </div>
+        {/* old numbers dim while the new ones load, so they never pass for the new month's */}
+        <div className={`transition-opacity duration-150 ${isPlaceholderData ? "opacity-50" : ""}`}>
         <div ref={grid} className="mt-1 grid grid-cols-7 gap-1">
           {Array.from({ length: firstDow }, (_, i) => (
             <div key={`pad${i}`} />
@@ -106,6 +122,7 @@ export function CalendarWidget({ today }: { today: string }) {
               </button>
             );
           })}
+        </div>
         </div>
         {data && spend !== "all" && (
           <p className="mt-3 text-center text-sm text-ink-2">
