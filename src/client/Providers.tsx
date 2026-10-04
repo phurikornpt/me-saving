@@ -7,6 +7,7 @@ import { MotionConfig } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { AUTH_EXPIRED_EVENT } from "./api";
+import { useMotionPref } from "./motionPref";
 import { TopProgress } from "@/components/Loading";
 import { wake } from "./wake";
 
@@ -26,6 +27,7 @@ export function Providers({ children }: { children: ReactNode }) {
     return unsubscribe;
   }, [client]);
 
+  const reduceMotion = useMotionPref() === "reduce";
   const router = useRouter();
   useEffect(() => {
     const onExpired = () => router.replace("/login");
@@ -42,7 +44,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <MotionConfig reducedMotion="user">
+      <MotionConfig reducedMotion={reduceMotion ? "always" : "user"}>
         <TopProgress />
         {children}
       </MotionConfig>

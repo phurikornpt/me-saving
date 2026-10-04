@@ -175,7 +175,7 @@ export function SayScreen() {
 
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
-  const cloudMode: CloudMode = read.isPending ? "thinking" : listening ? "listening" : "idle";
+  const cloudMode: CloudMode = read.isPending ? "thinking" : read.isError ? "error" : listening ? "listening" : "idle";
   const caption = read.isPending
     ? "กำลังแยกให้…"
     : listening

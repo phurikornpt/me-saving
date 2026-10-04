@@ -21,7 +21,9 @@ import { AiBudgetNote } from "./AiBudgetNote";
 import { BackfillReview } from "./BackfillReview";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { AuroraCloud } from "./AuroraCloud";
 import { ReadingCloud, Spinner, type ReadingStage } from "./Loading";
+import { ScanStrip, type PicState } from "./ScanStrip";
 import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
@@ -67,6 +69,7 @@ export function ScanScreen() {
   const [skipped, setSkipped] = useState(0);
   const [progress, setProgress] = useState<string | null>(null);
   const [stage, setStage] = useState<ReadingStage>("resize");
+  const [pics, setPics] = useState<PicState[]>([]);
   const camera = useRef<HTMLInputElement>(null);
   const album = useRef<HTMLInputElement>(null);
 
@@ -103,14 +106,19 @@ export function ScanScreen() {
       const drafts: ReceiptDraftDTO[] = [];
       let failed = 0;
       let firstError: unknown;
+      const mark = (i: number, s: PicState) => setPics((p) => p.map((x, j) => (j === i ? s : x)));
+      setPics(files.map(() => "wait"));
       for (const [i, file] of files.entries()) {
         setProgress(files.length > 1 ? `${i + 1}/${files.length}` : null);
+        mark(i, "reading");
         try {
           setStage("resize"); // the two steps the user waits through are real: shrink the photo, then the AI
           const small = await resizeForUpload(file);
           setStage("ai");
           drafts.push(await api.parseReceipt(small, files.length === 1 ? onBill.map((p) => p.id) : []));
+          mark(i, "ok");
         } catch (e) {
+          mark(i, "failed");
           failed++;
           firstError ??= e;
         }
@@ -234,14 +242,15 @@ export function ScanScreen() {
 
       {phase === "reading" && (
         <Center>
+          {pics.length > 1 && <ScanStrip states={pics} />}
           <ReadingCloud stage={stage} progress={progress} />
         </Center>
       )}
 
       {phase === "failed" && (
         <Center>
-          <Icon name="receipt_long" size={48} className="text-ink-3" />
-          <p className="mt-3 max-w-xs text-center text-ink-2">
+          <AuroraCloud mode="error" pulse={0} className="h-[200px] w-[200px]" />
+          <p className="-mt-2 max-w-xs text-center text-ink-2">
             {failCode === "AI_UNAVAILABLE"
               ? "AI พักอยู่ตอนนี้ ลองใหม่อีกครั้ง หรือกรอกยอดรวมเองไปก่อน"
               : failCode === "RATE_LIMITED"

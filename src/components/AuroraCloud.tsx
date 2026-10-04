@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { motionReduced } from "@/client/motionPref";
 
 export type CloudMode = "idle" | "listening" | "thinking" | "done" | "error";
 
@@ -66,7 +67,6 @@ export function AuroraCloud({ mode, pulse, blur = 10, className = "" }: { mode: 
     el.width = SIZE * dpr;
     el.height = SIZE * dpr;
     ctx.scale(dpr, dpr);
-    const slow = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0.15 : 1;
     const p: CloudLook = { ...CLOUD_LOOK.idle };
     let amp = 0;
     let ang = 0;
@@ -91,6 +91,7 @@ export function AuroraCloud({ mode, pulse, blur = 10, className = "" }: { mode: 
       p.grey += (target.grey - p.grey) * k;
       amp += (live.current.kick - amp) * (1 - Math.pow(0.0005, dt));
       live.current.kick *= Math.pow(0.02, dt); // each word is a pulse that fades
+      const slow = motionReduced() ? 0.15 : 1; // read each frame, so the switch takes effect at once
       ang += dt * p.spin * slow;
 
       const t = now / 1000;

@@ -2,6 +2,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { buzz } from "@/client/haptics";
 import { Icon } from "./Icon";
 
 interface ToastInput {
@@ -38,6 +39,7 @@ export function FeedbackProvider({ children }: { children: ReactNode }) {
 
   const showToast = useCallback((t: ToastInput) => {
     const id = ++seq.current;
+    if (t.tone === "error") buzz("error");
     setToast({ ...t, id });
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setToast((cur) => (cur?.id === id ? null : cur)), t.ms ?? 5000);
