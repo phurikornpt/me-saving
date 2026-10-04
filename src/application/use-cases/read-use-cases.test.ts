@@ -8,6 +8,7 @@ import { GetOutstanding } from "./get-outstanding";
 import { MarkNoSpendDay } from "./mark-no-spend-day";
 import { RecordEntry } from "./record-entry";
 import { RecordRepayment } from "./record-repayment";
+import { SaveReceiptEntry } from "./save-receipt-entry";
 
 const FAN = "p-fan"; // seeded by createFakeRepos
 
@@ -89,6 +90,30 @@ describe("GetOutstanding", () => {
     expect(out.balance).toBe(9000);
     expect(out.items.map((i) => [i.entryId, i.outstanding])).toEqual([[b.entry.id, 9000]]);
     expect(a.entry.id).not.toBe(b.entry.id);
+  });
+
+  it("says what each owed entry was: its name, and for a group only the lines this person shares", async () => {
+    const f = createFakeRepos();
+    const clock = new FixedClock(new Date("2026-10-01T05:00:00Z"));
+    await new RecordEntry(f.tx, clock).execute({ kind: "expense", total: 6000, note: "แท็กซี่", split: { kind: "theirs", people: [FAN] } });
+    await new SaveReceiptEntry(f.tx, clock).execute({
+      merchant: "7-Eleven",
+      total: 9500,
+      lines: [
+        { rawName: "DUTCHMILL", canonicalName: "นมเปรี้ยว", qty: 2, price: 3000, owners: { me: false, people: [FAN] } },
+        { rawName: "ข้าวปั้น", canonicalName: "ข้าวปั้น", qty: 1, price: 3500, owners: { me: true, people: [] } },
+        { rawName: "แชมพู", canonicalName: "แชมพู", qty: 1, price: 3000, owners: { me: true, people: [FAN, "p-a"] } },
+      ],
+    });
+    const [fan] = (await new GetOutstanding(f.repos).execute()).filter((o) => o.personId === FAN);
+    expect(fan.items.map((i) => [i.title, i.outstanding])).toEqual([["แท็กซี่", 6000], ["7-Eleven", 4000]]);
+    expect(fan.items[0].lines).toEqual([]);
+    expect(fan.items[1].lines).toEqual([
+      { name: "นมเปรี้ยว", qty: 2, amount: 3000, parts: 1 },
+      { name: "แชมพู", qty: 1, amount: 1000, parts: 3 },
+    ]);
+    // the lines add up to what the entry charges this person
+    expect(fan.items[1].lines.reduce((s, l) => s + l.amount, 0)).toBe(fan.items[1].amount);
   });
 });
 

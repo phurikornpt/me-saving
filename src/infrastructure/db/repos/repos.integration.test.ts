@@ -286,6 +286,17 @@ describe("receipt save against real Postgres", () => {
     expect(stored?.othersShare).toBe(out.entry.othersShare);
   });
 
+  it("reads lines back in order, only for this account's entries", async () => {
+    const tx = createTransactionRunner(sequelize, USER);
+    const out = await new SaveReceiptEntry(tx, new FixedClock(NOON)).execute({ merchant: "7-Eleven", total: 13900, lines: lines() });
+    const got = await createRepos(sequelize, USER).receiptLines.listByEntries([out.entry.id]);
+    expect(got.get(out.entry.id)?.map((l) => [l.canonicalName, l.owners])).toEqual(lines().map((l) => [l.canonicalName, l.owners]));
+    expect((await createRepos(sequelize, USER).entries.findByIds([out.entry.id])).map((e) => e.merchant)).toEqual(["7-Eleven"]);
+    const other = await createUser(sequelize, `lines-${Date.now()}@example.com`, await hashPassword("y".repeat(12), FAST));
+    expect((await createRepos(sequelize, other).receiptLines.listByEntries([out.entry.id])).size).toBe(0);
+    expect(await createRepos(sequelize, other).entries.findByIds([out.entry.id])).toEqual([]);
+  });
+
   it("upserts owner memory and a later choice overwrites the earlier one", async () => {
     const tx = createTransactionRunner(sequelize, USER);
     const uc = new SaveReceiptEntry(tx, new FixedClock(NOON));

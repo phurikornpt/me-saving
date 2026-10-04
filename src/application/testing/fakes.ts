@@ -68,6 +68,9 @@ export function createFakeRepos() {
       async findById(id) {
         return entries.find((e) => e.id === id) ?? null;
       },
+      async findByIds(ids) {
+        return entries.filter((e) => ids.includes(e.id));
+      },
       async update(id, patch) {
         const i = entries.findIndex((e) => e.id === id);
         if (i < 0) return null;
@@ -111,6 +114,13 @@ export function createFakeRepos() {
   repos.receiptLines = {
     async insertMany(entryId, items) {
       items.forEach((l) => lines.push({ ...l, entryId }));
+    },
+    async listByEntries(entryIds) {
+      const out = new Map<string, NewReceiptLine[]>();
+      for (const { entryId, ...l } of lines) {
+        if (entryIds.includes(entryId)) out.set(entryId, [...(out.get(entryId) ?? []), l]);
+      }
+      return out;
     },
   };
   repos.ownerMemory = {
