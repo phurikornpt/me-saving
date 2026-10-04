@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { MotionConfig } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { AUTH_EXPIRED_EVENT } from "./api";
@@ -41,8 +42,10 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={client}>
-      <TopProgress />
-      {children}
+      <MotionConfig reducedMotion="user">
+        <TopProgress />
+        {children}
+      </MotionConfig>
     </QueryClientProvider>
   );
 }

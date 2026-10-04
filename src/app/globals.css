@@ -178,6 +178,10 @@ body {
 }
 .pill[aria-pressed="true"], .pill.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); }
 
+/* Pill whose dark fill is a sliding element (see PillBg in Dashboard) instead of a background swap */
+.pill-slide { transition: color 120ms; }
+.pill-slide[aria-pressed="true"] { background: var(--card); border-color: transparent; }
+
 .safe-bottom { padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 .safe-top { padding-top: max(0.75rem, env(safe-area-inset-top)); }
 

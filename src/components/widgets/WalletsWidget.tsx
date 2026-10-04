@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { DashboardDTO } from "@/client/types";
 import { activeWallets } from "@/client/wallets";
 import { formatBaht } from "@/domain/money";
+import { AnimatedNumber } from "../AnimatedNumber";
 import { Icon } from "../Icon";
 import { WidgetCard } from "./WidgetCard";
 
@@ -27,7 +28,7 @@ export function WalletsWidget({ data }: { data: DashboardDTO }) {
         )
       }
     >
-      {wallets.length > 1 && <p className="mb-1 text-sm text-ink-3">รวม {baht(total)}</p>}
+      {wallets.length > 1 && <p className="mb-1 text-sm text-ink-3">รวม <AnimatedNumber value={total} format={baht} /></p>}
       <ul className="divide-y divide-line">
         {wallets.map((w) => (
           <li key={w.id} className="flex items-center gap-3 py-2">
@@ -36,7 +37,7 @@ export function WalletsWidget({ data }: { data: DashboardDTO }) {
               {w.name}
               {w.isDefault && wallets.length > 1 && <span className="ml-1 text-xs text-ink-3">· หลัก</span>}
             </span>
-            <span className={`font-bold text-xl ${w.balance < 0 ? "text-expense" : ""}`}>{baht(w.balance)}</span>
+            <span className={`font-bold text-xl ${w.balance < 0 ? "text-expense" : ""}`}><AnimatedNumber value={w.balance} format={baht} /></span>
           </li>
         ))}
       </ul>
