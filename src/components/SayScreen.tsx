@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { draftProblem, parseFailureMessage, splitOf } from "@/client/entryDraft";
@@ -16,6 +16,7 @@ import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { sharesFor, sumShares } from "@/domain/split";
 import { AiBudgetNote } from "./AiBudgetNote";
+import { AuroraCloud, type CloudMode } from "./AuroraCloud";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Spinner } from "./Loading";
@@ -53,19 +54,21 @@ export function SayScreen() {
   const [walletId, setWalletId] = useState<string | null>(null);
   const [note, setNote] = useState("");
 
-  // ---- voice: same text box as typing; only shown where the browser has a recognizer ----
+  // ---- voice: opens listening straight away; same text box as typing; only where the browser has a recognizer ----
   // server snapshot false: the first client render matches the server, then the mic appears where supported
   const canListen = useSyncExternalStore(() => () => {}, () => speechRecognitionCtor() !== null, () => false);
   const [listening, setListening] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  const [pulse, setPulse] = useState(0); // +1 per recognised update: the cloud flickers with it
   const recognizer = useRef<SpeechRecognitionLike | null>(null);
+  const autoStarted = useRef(false);
+  const box = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const r = recognizer;
     return () => r.current?.abort();
   }, []);
 
-  const toggleMic = () => {
-    if (listening) return recognizer.current?.stop();
+  const startListening = useCallback(() => {
     const Ctor = speechRecognitionCtor();
     if (!Ctor) return;
     setMicError(null);
@@ -73,7 +76,10 @@ export function SayScreen() {
     r.lang = "th-TH";
     r.interimResults = true;
     r.continuous = false;
-    r.onresult = (e) => setText(transcriptOf(e.results).slice(0, MAX_LEN));
+    r.onresult = (e) => {
+      setText(transcriptOf(e.results).slice(0, MAX_LEN));
+      setPulse((n) => n + 1);
+    };
     r.onerror = (e) => setMicError(speechErrorMessage(e.error));
     r.onend = () => setListening(false);
     recognizer.current = r;
@@ -83,6 +89,21 @@ export function SayScreen() {
     } catch {
       setMicError(speechErrorMessage("other")); // start() throws if a session is already running
     }
+  }, []);
+
+  // Entering the screen starts listening. Some browsers (iOS Safari) refuse to start without a tap: then the
+  // cloud simply waits in its idle state and a tap on it starts listening.
+  useEffect(() => {
+    if (canListen && !autoStarted.current) {
+      autoStarted.current = true;
+      startListening();
+    }
+  }, [canListen, startListening]);
+
+  const tapCloud = () => {
+    if (listening) recognizer.current?.stop();
+    else if (canListen) startListening();
+    else box.current?.focus();
   };
 
   const read = useMutation({
@@ -153,64 +174,91 @@ export function SayScreen() {
 
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
+  const cloudMode: CloudMode = read.isPending ? "thinking" : listening ? "listening" : "idle";
+  const caption = read.isPending
+    ? "กำลังแยกให้…"
+    : listening
+      ? "กำลังฟัง… พูดได้เลย แตะเพื่อหยุด"
+      : micError
+        ? micError
+        : text.trim()
+          ? "ตรวจข้อความ แก้ได้ แล้วกดส่ง"
+          : canListen
+            ? "แตะก้อนเมฆแล้วพูดได้เลย"
+            : "พิมพ์ประโยคด้านล่างได้เลย";
+
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
+    <main className={`mx-auto flex min-h-dvh max-w-md flex-col ${draft ? "bg-bg" : "bg-[#0b0d12] text-white"}`}>
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
         <button className="rounded-full p-2" aria-label="กลับ" onClick={() => (draft ? setDraft(null) : router.back())}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">จดประโยคเดียว</h1>
+        {!draft && <AiBudgetNote onDark className="ml-auto" />}
       </header>
 
       {!draft && (
-        <section className="flex flex-1 flex-col px-5 pt-4">
-          <p className="text-ink-2">พิมพ์หรือพูดสั้นๆ เช่น &ldquo;ข้าวมันไก่ 60 หารแฟน&rdquo; แล้วตรวจก่อนบันทึก</p>
-          <div className="mt-4 flex items-start gap-2">
+        <section className="flex flex-1 flex-col items-center px-4 pt-2">
+          <button
+            type="button"
+            onClick={tapCloud}
+            aria-label={listening ? "หยุดฟัง" : "แตะเพื่อพูด"}
+            className="relative aspect-square w-full max-w-[300px] rounded-full"
+          >
+            <AuroraCloud mode={cloudMode} pulse={pulse} className="h-full w-full" />
+            {canListen && (
+              <span className="pointer-events-none absolute inset-0 grid place-items-center">
+                <Icon name="mic" size={44} fill className="text-white drop-shadow-lg" />
+              </span>
+            )}
+          </button>
+          <p className={`mt-1 min-h-6 px-4 text-center text-[15px] ${micError && !listening ? "text-streak" : "text-white/70"}`} role="status">
+            {caption}
+          </p>
+
+          {read.isError && (
+            <div className="mt-3 w-full rounded-2xl bg-white/[0.08] p-4" role="alert">
+              <p className="text-white/80">{parseFailureMessage(failCode)}</p>
+              <Link href="/new" transitionTypes={FORWARD} className="btn3d key mt-3 inline-flex">จดเอง</Link>
+            </div>
+          )}
+
+          <div
+            className={`safe-bottom mt-auto flex w-full flex-col gap-2 rounded-3xl border border-white/10 bg-white/[0.07] p-3 pl-4 transition-opacity ${
+              read.isPending ? "pointer-events-none opacity-50" : ""
+            }`}
+          >
+            <label htmlFor="say-text" className="text-[11px] tracking-wide text-white/45">
+              ข้อความ (แก้ได้)
+            </label>
             <textarea
+              id="say-text"
+              ref={box}
               value={text}
               maxLength={MAX_LEN}
-              rows={3}
-              autoFocus
-              aria-label="ประโยคที่จะจด"
-              placeholder="เช่น กาแฟ 55 หรือ เงินเดือน 25000"
-              onChange={(e) => setText(e.target.value)}
+              rows={2}
+              autoFocus={!canListen}
+              placeholder="เช่น ข้าวมันไก่ 60 หารแฟน"
+              onChange={(e) => {
+                if (listening) recognizer.current?.stop(); // typing takes over from the voice
+                setText(e.target.value);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
-              className="min-w-0 flex-1 resize-none rounded-2xl border-2 border-line bg-card px-4 py-3 outline-none focus:border-ink"
+              className="w-full resize-none bg-transparent text-lg leading-relaxed text-white outline-none placeholder:text-white/40"
             />
-            {canListen && (
-              <button
-                type="button"
-                className={`btn3d ${listening ? "key" : ""} !rounded-full p-3`}
-                aria-label={listening ? "หยุดฟัง" : "พูด"}
-                aria-pressed={listening}
-                onClick={toggleMic}
-              >
-                <Icon name="mic" size={28} fill={listening} />
+            <div className="flex items-center justify-between gap-3">
+              <Link href="/new" transitionTypes={FORWARD} className="text-xs text-white/50 underline">
+                จดเองแทน
+              </Link>
+              <button className="btn3d !px-5 !py-2.5" disabled={!text.trim() || read.isPending} onClick={submit}>
+                {read.isPending ? <><Spinner /> กำลังอ่าน…</> : <>ส่ง <Icon name="arrow_upward" size={20} /></>}
               </button>
-            )}
-          </div>
-          <AiBudgetNote className="mt-2" />
-          <p className="mt-2 min-h-5 text-sm" role="status">
-            {listening ? <span className="text-ink-2">กำลังฟัง… พูดได้เลย</span> : micError && <span className="text-expense">{micError}</span>}
-          </p>
-
-          {read.isError && (
-            <div className="mt-2 rounded-2xl bg-card p-4" role="alert">
-              <p className="text-ink-2">{parseFailureMessage(failCode)}</p>
-              <Link href="/new" transitionTypes={FORWARD} className="btn3d mt-3 inline-flex">จดเอง</Link>
             </div>
-          )}
-
-          <div className="safe-bottom mt-auto flex flex-col gap-3 pt-6">
-            <button className="btn3d py-4 text-lg" disabled={!text.trim() || read.isPending} onClick={submit}>
-              {read.isPending ? <><Spinner /> กำลังอ่าน…</> : <><Icon name="edit_note" /> ให้ AI ช่วยกรอก</>}
-            </button>
-            <Link href="/new" transitionTypes={FORWARD} className="text-center text-sm text-ink-3 underline">จดเองแทน</Link>
           </div>
         </section>
       )}

@@ -11,6 +11,8 @@ export interface WheelSlot {
   label: string;
   tone: string; // css color for the icon
   disabled?: boolean;
+  /** Small second line under the label (used by the centre slot). */
+  sub?: string;
   /** A second choice further out in the same direction (drag past the slot to reach it). */
   outer?: Omit<WheelSlot, "outer">;
 }
@@ -21,6 +23,10 @@ const OUTER = 175; // beyond this you're "outside the wheel" (release there = ca
 const RADIUS = 112;
 const OUTER_RADIUS = 215; // where an outer slot sits, shrunk on short screens (see outerRadius)
 const OUTER_REACH = 60; // how far past an outer slot a release still counts
+export const CENTRE_RADIUS = 58; // the big centre slot (when there is one): the finger lands on it first when dragging straight up
+
+/** Whether an offset from the wheel centre is on the big centre slot. */
+export const inCentre = (dx: number, dy: number, radius = CENTRE_RADIUS) => Math.hypot(dx, dy) < radius;
 
 /** Short (landscape) screens pull the outer ring in so it stays on screen. */
 export const outerRadius = (viewportHeight: number) => Math.max(RADIUS + 60, Math.min(OUTER_RADIUS, viewportHeight / 2 - 50));
@@ -51,15 +57,19 @@ export function slotAt(dx: number, dy: number, count: number, maxDist = OUTER): 
 /**
  * GTA-style radial picker on the [+] button. Tap = onTap. Hold ~250 ms = the wheel opens in the
  * middle of the screen; drag the finger onto a slot and release to choose it.
- * Releasing without entering the ring cancels.
+ * Releasing without entering the ring cancels. With a `middle` slot the middle of the wheel is a big
+ * choice of its own instead of the cancel zone: releasing there after dragging picks it.
  */
 export function ModeWheel({
   slots,
+  middle,
   onTap,
   onPick,
   onPress,
 }: {
   slots: WheelSlot[];
+  /** A big choice in the middle of the wheel (instead of the cancel zone). */
+  middle?: WheelSlot;
   onTap: () => void;
   onPick: (id: string) => void;
   /** Fires the instant a finger lands (used to warm the backend before the user finishes typing). */
@@ -77,6 +87,7 @@ export function ModeWheel({
     const c = centre();
     const moved = Math.hypot(clientX - origin.current.x, clientY - origin.current.y) > 12;
     if (!moved) return null; // the finger starts far from the ring; don't preselect anything
+    if (middle && inCentre(clientX - c.x, clientY - c.y)) return middle.disabled ? null : middle.id;
     const t = targetAt(clientX - c.x, clientY - c.y, slots.length, (i) => !!slots[i].outer, ring);
     if (!t) return null;
     const s = t.outer ? slots[t.index].outer! : slots[t.index];
@@ -177,8 +188,24 @@ export function ModeWheel({
                   </motion.div>,
                 ];
               })}
-              <div className="absolute -ml-3 -mt-3 h-6 w-6 rounded-full border-2 border-white/50" />
-              <p className="absolute -ml-32 mt-[150px] w-64 text-center text-sm text-white/80">ลากไปที่ช่อง แล้วปล่อยนิ้ว</p>
+              {middle ? (
+                <motion.div
+                  initial={{ scale: 0.4, opacity: 0 }}
+                  animate={{ scale: active === middle.id ? 1.12 : 1, opacity: middle.disabled ? 0.3 : 1 }}
+                  transition={{ type: "spring", stiffness: 420, damping: 26 }}
+                  className={`wheel-hero absolute flex flex-col items-center justify-center rounded-full text-center ${
+                    active === middle.id ? "wheel-hero-on bg-ink text-[var(--on-ink)]" : "bg-primary text-white"
+                  }`}
+                  style={{ width: CENTRE_RADIUS * 2, height: CENTRE_RADIUS * 2, marginLeft: -CENTRE_RADIUS, marginTop: -CENTRE_RADIUS }}
+                >
+                  <Icon name={middle.icon} size={46} fill />
+                  <span className="mt-0.5 text-[13px] font-medium leading-tight">{middle.label}</span>
+                  {middle.sub && <span className="text-[10px] leading-tight opacity-85">{middle.sub}</span>}
+                </motion.div>
+              ) : (
+                <div className="absolute -ml-3 -mt-3 h-6 w-6 rounded-full border-2 border-white/50" />
+              )}
+              <p className="absolute -ml-32 mt-[178px] w-64 text-center text-sm text-white/80">ลากไปที่ช่อง แล้วปล่อยนิ้ว</p>
             </div>
           </motion.div>
         )}

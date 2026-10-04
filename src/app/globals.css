@@ -197,6 +197,13 @@ body {
   animation: shimmer 1.4s linear infinite;
 }
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+/* the big centre slot of the mode wheel: a quiet ring that pulses until the finger is on it */
+.wheel-hero { box-shadow: 0 8px 0 var(--primary-edge), 0 14px 26px rgb(0 0 0 / 0.3); }
+.wheel-hero::after { content: ""; position: absolute; inset: -7px; border-radius: 9999px; border: 2px solid var(--primary); opacity: 0; animation: wheel-pulse 1.8s ease-out infinite; pointer-events: none; }
+.wheel-hero-on { box-shadow: 0 8px 0 var(--key-edge), 0 14px 26px rgb(0 0 0 / 0.3); }
+.wheel-hero-on::after { display: none; }
+@keyframes wheel-pulse { 0% { transform: scale(0.92); opacity: 0.75; } 100% { transform: scale(1.22); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .wheel-hero::after { animation: none; } }
 @keyframes top-progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
 @keyframes scan-line { 0%, 100% { top: 6%; } 50% { top: 90%; } }
 /* Intro on the first open of "/" per session; <html data-intro="play"> is set by INTRO_INIT_SCRIPT.
