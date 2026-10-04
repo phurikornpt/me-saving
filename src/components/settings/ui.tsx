@@ -9,7 +9,7 @@ export function SettingsPage({ title, action, children }: { title: string; actio
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-16">
       <header className="safe-top flex items-center gap-2 pb-3">
-        <Link href="/settings" className="rounded-full p-2" aria-label="กลับไปตั้งค่า">
+        <Link href="/settings" replace className="rounded-full p-2" aria-label="กลับไปตั้งค่า">
           <Icon name="arrow_back" />
         </Link>
         <h1 className="font-display min-w-0 flex-1 truncate text-xl">{title}</h1>

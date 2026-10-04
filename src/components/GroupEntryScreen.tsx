@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { activePeople, personName } from "@/client/people";
@@ -19,13 +19,13 @@ import { WalletPicker } from "./Wallets";
 
 /** One group entry (a scanned receipt or items typed by hand): see its lines, and edit them until someone pays it back. */
 export function GroupEntryScreen({ id }: { id: string }) {
-  const router = useRouter();
+  const goBack = useBackOr();
   const { data, isError } = useQuery({ queryKey: ["entry", id], queryFn: () => api.entryDetail(id) });
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="min-w-0 flex-1 truncate font-display text-xl">{data?.entry.merchant || "หลายรายการ"}</h1>
@@ -76,7 +76,7 @@ const ERRORS: Record<string, string> = {
 };
 
 function Editor({ data }: { data: EntryDetailDTO }) {
-  const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const { data: people = [] } = usePeople();
@@ -120,7 +120,7 @@ function Editor({ data }: { data: EntryDetailDTO }) {
     onSuccess: () => {
       void qc.invalidateQueries();
       fb.toast({ message: "แก้ไขแล้ว" });
-      router.back();
+      goBack();
     },
     onError: (e) => {
       const code = e instanceof ApiError ? e.code : "";

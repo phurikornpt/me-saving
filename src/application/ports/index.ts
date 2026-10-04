@@ -3,6 +3,7 @@ import type { Satang } from "@/domain/money";
 import type { LayoutItem } from "@/domain/dashboard-layout";
 import type { Ledger } from "@/domain/ledger";
 import type { LineOwners, Share } from "@/domain/split";
+import type { SpendFilter } from "@/domain/spend-filter";
 import type { EntryKind } from "@/domain/wallet";
 
 export interface Clock {
@@ -237,8 +238,12 @@ export interface DailyTotal {
 
 /** Read-side aggregates. Implemented with raw SQL for speed (dashboard / calendar). */
 export interface StatsRepo {
-  /** Per Bangkok day in [from, toExclusive), only days that have entries. `walletId`: only that wallet's entries. */
-  dailyTotals(from: DayKey, toExclusive: DayKey, walletId?: string): Promise<DailyTotal[]>;
+  /**
+   * Per Bangkok day in [from, toExclusive), only days that have entries. `walletId`: only that wallet's entries.
+   * `spend` "mine" / "fronted": only expenses with no one else's share / with someone else's share, at their full
+   * amount, and no income.
+   */
+  dailyTotals(from: DayKey, toExclusive: DayKey, walletId?: string, spend?: SpendFilter): Promise<DailyTotal[]>;
   /** (day, kind) of logged days in [from, toExclusive). */
   loggedKinds(from: DayKey, toExclusive: DayKey): Promise<{ day: DayKey; kind: "entry" | "no_spend" }[]>;
   /** Our own spending per category in [from, toExclusive); receipts count by their lines. categoryId null = uncategorised. */

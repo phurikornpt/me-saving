@@ -12,6 +12,7 @@ import { useDashboard } from "@/client/queries";
 import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { usePullToRefresh } from "@/client/usePullToRefresh";
 import { wake } from "@/client/wake";
 import type { WidgetId } from "@/domain/dashboard-layout";
 import { EditLayoutSheet } from "./EditLayoutSheet";
@@ -19,6 +20,7 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { DashboardSkeleton } from "./Loading";
 import { ModeWheel, type WheelSlot } from "./ModeWheel";
+import { PullIndicator } from "./PullIndicator";
 import { CategorySummaryWidget } from "./widgets/CategorySummaryWidget";
 import { CalendarWidget } from "./widgets/CalendarWidget";
 import { MonthSummaryWidget } from "./widgets/MonthSummaryWidget";
@@ -43,6 +45,17 @@ function renderWidget(id: WidgetId, data: DashboardDTO) {
   }
 }
 
+/** The selected pill's dark fill; `layoutId` makes it slide from the old pill to the new one. */
+function PillBg() {
+  return (
+    <motion.span
+      layoutId="wallet-pill-bg"
+      className="absolute -inset-0.5 rounded-full bg-ink"
+      transition={{ type: "spring", stiffness: 500, damping: 36 }}
+    />
+  );
+}
+
 export function Dashboard() {
   const base = useDashboard();
   const { isLoading, isError, refetch } = base;
@@ -63,6 +76,8 @@ export function Dashboard() {
   const afterLog = useAfterLog();
   const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
+  // refetches whatever is on screen (dashboard, calendar, breakdown, ...); the rest goes stale and loads when next opened
+  const { pull, refreshing } = usePullToRefresh(() => qc.invalidateQueries());
 
   const noSpend = useMutation({
     mutationFn: api.noSpend,
@@ -104,6 +119,7 @@ export function Dashboard() {
 
   return (
     <main className="mx-auto min-h-dvh max-w-md px-4 pb-36">
+      <PullIndicator pull={pull} refreshing={refreshing} />
       <header className="intro-rise safe-top flex items-center justify-between pb-3">
         <h1 className="font-display text-2xl">me-budget</h1>
         <div className="flex gap-1">
@@ -133,12 +149,14 @@ export function Dashboard() {
 
       {activeWallets.length > 1 && (
         <div className="-mx-4 mb-3 flex gap-2 overflow-x-auto px-4" role="group" aria-label="ดูตามกระเป๋า">
-          <button className="pill shrink-0 text-sm" aria-pressed={wallet === null} onClick={() => setWalletFilter(null)}>
-            ทุกกระเป๋า
+          <button className="pill pill-slide relative shrink-0 text-sm" aria-pressed={wallet === null} onClick={() => setWalletFilter(null)}>
+            {wallet === null && <PillBg />}
+            <span className="relative">ทุกกระเป๋า</span>
           </button>
           {activeWallets.map((w) => (
-            <button key={w.id} className="pill flex shrink-0 items-center gap-1 text-sm" aria-pressed={wallet === w.id} onClick={() => setWalletFilter(w.id)}>
-              <Icon name={w.icon} size={16} /> {w.name}
+            <button key={w.id} className="pill pill-slide relative flex shrink-0 items-center gap-1 text-sm" aria-pressed={wallet === w.id} onClick={() => setWalletFilter(w.id)}>
+              {wallet === w.id && <PillBg />}
+              <span className="relative flex items-center gap-1"><Icon name={w.icon} size={16} /> {w.name}</span>
             </button>
           ))}
         </div>

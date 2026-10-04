@@ -7,11 +7,14 @@ import { owedTitle, describeOwedLine, formatDebtMessage } from "@/client/debtMes
 import { useCategories, useOutstanding } from "@/client/queries";
 import type { DashboardDTO, OwedItemDTO } from "@/client/types";
 import { formatBaht } from "@/domain/money";
+import { AnimatedNumber } from "../AnimatedNumber";
 import { useFeedback } from "../Feedback";
 import { Icon } from "../Icon";
 import { PersonDot } from "../People";
 import { Sheet } from "../Sheet";
 import { WidgetCard } from "./WidgetCard";
+
+const baht = (satang: number) => `฿${formatBaht(satang)}`;
 
 /** Who owes us what. Tap a person for the entries it comes from and to record a repayment. */
 export function PeopleWidget({ data }: { data: DashboardDTO }) {
@@ -55,14 +58,14 @@ export function PeopleWidget({ data }: { data: DashboardDTO }) {
           </div>
         ) : (
           <>
-            {owing.length > 1 && <p className="mb-1 text-sm text-ink-3">รวม ฿{formatBaht(total)}</p>}
+            {owing.length > 1 && <p className="mb-1 text-sm text-ink-3">รวม <AnimatedNumber value={total} format={baht} /></p>}
             <ul className="divide-y divide-line">
               {owing.map((b) => (
                 <li key={b.personId}>
                   <button className="flex w-full items-center gap-3 py-2 text-left" onClick={() => setOpen(b.personId)}>
                     <PersonDot people={data.people} id={b.personId} size={12} />
                     <span className="min-w-0 flex-1 truncate">{personName(data.people, b.personId)}</span>
-                    <span className="font-bold text-2xl" style={{ color: personColor(data.people, b.personId) }}>฿{formatBaht(b.balance)}</span>
+                    <span className="font-bold text-2xl" style={{ color: personColor(data.people, b.personId) }}><AnimatedNumber value={b.balance} format={baht} /></span>
                     <Icon name="chevron_right" className="text-ink-3" />
                   </button>
                 </li>

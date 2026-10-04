@@ -18,6 +18,7 @@ import type {
   SplitMode,
   WalletDTO,
 } from "./types";
+import type { SpendFilter } from "@/domain/spend-filter";
 
 export const AUTH_EXPIRED_EVENT = "me-budget:auth-expired";
 
@@ -51,8 +52,8 @@ const q = (params: Record<string, string | number | undefined>) => {
 export const api = {
   /** `wallet`: narrow today's totals and recent entries to one wallet. */
   dashboard: (wallet?: string | null) => request<DashboardDTO>("GET", `/api/dashboard${q({ wallet: wallet ?? undefined })}`),
-  calendar: (month: string, wallet?: string | null) =>
-    request<CalendarDTO>("GET", `/api/calendar${q({ month, wallet: wallet ?? undefined })}`),
+  calendar: (month: string, wallet?: string | null, spend: SpendFilter = "all") =>
+    request<CalendarDTO>("GET", `/api/calendar${q({ month, wallet: wallet ?? undefined, spend: spend === "all" ? undefined : spend })}`),
   categoryBreakdown: (month: string, wallet?: string | null) =>
     request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month, wallet: wallet ?? undefined })}`),
   /** May call the AI (once per month at most, and it counts against the daily AI limit). */

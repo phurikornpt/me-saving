@@ -3,12 +3,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBackOr } from "@/client/useBackOr";
 import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
 import { applyDuplicates, rowsFromDraft, type BackfillRow } from "@/client/backfill";
 import { activePeople, describeShares } from "@/client/people";
 import { useAiBudget, useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
+import { occurredAtFor, usableScanDay } from "@/client/occurredAt";
 import { resizeForUpload } from "@/client/resizeImage";
 import type { ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -23,9 +25,7 @@ import { ItemLines } from "./ItemLines";
 import { PeoplePicker, SplitSummary } from "./People";
 import { WalletPicker } from "./Wallets";
 
-type Header = { kind: ReceiptDraftDTO["kind"]; merchant: string | null; date: string | null };
-
-const KIND_LABEL: Record<Header["kind"], string> = {
+const KIND_LABEL: Record<ReceiptDraftDTO["kind"], string> = {
   receipt: "ใบเสร็จ",
   delivery: "ออเดอร์เดลิเวอรี่",
   online_order: "ออเดอร์ออนไลน์",
@@ -42,6 +42,7 @@ const MAX_PICTURES = 10;
  */
 export function ScanScreen() {
   const router = useRouter();
+  const goBack = useBackOr();
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -52,7 +53,12 @@ export function ScanScreen() {
   const [walletId, setWalletId] = useState<string | null>(null);
   const [sharedWith, setSharedWith] = useState<string[]>([]);
   const onBill = activePeople(people).filter((p) => sharedWith.includes(p.id));
-  const [header, setHeader] = useState<Header | null>(null);
+  const [reviewing, setReviewing] = useState(false);
+  const [kind, setKind] = useState<ReceiptDraftDTO["kind"]>("receipt");
+  const [name, setName] = useState("");
+  const [day, setDay] = useState("");
+  const today = bangkokDay(new Date());
+  const backdated = !!day && day < today;
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
   const [totalText, setTotalText] = useState("");
@@ -81,7 +87,10 @@ export function ScanScreen() {
     const paid = draft.total > 0 ? draft.total : draft.lines.reduce((sum, l) => sum + l.price, 0);
     setTotal(paid);
     setTotalText(formatBaht(paid).replace(/,/g, ""));
-    setHeader({ kind: draft.kind, merchant: draft.merchant, date: draft.date });
+    setKind(draft.kind);
+    setName(draft.merchant ?? "");
+    setDay(usableScanDay(draft.date, today));
+    setReviewing(true);
   };
 
   // One picture of a shop receipt / order keeps the itemised review. A history page, or several
@@ -141,18 +150,16 @@ export function ScanScreen() {
     read.mutate(left === null ? picked : picked.slice(0, left));
   };
 
-  const phase = rows ? "backfill" : header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
+  const phase = rows ? "backfill" : reviewing ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
   const sum = useMemo(() => summarize(lines, total), [lines, total]);
 
   const save = useMutation({
     mutationFn: () => {
-      const date = header?.date ?? null;
-      const today = bangkokDay(new Date());
       return api.saveReceipt({
-        merchant: header?.merchant ?? null,
-        occurredAt: date && date <= today ? new Date(`${date}T12:00:00+07:00`).toISOString() : undefined,
+        merchant: name.trim() || null,
+        occurredAt: occurredAtFor(day, today),
         total,
         people: onBill.map((p) => p.id),
         walletId: walletId ?? undefined,
@@ -183,7 +190,7 @@ export function ScanScreen() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="safe-top flex items-center gap-2 px-4 pb-2">
-        <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
+        <button className="rounded-full p-2" aria-label="กลับ" onClick={goBack}>
           <Icon name="arrow_back" />
         </button>
         <h1 className="font-display text-xl">{rows ? "จดย้อนหลัง" : onBill.length ? "สแกนหารกัน" : "สแกน"}</h1>
@@ -259,13 +266,31 @@ export function ScanScreen() {
 
       {phase === "review" && (
         <>
-          <div className="px-5 pb-2">
-            <p className="truncate font-medium">{header?.merchant ?? KIND_LABEL[header?.kind ?? "receipt"]}</p>
-            <p className="text-xs text-ink-3">
-              {header ? `${KIND_LABEL[header.kind]} · ` : ""}
-              {onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · ค่าส่ง/ค่าบริการหารเท่ากันทุกคน · " : ""}แตะชื่อเพื่อแก้
-            </p>
-          </div>
+          <section className="flex items-center gap-2 px-5 pb-2">
+            <input
+              value={name}
+              maxLength={100}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="ชื่อกลุ่ม เช่น ค่า 7-11 (ไม่ใส่ก็ได้)"
+              aria-label="ชื่อกลุ่ม"
+              className="min-w-0 flex-1 rounded-full border-2 border-line bg-card px-4 py-2 text-sm outline-none focus:border-ink"
+            />
+            <label className="pill flex items-center gap-1 text-sm">
+              <Icon name="calendar_month" size={18} />
+              <input
+                type="date"
+                value={day}
+                max={today}
+                onChange={(e) => setDay(e.target.value)}
+                className="w-[7.5rem] bg-transparent text-xs outline-none"
+                aria-label="วันที่จ่าย (ค่าเริ่มต้นคือวันนี้)"
+              />
+            </label>
+          </section>
+          {backdated && <p className="px-6 pb-1 text-xs text-ink-3">จดย้อนหลัง: เงินถูกบันทึกในวันนั้น แต่ไม่ช่วยต่อ streak</p>}
+          <p className="px-6 pb-2 text-xs text-ink-3">
+            {KIND_LABEL[kind]} · {onBill.length ? "แตะชิปเพื่อเปลี่ยนว่าของใคร · ค่าส่ง/ค่าบริการหารเท่ากันทุกคน · " : ""}แตะชื่อรายการเพื่อแก้
+          </p>
 
           <ItemLines lines={lines} onChange={setLines} onBill={onBill} addLabel="เพิ่มรายการที่ AI อ่านตก" />
 

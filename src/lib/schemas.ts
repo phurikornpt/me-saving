@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { SPEND_FILTERS } from "@/domain/spend-filter";
 
 export const satang = z.number().int().positive().max(2_000_000_000);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -65,6 +66,8 @@ export const calendarQuery = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/),
   /** Only this wallet's entries. */
   wallet: z.uuid().optional(),
+  /** Only our own expenses ("mine") or only ones we fronted for others ("fronted") at their full amount. */
+  spend: z.enum(SPEND_FILTERS).optional(),
 });
 export const summaryQuery = z.object({ month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/) });
 export const dashboardQuery =z.object({ wallet: z.uuid().optional() });
