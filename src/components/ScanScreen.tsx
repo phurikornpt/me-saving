@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { api, ApiError, describeFailure } from "@/client/api";
+import { applyDuplicates, rowsFromDraft, type BackfillRow } from "@/client/backfill";
 import { activePeople, describeShares } from "@/client/people";
 import { useCategories, usePeople, useWallets } from "@/client/queries";
 import { summarize, type DraftLine } from "@/client/receiptMath";
@@ -13,6 +14,7 @@ import type { ReceiptDraftDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { bangkokDay } from "@/domain/day";
 import { formatBaht, parseBaht } from "@/domain/money";
+import { BackfillReview } from "./BackfillReview";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { ReadingReceipt, Spinner } from "./Loading";
@@ -27,7 +29,11 @@ const KIND_LABEL: Record<Header["kind"], string> = {
   delivery: "ออเดอร์เดลิเวอรี่",
   online_order: "ออเดอร์ออนไลน์",
   transfer_slip: "สลิปโอน",
+  history: "หน้าประวัติรายการ",
 };
+
+/** Pictures read in one go. Each one costs one AI call from the daily budget. */
+const MAX_PICTURES = 10;
 
 /**
  * One scan button, two jobs: with nobody picked it just reads the lines off the receipt (all ours);
@@ -48,6 +54,9 @@ export function ScanScreen() {
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [total, setTotal] = useState(0);
   const [totalText, setTotalText] = useState("");
+  const [rows, setRows] = useState<BackfillRow[] | null>(null);
+  const [skipped, setSkipped] = useState(0);
+  const [progress, setProgress] = useState<string | null>(null);
   const camera = useRef<HTMLInputElement>(null);
   const album = useRef<HTMLInputElement>(null);
 
@@ -73,18 +82,52 @@ export function ScanScreen() {
     setHeader({ kind: draft.kind, merchant: draft.merchant, date: draft.date });
   };
 
+  // One picture of a shop receipt / order keeps the itemised review. A history page, or several
+  // pictures at once, becomes a list of past entries to tick and save together (backfill).
   const read = useMutation({
-    mutationFn: async (file: File) => api.parseReceipt(await resizeForUpload(file), onBill.map((p) => p.id)),
-    onSuccess: toLines,
+    mutationFn: async (files: File[]) => {
+      const today = bangkokDay(new Date());
+      const drafts: ReceiptDraftDTO[] = [];
+      let failed = 0;
+      let firstError: unknown;
+      for (const [i, file] of files.entries()) {
+        setProgress(files.length > 1 ? `${i + 1}/${files.length}` : null);
+        try {
+          drafts.push(await api.parseReceipt(await resizeForUpload(file), files.length === 1 ? onBill.map((p) => p.id) : []));
+        } catch (e) {
+          failed++;
+          firstError ??= e;
+        }
+      }
+      if (drafts.length === 0) throw firstError;
+      if (drafts.length === 1 && files.length === 1 && drafts[0].kind !== "history") return { drafts, failed, rows: null };
+      let found = drafts.flatMap((d, i) => rowsFromDraft(d, categories, today, `p${i}`));
+      if (found.length === 0) throw firstError ?? new ApiError(422, "INVALID_RECEIPT", "nothing readable");
+      try {
+        const { duplicates } = await api.checkBackfill(found.map((r) => ({ day: r.day, total: r.amount, kind: r.kind, description: r.description })));
+        found = applyDuplicates(found, duplicates);
+      } catch {
+        /* the duplicate hint is optional: show the rows without it */
+      }
+      return { drafts, failed, rows: found };
+    },
+    onSuccess: ({ drafts, failed, rows: found }) => {
+      setProgress(null);
+      if (found) {
+        setSkipped(failed);
+        setRows(found);
+      } else toLines(drafts[0]);
+    },
+    onError: () => setProgress(null),
   });
 
   const onPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
+    const files = Array.from(e.target.files ?? []).slice(0, MAX_PICTURES);
     e.target.value = "";
-    if (f) read.mutate(f);
+    if (files.length > 0) read.mutate(files);
   };
 
-  const phase = header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
+  const phase = rows ? "backfill" : header ? "review" : read.isPending ? "reading" : read.isError ? "failed" : "idle";
   const failCode = read.error instanceof ApiError ? read.error.code : "UNKNOWN";
 
   const sum = useMemo(() => summarize(lines, total), [lines, total]);
@@ -129,12 +172,12 @@ export function ScanScreen() {
         <button className="rounded-full p-2" aria-label="กลับ" onClick={() => router.back()}>
           <Icon name="arrow_back" />
         </button>
-        <h1 className="font-display text-xl">{onBill.length ? "สแกนหารกัน" : "สแกน"}</h1>
+        <h1 className="font-display text-xl">{rows ? "จดย้อนหลัง" : onBill.length ? "สแกนหารกัน" : "สแกน"}</h1>
       </header>
 
       {/* Two inputs: `capture` forces the camera on phones, so the album needs its own */}
       <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden" onChange={onPicked} />
-      <input ref={album} type="file" accept="image/*" className="hidden" onChange={onPicked} />
+      <input ref={album} type="file" accept="image/*" multiple className="hidden" onChange={onPicked} />
 
       {phase === "idle" && (
         <Center>
@@ -143,6 +186,8 @@ export function ScanScreen() {
             ถ่ายรูปหรือเลือกรูป
             <br />
             <span className="text-sm text-ink-3">ใบเสร็จ · ออเดอร์เดลิเวอรี่/ช้อปออนไลน์ (แคปหน้าจอ) · สลิปโอน</span>
+            <br />
+            <span className="text-sm text-ink-3">ลืมจดหลายวัน? แคปหน้าประวัติในแอปธนาคาร หรือเลือกหลายรูปพร้อมกัน (สูงสุด {MAX_PICTURES})</span>
           </p>
           <div className="mt-5 w-full max-w-xs rounded-2xl bg-card p-4">
             <p className="mb-2 text-sm text-ink-3">หารกับใคร? (ไม่เลือก = แค่แกะรายการ ของเราทั้งหมด)</p>
@@ -163,6 +208,7 @@ export function ScanScreen() {
       {phase === "reading" && (
         <Center>
           <ReadingReceipt />
+          {progress && <p className="mt-2 text-sm text-ink-3">กำลังอ่านรูปที่ {progress}</p>}
         </Center>
       )}
 
@@ -183,6 +229,17 @@ export function ScanScreen() {
             <Link href="/itemized" className="btn3d">กรอกเอง</Link>
           </div>
         </Center>
+      )}
+
+      {phase === "backfill" && rows && (
+        <BackfillReview
+          initial={rows}
+          failed={skipped}
+          onCancel={() => {
+            setRows(null);
+            read.reset();
+          }}
+        />
       )}
 
       {phase === "review" && (

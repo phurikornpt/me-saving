@@ -170,3 +170,24 @@ export const settingsPatchBody = z.object({
   dashboardLayout: z.array(z.object({ id: z.string(), enabled: z.boolean() })).optional(),
   meNote: z.string().trim().max(500).optional(),
 });
+
+// Batch of past entries (bank-history screenshot, several slips). Text is clipped, not rejected, like receipts.
+export const backfillBody = z.object({
+  walletId: z.uuid().nullish(),
+  rows: z
+    .array(
+      z.object({
+        kind: z.enum(["expense", "income"]),
+        total: satang,
+        occurredAt: z.coerce.date(),
+        categoryId: z.uuid().nullish(),
+        note: clip(200).nullish(),
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+
+export const backfillCheckBody = z.object({
+  rows: z.array(z.object({ day, total: satang, kind: z.enum(["expense", "income"]), description: clip(100) })).max(100),
+});

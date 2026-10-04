@@ -84,7 +84,8 @@ export interface OwedItemDTO {
 export type OutstandingDTO = { personId: string; balance: number; items: OwedItemDTO[] }[];
 export interface ActivityDTO { xpGained: number; streak: number; leveledUp: boolean }
 export interface DraftLineDTO { rawName: string; canonicalName: string; qty: number; price: number; categoryName: string | null; owners: LineOwners; ownerSource: "memory" | "ai" | "default"; lowConfidence: boolean }
-export interface ReceiptDraftDTO { kind: "receipt" | "delivery" | "online_order" | "transfer_slip"; merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
+export interface TransactionDTO { date: string | null; description: string; amount: number; direction: "out" | "in"; categoryName: string | null }
+export interface ReceiptDraftDTO { kind: "receipt" | "delivery" | "online_order" | "transfer_slip" | "history"; transactions: TransactionDTO[]; merchant: string | null; date: string | null; total: number; lines: DraftLineDTO[]; sumMismatch: boolean }
 /** A sentence turned into an unsaved entry. Amount is satang, null when none was said. `uncertain` fields get highlighted. */
 export interface EntryTextDraftDTO {
   kind: "expense" | "income";

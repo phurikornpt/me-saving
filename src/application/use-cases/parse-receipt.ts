@@ -5,6 +5,7 @@ import type {
   CategoryRepo,
   Clock,
   ImageKind,
+  ParsedTransaction,
   LoginAttemptRepo,
   OwnerMemoryRepo,
   PersonRepo,
@@ -36,6 +37,8 @@ export interface ReceiptDraft {
   date: string | null;
   total: Satang;
   lines: ReceiptDraftLine[];
+  /** Only for kind "history" (then `lines` is empty): the rows of a bank / e-wallet page. */
+  transactions: ParsedTransaction[];
   /** Printed lines don't add up to the paid total (reading error, or a bill-level discount). */
   sumMismatch: boolean;
 }
@@ -132,6 +135,7 @@ export class ParseReceipt {
       date: parsed.date,
       total: parsed.total,
       lines: all,
+      transactions: parsed.transactions ?? [],
       sumMismatch: sum !== parsed.total,
     };
   }

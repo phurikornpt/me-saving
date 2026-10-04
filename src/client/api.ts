@@ -64,6 +64,13 @@ export const api = {
   settings: () => request<SettingsDTO>("GET", "/api/settings"),
   wallets: () => request<WalletDTO[]>("GET", "/api/wallets"),
 
+  /** Which rows look like entries already on file (no AI, no quota). */
+  checkBackfill: (rows: { day: string; total: number; kind: "expense" | "income"; description: string }[]) =>
+    request<{ duplicates: boolean[] }>("POST", "/api/backfill/check", { rows }),
+  saveBackfill: (b: {
+    walletId?: string;
+    rows: { kind: "expense" | "income"; total: number; occurredAt: string; categoryId: string | null; note: string | null }[];
+  }) => request<ActivityDTO & { entries: EntryDTO[] }>("POST", "/api/backfill", b),
   recordEntry: (b: {
     kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null;
     occurredAt?: string; split?: SplitMode; source?: "manual" | "preset" | "wheel";

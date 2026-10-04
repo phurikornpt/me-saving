@@ -7,11 +7,13 @@ import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { FindDuplicates } from "@/application/use-cases/find-duplicates";
 import { GetMonthSummary } from "@/application/use-cases/get-month-summary";
 import { ParseEntryText } from "@/application/use-cases/parse-entry-text";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
+import { RecordBackfill } from "@/application/use-cases/record-backfill";
 import { RecordEntry } from "@/application/use-cases/record-entry";
 import { RecordRepayment } from "@/application/use-cases/record-repayment";
 import { RecordTransfer } from "@/application/use-cases/record-transfer";
@@ -92,6 +94,8 @@ function build() {
           key: `ai:${userId}`, // the same shared AI budget as parseReceipt
           perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
         }),
+      findDuplicates: new FindDuplicates(repos.entries),
+      recordBackfill: new RecordBackfill(tx, systemClock),
       recordEntry: new RecordEntry(tx, systemClock),
       recordRepayment: new RecordRepayment(tx, systemClock),
       recordTransfer: new RecordTransfer(tx, systemClock),

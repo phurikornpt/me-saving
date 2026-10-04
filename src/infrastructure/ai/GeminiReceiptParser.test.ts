@@ -186,4 +186,34 @@ describe("kinds and fees", () => {
       code: "INVALID_RECEIPT",
     });
   });
+
+  it("reads a bank history page into transactions: dates normalised, empty or zero rows dropped", async () => {
+    const out = await parseWith({
+      kind: "history", merchant: null, date: null, total_paid: 0, lines: [], fees: [],
+      transactions: [
+        { date: "2569-09-28", description: "7-Eleven", amount: 55, direction: "out", category: "อาหาร" },
+        { date: null, description: "เงินเดือน", amount: 30000, direction: "in", category: null },
+        { date: "2026-09-27", description: "   ", amount: 10, direction: "out", category: null },
+        { date: "2026-09-27", description: "ศูนย์", amount: 0, direction: "out", category: null },
+      ],
+    });
+    expect(out.kind).toBe("history");
+    expect(out.lines).toEqual([]);
+    expect(out.transactions).toEqual([
+      { date: "2026-09-28", description: "7-Eleven", amount: 5500, direction: "out", categoryName: "อาหาร" },
+      { date: null, description: "เงินเดือน", amount: 3000000, direction: "in", categoryName: null },
+    ]);
+  });
+
+  it("a history page with no readable rows becomes INVALID_RECEIPT", async () => {
+    await expect(
+      parseWith({ kind: "history", merchant: null, date: null, total_paid: 0, lines: [], fees: [], transactions: [] }),
+    ).rejects.toMatchObject({ code: "INVALID_RECEIPT" });
+  });
+
+  it("caps a runaway history at 60 rows", async () => {
+    const many = Array.from({ length: 80 }, (_, i) => ({ date: "2026-09-28", description: `r${i}`, amount: 10, direction: "out", category: null }));
+    const out = await parseWith({ kind: "history", merchant: null, date: null, total_paid: 0, lines: [], fees: [], transactions: many });
+    expect(out.transactions).toHaveLength(60);
+  });
 });

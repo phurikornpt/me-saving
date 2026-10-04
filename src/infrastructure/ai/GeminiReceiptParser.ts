@@ -23,14 +23,26 @@ function buildSchema(keys: string[]) {
   });
   return z.object({
     kind: z
-      .enum(["receipt", "delivery", "online_order", "transfer_slip", "unknown"])
+      .enum(["receipt", "delivery", "online_order", "transfer_slip", "history", "unknown"])
       .describe(
-        "What the picture is: receipt (shop receipt), delivery (food/grocery delivery order, e.g. Grab, LINE MAN, foodpanda), online_order (Shopee, Lazada ...), transfer_slip (bank / PromptPay transfer slip), unknown (anything else, including a list of many past transactions)",
+        "What the picture is: receipt (shop receipt), delivery (food/grocery delivery order, e.g. Grab, LINE MAN, foodpanda), online_order (Shopee, Lazada ...), transfer_slip (bank / PromptPay transfer slip), history (a page listing MANY past transactions, e.g. bank app or e-wallet history), unknown (anything else)",
       ),
     merchant: z.string().nullable().describe("Shop or restaurant name. For a transfer_slip: who received the money"),
     date: z.string().nullable().describe("Gregorian date as YYYY-MM-DD, or null if unreadable"),
     total_paid: z.number().min(0).describe("Final amount paid in baht, after discounts and VAT"),
     lines: z.array(keys.length ? withOwners : line),
+    transactions: z
+      .array(
+        z.object({
+          date: z.string().nullable().describe("Gregorian YYYY-MM-DD of this row (use the day header above it if the row has none), or null"),
+          description: z.string().describe("Who / what, as shown, e.g. the shop or the person"),
+          amount: z.number().min(0).describe("Baht, always positive"),
+          direction: z.enum(["out", "in"]).describe("out = money spent / transferred away / paid; in = money received"),
+          category: z.string().nullable().describe("One of the provided category names, or null"),
+        }),
+      )
+      .optional()
+      .describe("Only for kind=history: one entry per row. Otherwise omit or empty"),
     fees: z
       .array(z.object({ name: z.string(), amount: z.number().min(0).describe("Baht") }))
       .describe("Delivery fee, service/platform fee, small-order fee, packaging fee, tip. NOT discounts, NOT VAT. Empty if none"),
@@ -49,6 +61,9 @@ const toSatang = (baht: number) => Math.round(baht * 100);
 // handled by allocation, so these rows must never become lines.
 const NON_PRODUCT = /ส่วนลด|โปรโมชั่น|โปรโมชัน|คูปอง|แต้ม|เงินทอน|ภาษี|vat|discount|coupon|promo|subtotal|change|point/i;
 export const isNonProduct = (name: string) => NON_PRODUCT.test(name);
+
+/** A history page rarely holds more; the cap keeps one bad read from flooding the review screen. */
+const MAX_TRANSACTIONS = 60;
 
 const RETRYABLE = new Set([500, 502, 503, 504]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -74,7 +89,8 @@ function buildPrompt(ctx: { people: Person[]; meNote?: string; knownNames: strin
     "- Discount rows (ส่วนลด, โปรโมชั่น, คูปอง, member discount ...) are NEVER products, even though they are printed between the products. Do not output them as lines.",
     "- Delivery / online order: `lines` are the food or goods, with options folded into the name. Delivery fee, service fee, small-order fee, packaging fee and tip go in `fees`, never in `lines`. Promo codes, free delivery and discounts go nowhere: they only lower `total_paid`.",
     "- transfer_slip: `lines` has exactly ONE entry: raw_name = the memo if there is one, else \"โอนเงินให้ <recipient>\"; canonical_name = the short purpose (e.g. \"ค่าข้าว\", \"โอนเงิน\"); line_total = the amount; merchant = the recipient; `fees` is empty. NEVER output account numbers, phone numbers or balances anywhere.",
-    "- unknown: not a purchase (or many past transactions in a list): return empty `lines`.",
+    "- history: a page listing many past transactions. Put EACH row in `transactions` (newest first as shown), leave `lines` and `fees` empty, set `total_paid` to 0. Skip balances, account numbers, and rows that are only a header. Read direction from the sign / colour / wording (รับเงิน, เงินเข้า = in; จ่าย, โอนออก, ชำระ = out).",
+    "- unknown: anything else that is not a purchase: return empty `lines`.",
     "- Amounts are in baht as numbers. A line's `line_total` already includes its quantity.",
     "- `total_paid` is what was actually paid in total. Bill-level discounts are NOT lines.",
     "- Dates: output Gregorian YYYY-MM-DD (convert Buddhist-era years by subtracting 543).",
@@ -140,6 +156,25 @@ export function createGeminiReceiptParser(opts: { apiKey: string; model?: string
       const parsed = schema.safeParse(safeJson(text));
       if (!parsed.success) throw new DomainError("AI_UNAVAILABLE", "gemini returned an unreadable result");
       const r = { ...parsed.data, lines: parsed.data.lines.filter((l) => !isNonProduct(l.raw_name) && !isNonProduct(l.canonical_name)) };
+      const rows = (r.transactions ?? []).filter((t) => t.amount > 0 && t.description.trim()).slice(0, MAX_TRANSACTIONS);
+      if (r.kind === "history") {
+        if (rows.length === 0) throw new DomainError("INVALID_RECEIPT", "no transactions found on the picture");
+        return {
+          kind: "history",
+          merchant: null,
+          date: null,
+          total: 0,
+          lines: [],
+          fees: [],
+          transactions: rows.map((t) => ({
+            date: normaliseDate(t.date),
+            description: t.description.trim(),
+            amount: toSatang(t.amount),
+            direction: t.direction,
+            categoryName: t.category,
+          })),
+        };
+      }
       if (r.kind === "unknown" || r.lines.length === 0) throw new DomainError("INVALID_RECEIPT", "no products found on the picture");
 
       return {

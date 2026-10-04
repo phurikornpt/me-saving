@@ -171,6 +171,26 @@ describe("ParseReceipt", () => {
     expect((await uc.execute(img)).sumMismatch).toBe(true);
   });
 
+  it("a history page comes back as transactions with no lines, and costs one scan", async () => {
+    const history: ParsedReceipt = {
+      kind: "history",
+      merchant: null,
+      date: null,
+      total: 0,
+      lines: [],
+      fees: [],
+      transactions: [
+        { date: "2026-09-28", description: "7-Eleven", amount: 5500, direction: "out", categoryName: "อาหาร" },
+        { date: null, description: "เงินเดือน", amount: 3000000, direction: "in", categoryName: null },
+      ],
+    };
+    const { uc, b } = setupParse(history);
+    const draft = await uc.execute(img, [FAN]); // people make no sense for a history page: ignored
+    expect(draft).toMatchObject({ kind: "history", lines: [] });
+    expect(draft.transactions).toEqual(history.transactions);
+    expect(b.n).toBe(1);
+  });
+
   it("flags when printed lines don't add up to the paid total", async () => {
     const { uc } = setupParse({ ...RECEIPT, total: 15000 }); // lines sum to 16400
     expect((await uc.execute(img)).sumMismatch).toBe(true);
