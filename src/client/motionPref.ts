@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { MOTION_KEY as KEY } from "./motionInit";
 
 // "Reduce motion" for this device. Off = follow the system setting; on = reduce whatever the system says.
 // Kept in localStorage like the theme, and mirrored onto <html data-motion="reduce"> before first paint
@@ -6,12 +7,8 @@ import { useSyncExternalStore } from "react";
 
 export type MotionPref = "system" | "reduce";
 
-const KEY = "me-budget-motion";
 const EVENT = "me-budget:motion";
 const MEDIA = "(prefers-reduced-motion: reduce)";
-
-/** Runs in <head> before first paint. Keep it dependency-free. */
-export const MOTION_INIT_SCRIPT = `(function(){try{if(localStorage.getItem("${KEY}")==="reduce")document.documentElement.dataset.motion="reduce"}catch(e){}})()`;
 
 /** Motion is reduced when the user asked for it here, or the system asks for it. */
 export const resolveReduced = (pref: MotionPref, systemReduces: boolean): boolean => pref === "reduce" || systemReduces;

@@ -3,7 +3,7 @@ import { Anuphan, Mitr } from "next/font/google";
 import { iconFontUrl } from "@/client/icons";
 import { Providers } from "@/client/Providers";
 import { INTRO_INIT_SCRIPT } from "@/client/intro";
-import { MOTION_INIT_SCRIPT } from "@/client/motionPref";
+import { MOTION_INIT_SCRIPT } from "@/client/motionInit";
 import { THEME_INIT_SCRIPT } from "@/client/theme";
 import { AppIntro } from "@/components/AppIntro";
 import { FeedbackProvider } from "@/components/Feedback";
