@@ -2,6 +2,8 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useFeedback } from "@/components/Feedback";
+import { buzz } from "./haptics";
+import { markEntryLogged, markFirstLogToday } from "./justLogged";
 import type { ActivityDTO } from "./types";
 
 const MILESTONES = [7, 30, 100];
@@ -18,6 +20,9 @@ export function useAfterLog() {
     void qc.invalidateQueries({ queryKey: ["wallets"] });
     fb.xp(a.xpGained);
     const firstOfDay = a.xpGained >= 10; // only the first log of a day moves the streak
+    if (firstOfDay) markFirstLogToday(); // the streak widget plays its reward when it sees today lit
+    markEntryLogged();
+    buzz(firstOfDay ? "streak" : "ok");
     if (a.leveledUp) fb.celebrate({ title: "เลเวลอัป!", subtitle: "เก่งมาก จดต่อเนื่องแบบนี้เลย", icon: "military_tech" });
     else if (firstOfDay && MILESTONES.includes(a.streak))
       fb.celebrate({ title: `ไฟติด ${a.streak} วันแล้ว!`, subtitle: "ไม่ขาดสักวันเลย", icon: "local_fire_department" });

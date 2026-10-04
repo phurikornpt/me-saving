@@ -15,7 +15,7 @@ const SPLITS: [CardSplit, string][] = [
   ["equal", "หารเท่ากัน"],
   ["theirs", "ของเขาทั้งหมด"],
 ];
-const flag = (on: boolean) => (on ? "rounded-2xl ring-2 ring-streak" : "");
+const flag = (on: boolean) => (on ? "flash-once rounded-2xl ring-2 ring-streak" : "");
 const cleanBaht = (v: string) => v.replace(/[^\d.]/g, "");
 
 export interface CardsCtx {

@@ -1,11 +1,14 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useState } from "react";
 import { ApiError } from "@/client/api";
+import { DUR, staggerDelay } from "@/client/motion";
 import { useMonthSummary } from "@/client/queries";
+import { summaryLines } from "@/client/summaryLines";
 import { AiBudgetNote } from "../AiBudgetNote";
+import { AuroraCloud } from "../AuroraCloud";
 import { Icon } from "../Icon";
-import { Skeleton } from "../Loading";
 import { WidgetCard } from "./WidgetCard";
 
 const errorText = (e: unknown) =>
@@ -34,10 +37,31 @@ export function MonthSummaryWidget({ today }: { today: string }) {
           <AiBudgetNote />
         </div>
       )}
-      {asked && isFetching && !data && <Skeleton className="h-16 w-full" />}
-      {data && <p className="whitespace-pre-line leading-relaxed">{data.text}</p>}
+      {asked && isFetching && !data && (
+        <div className="flex flex-col items-center py-1" role="status">
+          <AuroraCloud mode="thinking" pulse={0} blur={5} className="-my-3 h-28 w-28" />
+          <span className="text-xs text-ink-3">กำลังสรุป…</span>
+        </div>
+      )}
+      {/* the text arrives whole from the server; showing it a line at a time is a reveal, not a stream */}
+      {data && (
+        <div className="leading-relaxed">
+          {summaryLines(data.text).map((line, i) => (
+            <motion.p
+              key={line}
+              className="mb-1.5 last:mb-0"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: DUR.slow, delay: staggerDelay(i, 0.2, 0.8) }}
+            >
+              {line}
+            </motion.p>
+          ))}
+        </div>
+      )}
       {asked && error && (
         <div className="flex flex-col items-center gap-3 py-2">
+          <AuroraCloud mode="error" pulse={0} blur={5} className="-my-3 h-24 w-24" />
           <p className="text-center text-sm text-ink-2">{errorText(error)}</p>
           <button className="btn3d" onClick={() => setAsked(false)}>ปิด</button>
         </div>

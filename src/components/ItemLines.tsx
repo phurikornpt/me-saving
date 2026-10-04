@@ -1,7 +1,9 @@
 "use client";
 
+import { motion } from "motion/react";
 import { useState } from "react";
 import { useCategories, usePeople } from "@/client/queries";
+import { DUR, staggerDelay } from "@/client/motion";
 import { nextOwners, type DraftLine } from "@/client/receiptMath";
 import type { LineOwners, PersonDTO } from "@/client/types";
 import { formatBaht, parseBaht } from "@/domain/money";
@@ -20,7 +22,7 @@ const blankLine = (): DraftLine => ({
  * with more it opens a picker. Tap a name to edit the line.
  */
 export function ItemLines({
-  lines, onChange, onBill, addLabel, startAdding = false,
+  lines, onChange, onBill, addLabel, startAdding = false, reveal = false,
 }: {
   lines: DraftLine[];
   onChange: (update: (ls: DraftLine[]) => DraftLine[]) => void;
@@ -28,6 +30,8 @@ export function ItemLines({
   onBill: PersonDTO[];
   addLabel: string;
   startAdding?: boolean;
+  /** The lines just arrived from the AI: let them flow in one after another, and glow once on the unsure ones. */
+  reveal?: boolean;
 }) {
   const { data: people = [] } = usePeople();
   const [editing, setEditing] = useState<DraftLine | null>(() => (startAdding ? blankLine() : null));
@@ -52,8 +56,14 @@ export function ItemLines({
       )}
 
       <ul className="flex-1 divide-y divide-line px-5">
-        {lines.map((l) => (
-          <li key={l.key} className={`flex items-center gap-3 py-3 ${l.lowConfidence ? "-mx-2 rounded-xl bg-streak/25 px-2" : ""}`}>
+        {lines.map((l, i) => (
+          <motion.li
+            key={l.key}
+            initial={reveal ? { opacity: 0, y: 14 } : false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: DUR.base, delay: reveal ? 0.15 + staggerDelay(i) : 0 }}
+            className={`flex items-center gap-3 py-3 ${l.lowConfidence ? `-mx-2 rounded-xl bg-streak/25 px-2 ${reveal ? "flash-once" : ""}` : ""}`}
+          >
             <button className="min-w-0 flex-1 text-left" onClick={() => setEditing(l)}>
               <span className="block truncate">{l.canonicalName}{l.qty > 1 && <span className="text-ink-3"> ×{l.qty}</span>}</span>
               <span className="block text-xs text-ink-3">฿{formatBaht(l.price)}{l.lowConfidence && " · AI ไม่แน่ใจ"}</span>
@@ -65,7 +75,7 @@ export function ItemLines({
                 onClick={() => (onBill.length === 1 ? setOwners(l.key, nextOwners(l.owners, onBill[0].id)) : setPicking(l))}
               />
             )}
-          </li>
+          </motion.li>
         ))}
         <li className="py-3">
           <button className="flex items-center gap-2 text-sm text-ink-2" onClick={() => setEditing(blankLine())}>

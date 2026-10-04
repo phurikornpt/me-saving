@@ -1,8 +1,11 @@
 "use client";
 
+import { DUR } from "@/client/motion";
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
-import { useState } from "react";
+import { AnimatePresence, motion, useAnimate } from "motion/react";
+import { useState, useSyncExternalStore } from "react";
+import { readNoSpendLogged, subscribeNoSpendLogged } from "@/client/justLogged";
 import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
@@ -25,10 +28,12 @@ const shiftMonth = (month: string, by: number) => {
 };
 
 export function CalendarWidget({ today }: { today: string }) {
+  const noSpendJustNow = useSyncExternalStore(subscribeNoSpendLogged, readNoSpendLogged, () => false);
   const [month, setMonth] = useState(today.slice(0, 7));
   const [openDay, setOpenDay] = useState<string | null>(null);
   const [editing, setEditing] = useState<EntryDTO | null>(null);
   const wallet = useWalletFilter();
+  const [grid, animateGrid] = useAnimate<HTMLDivElement>();
   const spend = useSpendFilter();
   const { data } = useCalendar(month, wallet, spend);
   const { data: categories = [] } = useCategories();
@@ -36,6 +41,11 @@ export function CalendarWidget({ today }: { today: string }) {
   const shown = dayEntries.data?.filter((e) => inWallet(e, wallet) && matchesSpend(e, spend));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
+  // The month slides in from the side you pressed; the numbers behind it may still be the old month's for a moment.
+  const go = (dir: 1 | -1) => {
+    setMonth(shiftMonth(month, dir));
+    void animateGrid(grid.current, { x: [dir * 28, 0], opacity: [0.2, 1] }, { duration: DUR.base + 0.05 });
+  };
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 
   return (
@@ -44,11 +54,11 @@ export function CalendarWidget({ today }: { today: string }) {
         title="ปฏิทิน"
         action={
           <div className="flex items-center gap-1">
-            <button aria-label="เดือนก่อน" onClick={() => setMonth(shiftMonth(month, -1))} className="rounded-full p-1">
+            <button aria-label="เดือนก่อน" onClick={() => go(-1)} className="rounded-full p-1">
               <Icon name="chevron_left" size={20} />
             </button>
             <span className="min-w-28 text-center text-sm">{title}</span>
-            <button aria-label="เดือนถัดไป" onClick={() => setMonth(shiftMonth(month, 1))} className="rounded-full p-1">
+            <button aria-label="เดือนถัดไป" onClick={() => go(1)} className="rounded-full p-1">
               <Icon name="chevron_right" size={20} />
             </button>
           </div>
@@ -56,7 +66,10 @@ export function CalendarWidget({ today }: { today: string }) {
       >
         <div className="mb-2 flex gap-2" role="group" aria-label="กรองรายจ่าย">
           {SPEND_FILTERS.map((s) => (
-            <button key={s} className="pill text-sm" aria-pressed={spend === s} onClick={() => setSpendFilter(s)}>
+            <button key={s} className="pill text-sm" aria-pressed={spend === s} onClick={() => {
+                if (s !== spend) void animateGrid(grid.current, { opacity: [0.25, 1] }, { duration: DUR.base });
+                setSpendFilter(s);
+              }}>
               {SPEND_LABEL[s]}
             </button>
           ))}
@@ -66,7 +79,7 @@ export function CalendarWidget({ today }: { today: string }) {
             <div key={w}>{w}</div>
           ))}
         </div>
-        <div className="mt-1 grid grid-cols-7 gap-1">
+        <div ref={grid} className="mt-1 grid grid-cols-7 gap-1">
           {Array.from({ length: firstDow }, (_, i) => (
             <div key={`pad${i}`} />
           ))}
@@ -79,7 +92,7 @@ export function CalendarWidget({ today }: { today: string }) {
                 onClick={() => setOpenDay(d.day)}
                 className={`relative flex min-h-[3.6rem] flex-col items-center rounded-xl px-0.5 pt-1 text-[10px] leading-tight ${
                   d.day === today ? "ring-2 ring-ink" : ""
-                } ${future ? "opacity-40" : ""}`}
+                } ${future ? "opacity-40" : ""} ${d.day === today && d.logged === "no_spend" && noSpendJustNow ? "dot-pop" : ""}`}
                 style={{ background: `color-mix(in srgb, var(--expense) ${heat}%, var(--surface))` }}
                 aria-label={`${d.day} จ่าย ${formatBaht(d.spent)} รับ ${formatBaht(d.earned)}`}
               >
@@ -116,11 +129,19 @@ export function CalendarWidget({ today }: { today: string }) {
         {dayEntries.isLoading && <p className="py-4 text-center text-ink-3">กำลังโหลด…</p>}
         {shown?.length === 0 && <p className="py-4 text-center text-ink-3">ไม่มีรายการ</p>}
         <ul className="divide-y divide-line">
-          {shown?.map((e) => (
-            <li key={e.id}>
-              <EntryRow entry={e} categories={categories} onClick={() => setEditing(e)} />
-            </li>
-          ))}
+          <AnimatePresence initial={false}>
+            {shown?.map((e) => (
+              <motion.li
+                key={e.id}
+                layout="position"
+                className="overflow-hidden"
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: DUR.base }}
+              >
+                <EntryRow entry={e} categories={categories} onClick={() => setEditing(e)} />
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
         {openDay && openDay < addDays(today, 1) && (
           <Link href={`/new?mode=expense&day=${openDay}`} transitionTypes={FORWARD} className="btn3d key mt-4 w-full text-sm">

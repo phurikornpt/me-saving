@@ -2,7 +2,8 @@
 
 import { useIsFetching, useIsMutating } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Icon } from "./Icon";
+import { SLOW_AFTER_MS } from "@/client/motion";
+import { AuroraCloud } from "./AuroraCloud";
 
 export function Spinner({ size = 18, className = "" }: { size?: number; className?: string }) {
   return (
@@ -51,22 +52,37 @@ export function TopProgress() {
   );
 }
 
-const READING_STEPS = ["กำลังส่งรูป…", "กำลังอ่านรายการ…", "กำลังจัดหมวดและแบ่งเจ้าของ…", "ใกล้เสร็จแล้ว…"];
+export type ReadingStage = "resize" | "ai";
 
-/** Receipt with a scan line sweeping over it; the caption advances so a long AI call doesn't feel stuck. */
-export function ReadingReceipt() {
-  const [step, setStep] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setStep((s) => Math.min(s + 1, READING_STEPS.length - 1)), 3000);
-    return () => clearInterval(t);
-  }, []);
+/**
+ * Shown while the AI reads a picture. The caption follows what is really happening (shrinking the photo,
+ * then waiting for the AI), and says so when the wait runs long. No percentage: nothing real to measure.
+ */
+export function ReadingCloud({ stage, progress }: { stage: ReadingStage; progress?: string | null }) {
+  const slow = useSlowAfter(SLOW_AFTER_MS, stage === "ai");
   return (
     <>
-      <div className="relative flex h-32 w-24 items-center justify-center overflow-hidden rounded-2xl bg-card shadow-[0_4px_0_var(--line)]">
-        <Icon name="receipt_long" size={56} className="text-ink-3" />
-        <div className="scan-line absolute inset-x-0 h-0.5 bg-primary shadow-[0_0_8px_var(--primary)]" style={{ animation: "scan-line 1.8s ease-in-out infinite" }} />
+      <div className="aurora-in">
+        <AuroraCloud mode="thinking" pulse={0} className="h-[260px] w-[260px]" />
       </div>
-      <p className="mt-4 text-ink-2" role="status">{READING_STEPS[step]}</p>
+      <p className="-mt-2 text-ink-2" role="status">
+        {stage === "resize" ? "กำลังย่อรูป…" : progress ? `AI กำลังอ่านรูปที่ ${progress}…` : "AI กำลังอ่านรูป…"}
+      </p>
+      <p className="mt-1 min-h-5 text-sm text-ink-3">{slow ? "ใช้เวลานานกว่าปกติ ยังรออยู่…" : ""}</p>
     </>
   );
+}
+
+/** true once `active` has been true for `ms` milliseconds; false again when it stops. */
+function useSlowAfter(ms: number, active: boolean) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!active) return;
+    const t = setTimeout(() => setSlow(true), ms);
+    return () => {
+      clearTimeout(t);
+      setSlow(false);
+    };
+  }, [ms, active]);
+  return slow;
 }

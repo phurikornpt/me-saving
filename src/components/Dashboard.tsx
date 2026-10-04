@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/client/api";
 import { introPlaying } from "@/client/intro";
+import { markNoSpendLogged } from "@/client/justLogged";
 import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
 import { FORWARD } from "@/client/nav";
@@ -91,6 +92,7 @@ export function Dashboard() {
     onMutate: () => applyOptimisticNoSpend(qc),
     onSuccess: (out) => {
       afterLog(out);
+      markNoSpendLogged();
       fb.toast({ message: "วันนี้ไม่ได้ใช้เงิน นับเป็นวันที่จดแล้ว" });
     },
     onError: (_e, _v, rollback) => {

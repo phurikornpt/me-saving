@@ -1,9 +1,11 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api, describeFailure } from "@/client/api";
+import { DUR, staggerDelay } from "@/client/motion";
 import { canSave, summarizeRows, toSaveRows, type BackfillRow } from "@/client/backfill";
 import { useCategories, useWallets } from "@/client/queries";
 import { useAfterLog } from "@/client/useAfterLog";
@@ -55,8 +57,14 @@ export function BackfillReview({ initial, failed, onCancel }: { initial: Backfil
       </div>
 
       <ul className="flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-3">
-        {rows.map((r) => (
-          <li key={r.key} className={`rounded-2xl bg-card p-3 ${r.duplicate ? "ring-1 ring-streak" : ""} ${r.selected ? "" : "opacity-60"}`}>
+        {rows.map((r, i) => (
+          <motion.li
+            key={r.key}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: r.selected ? 1 : 0.6, y: 0 }}
+            transition={{ duration: DUR.base, delay: staggerDelay(i, 0.05, 0.45) }}
+            className={`rounded-2xl bg-card p-3 ${r.duplicate ? "flash-once ring-1 ring-streak" : ""}`}
+          >
             <div className="flex items-center gap-2">
               <input type="checkbox" className="size-5" checked={r.selected} onChange={(e) => patch(r.key, { selected: e.target.checked })} aria-label="จดรายการนี้" />
               <span className="w-12 shrink-0 text-xs text-ink-3">{dayLabel(r.day)}</span>
@@ -108,7 +116,7 @@ export function BackfillReview({ initial, failed, onCancel }: { initial: Backfil
               </select>
               {r.duplicate && <span className="shrink-0 text-xs text-ink-2">อาจซ้ำ</span>}
             </div>
-          </li>
+          </motion.li>
         ))}
       </ul>
 

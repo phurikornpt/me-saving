@@ -3,6 +3,7 @@ import { Anuphan, Mitr } from "next/font/google";
 import { iconFontUrl } from "@/client/icons";
 import { Providers } from "@/client/Providers";
 import { INTRO_INIT_SCRIPT } from "@/client/intro";
+import { MOTION_INIT_SCRIPT } from "@/client/motionInit";
 import { THEME_INIT_SCRIPT } from "@/client/theme";
 import { AppIntro } from "@/components/AppIntro";
 import { FeedbackProvider } from "@/components/Feedback";
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html lang="th" suppressHydrationWarning className={`${mitr.variable} ${anuphan.variable} h-full antialiased`}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: MOTION_INIT_SCRIPT }} />
         <script dangerouslySetInnerHTML={{ __html: INTRO_INIT_SCRIPT }} />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
