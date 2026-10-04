@@ -4,6 +4,8 @@ import { ME_ONLY, type LineOwners } from "@/domain/split";
 import type {
   CategoryRepo,
   Clock,
+  ImageKind,
+  ParsedTransaction,
   LoginAttemptRepo,
   OwnerMemoryRepo,
   PersonRepo,
@@ -30,10 +32,13 @@ export interface ReceiptDraftLine {
 }
 
 export interface ReceiptDraft {
+  kind: ImageKind;
   merchant: string | null;
   date: string | null;
   total: Satang;
   lines: ReceiptDraftLine[];
+  /** Only for kind "history" (then `lines` is empty): the rows of a bank / e-wallet page. */
+  transactions: ParsedTransaction[];
   /** Printed lines don't add up to the paid total (reading error, or a bill-level discount). */
   sumMismatch: boolean;
 }
@@ -106,12 +111,31 @@ export class ParseReceipt {
       if (l.confident && ai) return { ...base, owners: ai, ownerSource: "ai", lowConfidence: false };
       return { ...base, owners: ME_ONLY, ownerSource: "default", lowConfidence: true };
     });
-    const sum = lines.reduce((s, l) => s + l.price, 0);
+    // Fees are not anyone's product: everyone on the bill pays the same part, whatever they ordered.
+    // They take the category of the priciest product, so a delivery fee stays with the food.
+    const priciest = lines.reduce((a, b) => (b.price > a.price ? b : a), lines[0]);
+    const billOwners: LineOwners = { me: true, people: people.map((p) => p.id) };
+    const feeLines = parsed.fees.map(
+      (f): ReceiptDraftLine => ({
+        rawName: f.name,
+        canonicalName: f.name,
+        qty: 1,
+        price: f.amount,
+        categoryName: priciest?.categoryName ?? null,
+        owners: billOwners,
+        ownerSource: "default",
+        lowConfidence: false,
+      }),
+    );
+    const all = [...lines, ...feeLines];
+    const sum = all.reduce((s, l) => s + l.price, 0);
     return {
+      kind: parsed.kind,
       merchant: parsed.merchant,
       date: parsed.date,
       total: parsed.total,
-      lines,
+      lines: all,
+      transactions: parsed.transactions ?? [],
       sumMismatch: sum !== parsed.total,
     };
   }

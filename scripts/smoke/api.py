@@ -58,7 +58,7 @@ s,r = call("POST", "/api/repayments", {"personId":FAN,"amount":2001}); check("ov
 
 # --- dashboard / outstanding / lists
 s,d = call("GET", "/api/dashboard")
-check("dashboard: balance, totals, streak, layout", d["balances"]==[{"personId":FAN,"balance":2000}] and d["todayTotals"]["spent"]==11000 and d["streak"]["current"]==1 and len(d["layout"])==6, d)
+check("dashboard: balance, totals, streak, layout", d["balances"]==[{"personId":FAN,"balance":2000}] and d["todayTotals"]["spent"]==11000 and d["streak"]["current"]==1 and [i["id"] for i in d["layout"]].count("monthSummary")==1 and len({i["id"] for i in d["layout"]})==len(d["layout"]) >= 8, d)
 s,o = call("GET", "/api/people/outstanding"); check("outstanding = 2000 on the fronted entry", o[0]["balance"]==2000 and o[0]["items"][0]["entryId"]==eid, o)
 s,l = call("GET", "/api/entries?day="+d["today"]); check("entries of today incl. repayment", s==200 and len(l)==3, (s,l))
 s,cal = call("GET", "/api/calendar?month="+d["today"][:7])
@@ -70,7 +70,7 @@ s,x = call("GET", "/api/calendar?month=2026-13"); check("bad month -> 400", s==4
 s,x = call("POST", "/api/no-spend"); check("no-spend after logging today -> 409", s==409 and x["error"]["code"]=="NO_SPEND_ALREADY_LOGGED", x)
 
 # --- edit / delete guard
-s,x = call("PATCH", f"/api/entries/{eid}", {"split":{"kind":"none"}}); check("edit that makes balance negative -> 409", s==409 and x["error"]["code"]=="BALANCE_WOULD_GO_NEGATIVE", x)
+s,x = call("PATCH", f"/api/entries/{eid}", {"split":{"kind":"none"}}); check("edit of an entry already paid back -> 409 ENTRY_REPAID", s==409 and x["error"]["code"]=="ENTRY_REPAID", x)
 s,x = call("PATCH", f"/api/entries/{eid}", {"note":"ข้าวมันไก่"}); check("PATCH note ok", s==200 and x["note"]=="ข้าวมันไก่", x)
 s,x = call("DELETE", f"/api/entries/{eid}"); check("delete fronted entry covered by repayment -> 409", s==409, x)
 s,x = call("DELETE", f"/api/entries/{uuid.uuid4()}"); check("delete unknown -> 404", s==404, x)

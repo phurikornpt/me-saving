@@ -6,10 +6,13 @@ import type {
   DashboardDTO,
   EntryDTO,
   EntryDetailDTO,
+  EntryTextDraftDTO,
   LineOwners,
+  MonthSummaryDTO,
   OutstandingDTO,
   PersonDTO,
   PresetDTO,
+  AiBudgetDTO,
   ReceiptDraftDTO,
   SettingsDTO,
   SplitMode,
@@ -53,6 +56,8 @@ export const api = {
     request<CalendarDTO>("GET", `/api/calendar${q({ month, wallet: wallet ?? undefined, spend: spend === "all" ? undefined : spend })}`),
   categoryBreakdown: (month: string, wallet?: string | null) =>
     request<CategoryBreakdownDTO>("GET", `/api/stats/categories${q({ month, wallet: wallet ?? undefined })}`),
+  /** May call the AI (once per month at most, and it counts against the daily AI limit). */
+  monthSummary: (month: string) => request<MonthSummaryDTO>("GET", `/api/summary${q({ month })}`),
   entriesOn: (day: string) => request<EntryDTO[]>("GET", `/api/entries${q({ day })}`),
   outstanding: () => request<OutstandingDTO>("GET", "/api/people/outstanding"),
   entryDetail: (id: string) => request<EntryDetailDTO>("GET", `/api/entries/${id}`),
@@ -61,6 +66,14 @@ export const api = {
   settings: () => request<SettingsDTO>("GET", "/api/settings"),
   wallets: () => request<WalletDTO[]>("GET", "/api/wallets"),
 
+  /** Which rows look like entries already on file (no AI, no quota). */
+  aiBudget: () => request<AiBudgetDTO>("GET", "/api/ai-budget"),
+  checkBackfill: (rows: { day: string; total: number; kind: "expense" | "income"; description: string }[]) =>
+    request<{ duplicates: boolean[] }>("POST", "/api/backfill/check", { rows }),
+  saveBackfill: (b: {
+    walletId?: string;
+    rows: { kind: "expense" | "income"; total: number; occurredAt: string; categoryId: string | null; note: string | null }[];
+  }) => request<ActivityDTO & { entries: EntryDTO[] }>("POST", "/api/backfill", b),
   recordEntry: (b: {
     kind: "expense" | "income"; total: number; categoryId?: string | null; note?: string | null;
     occurredAt?: string; split?: SplitMode; source?: "manual" | "preset" | "wheel";
@@ -89,6 +102,8 @@ export const api = {
     if (people.length) f.set("people", people.join(","));
     return request<ReceiptDraftDTO>("POST", "/api/receipt/parse", f);
   },
+  /** One typed or spoken sentence -> an unsaved draft entry. Counts against the daily AI budget. */
+  parseEntryText: (text: string) => request<EntryTextDraftDTO>("POST", "/api/entry/parse", { text }),
   saveReceipt: (b: {
     source?: "receipt" | "itemized"; merchant?: string | null; occurredAt?: string; total: number; people?: string[];
     walletId?: string;
