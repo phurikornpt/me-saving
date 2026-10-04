@@ -4,8 +4,8 @@
 export const ICONS = [
   "account_balance", "account_balance_wallet", "add", "add_photo_alternate", "arrow_back", "arrow_downward", "arrow_upward",
   "backspace", "bedtime", "bolt", "calendar_month", "check", "chevron_left", "chevron_right", "close",
-  "coffee", "credit_card", "currency_exchange", "delete", "drag_indicator", "edit", "favorite", "flight", "group",
-  "health_and_safety", "history", "home", "list_alt", "local_fire_department", "local_grocery_store", "local_taxi",
+  "coffee", "credit_card", "currency_exchange", "delete", "drag_indicator", "edit", "expand_less", "expand_more", "favorite", "flight", "group",
+  "health_and_safety", "history", "home", "ios_share", "list_alt", "local_fire_department", "local_grocery_store", "local_taxi",
   "logout", "military_tech", "more_horiz", "movie", "payments", "person", "person_add", "pets", "photo_camera", "receipt",
   "receipt_long", "restaurant", "savings", "school", "settings", "shopping_bag", "smartphone", "sports_esports", "star",
   "swap_horiz", "train",
