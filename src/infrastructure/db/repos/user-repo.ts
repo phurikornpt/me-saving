@@ -1,7 +1,7 @@
 import type { Sequelize } from "sequelize";
 import type { CredentialVerifier } from "@/application/ports";
 import { hashPassword, isWellFormedHash, verifyPassword } from "../../security/password";
-import { seedUserDefaults } from "../default-categories";
+import { seedDefaultWallet, seedUserDefaults } from "../default-categories";
 import { initModels } from "../models";
 
 const normalize = (email: string) => email.trim().toLowerCase();
@@ -22,7 +22,7 @@ export function createDbCredentialVerifier(sequelize: Sequelize): CredentialVeri
   };
 }
 
-/** A new, empty account with the default categories. Refuses an email that is already taken. */
+/** A new, empty account with the default categories and a "เงินสด" wallet. Refuses an email that is already taken. */
 export async function createUser(sequelize: Sequelize, email: string, passwordHash: string): Promise<string> {
   const { User } = initModels(sequelize);
   if (!isWellFormedHash(passwordHash)) throw new Error("password hash is not in the expected scrypt format");
@@ -32,6 +32,7 @@ export async function createUser(sequelize: Sequelize, email: string, passwordHa
     }
     const user = await User.create({ email: normalize(email), passwordHash }, { transaction });
     await seedUserDefaults(sequelize, user.id, transaction);
+    await seedDefaultWallet(sequelize, user.id, transaction);
     return user.id;
   });
 }

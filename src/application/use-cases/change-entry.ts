@@ -2,7 +2,9 @@ import { DomainError } from "@/domain/errors";
 import { assertNoNegativeBalance } from "@/domain/ledger";
 import { assertSatang, type Satang } from "@/domain/money";
 import { sharesFor, sumShares, type SplitMode } from "@/domain/split";
+import { assertTransfer } from "@/domain/wallet";
 import { assertKnownPeople } from "../known-people";
+import { assertActiveWallets } from "../known-wallets";
 import { isGroupSource, type EntryRecord, type TransactionRunner } from "../ports";
 
 export interface UpdateEntryPatch {
@@ -12,6 +14,9 @@ export interface UpdateEntryPatch {
   note?: string | null;
   merchant?: string | null;
   split?: SplitMode;
+  walletId?: string;
+  /** Transfers only. */
+  toWalletId?: string;
 }
 
 /** Editing never touches streak or XP: those come from the press-log moment only. */
@@ -32,6 +37,21 @@ export class UpdateEntry {
         throw new DomainError("INVALID_SPLIT", "only expenses can be fronted");
       }
 
+      if (patch.toWalletId !== undefined && current.kind !== "transfer") {
+        throw new DomainError("INVALID_TRANSFER", "only transfers have a wallet to send to");
+      }
+      const walletId = patch.walletId ?? current.walletId;
+      const toWalletId = patch.toWalletId ?? current.toWalletId;
+      if (current.kind === "transfer") assertTransfer(walletId, toWalletId!);
+      // Moving an entry onto a wallet needs it to be active; leaving it where it is never does.
+      await assertActiveWallets(
+        repos.wallets,
+        [
+          walletId !== current.walletId ? walletId : null,
+          toWalletId !== current.toWalletId ? toWalletId : null,
+        ].filter((id): id is string => id !== null),
+      );
+
       const total = patch.total ?? current.total;
       assertSatang(total);
       if (total === 0) throw new DomainError("INVALID_AMOUNT", "amount must be positive");
@@ -51,6 +71,8 @@ export class UpdateEntry {
         ...(patch.categoryId !== undefined && { categoryId: patch.categoryId }),
         ...(patch.note !== undefined && { note: patch.note }),
         ...(patch.merchant !== undefined && { merchant: patch.merchant }),
+        ...(patch.walletId !== undefined && { walletId }),
+        ...(patch.toWalletId !== undefined && { toWalletId }),
       });
       // A smaller share (or a bigger repayment) must never leave someone owing less than zero.
       assertNoNegativeBalance(await repos.entries.ledger());

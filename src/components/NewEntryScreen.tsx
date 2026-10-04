@@ -7,7 +7,7 @@ import { api, ApiError, describeFailure } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import { bumpCategory, sortByUsage } from "@/client/categoryUsage";
 import { activePeople, describeShares } from "@/client/people";
-import { useCategories, usePeople } from "@/client/queries";
+import { useCategories, usePeople, useWallets } from "@/client/queries";
 import type { Share, SplitMode } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
 import { bangkokDay } from "@/domain/day";
@@ -17,6 +17,7 @@ import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
 import { Keypad } from "./Keypad";
 import { PeoplePicker, PersonDot } from "./People";
+import { WalletPicker } from "./Wallets";
 
 type SplitChoice = "equal" | "theirs" | "custom";
 const MESSAGES: Record<string, string> = {
@@ -24,6 +25,7 @@ const MESSAGES: Record<string, string> = {
   UNKNOWN_PERSON: "ไม่พบคนที่เลือก ลองโหลดหน้าใหม่",
   INVALID_AMOUNT: "ใส่จำนวนเงินก่อนนะ",
   RATE_LIMITED: "ช้าลงหน่อย ลองใหม่อีกที",
+  UNKNOWN_WALLET: "ไม่พบกระเป๋าที่เลือก ลองโหลดหน้าใหม่",
 };
 
 export function NewEntryScreen() {
@@ -35,6 +37,9 @@ export function NewEntryScreen() {
   const afterLog = useAfterLog();
   const { data: categories = [] } = useCategories();
   const { data: people = [] } = usePeople();
+  const { data: wallets = [] } = useWallets();
+  // null = the default wallet (decided by the server, so a stale list can't send a wrong one)
+  const [walletId, setWalletId] = useState<string | null>(null);
 
   const [kind, setKind] = useState<"expense" | "income">(mode === "income" ? "income" : "expense");
   const [amount, setAmount] = useState("");
@@ -102,13 +107,14 @@ export function NewEntryScreen() {
         // a backdated entry still counts for money, never for the streak
         occurredAt: day ? new Date(`${day}T12:00:00+07:00`).toISOString() : undefined,
         source: "manual",
+        walletId: walletId ?? undefined,
       }),
     onMutate: async (categoryId) => {
       // Skip the preview for backdated entries: they may not land in today's numbers
       if (day) return undefined;
       return applyOptimisticEntry(qc, {
         kind, total, categoryId, note: note.trim() || null,
-        shares: preview ?? [],
+        shares: preview ?? [], walletId,
       });
     },
     onSuccess: (out, categoryId) => {
@@ -222,7 +228,11 @@ export function NewEntryScreen() {
         </section>
       )}
 
-      <section className="px-4 pt-4">
+      <section className="px-4 pt-3">
+        <WalletPicker wallets={wallets} value={walletId} onChange={setWalletId} label={kind === "income" ? "เข้ากระเป๋า" : "จ่ายจากกระเป๋า"} />
+      </section>
+
+      <section className="px-4 pt-3">
         <p className="mb-2 text-sm text-ink-3">แตะหมวดเพื่อบันทึก</p>
         <div className="grid grid-cols-4 gap-2">
           {visible.map((c) => (

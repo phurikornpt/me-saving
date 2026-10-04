@@ -25,11 +25,13 @@ import { PresetsWidget } from "./widgets/PresetsWidget";
 import { RecentWidget } from "./widgets/RecentWidget";
 import { StreakWidget } from "./widgets/StreakWidget";
 import { TodayWidget } from "./widgets/TodayWidget";
+import { WalletsWidget } from "./widgets/WalletsWidget";
 
 function renderWidget(id: WidgetId, data: DashboardDTO) {
   switch (id) {
     case "streak": return <StreakWidget data={data} />;
     case "people": return <PeopleWidget data={data} />;
+    case "wallets": return <WalletsWidget data={data} />;
     case "presets": return <PresetsWidget data={data} />;
     case "today": return <TodayWidget data={data} />;
     case "calendar": return <CalendarWidget today={data.today} />;

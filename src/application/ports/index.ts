@@ -3,6 +3,7 @@ import type { Satang } from "@/domain/money";
 import type { LayoutItem } from "@/domain/dashboard-layout";
 import type { Ledger } from "@/domain/ledger";
 import type { LineOwners, Share } from "@/domain/split";
+import type { EntryKind } from "@/domain/wallet";
 
 export interface Clock {
   now(): Date;
@@ -14,7 +15,7 @@ export type EntrySource = "manual" | "preset" | "receipt" | "itemized" | "wheel"
 export const isGroupSource = (s: EntrySource) => s === "receipt" || s === "itemized";
 
 export interface NewEntry {
-  kind: "expense" | "income" | "repayment";
+  kind: EntryKind;
   occurredAt: Date;
   createdAt: Date;
   total: Satang;
@@ -26,6 +27,10 @@ export interface NewEntry {
   note: string | null;
   merchant: string | null;
   source: EntrySource;
+  /** Where the money left from (expense, transfer) or arrived in (income, repayment). */
+  walletId: string;
+  /** Where a transfer's money went. Transfers only. */
+  toWalletId: string | null;
 }
 
 export interface EntryRecord extends NewEntry {
@@ -44,7 +49,9 @@ export interface EntryRepo {
   findById(id: string): Promise<EntryRecord | null>;
   update(
     id: string,
-    patch: Partial<Pick<NewEntry, "occurredAt" | "total" | "shares" | "categoryId" | "note" | "merchant">>,
+    patch: Partial<
+      Pick<NewEntry, "occurredAt" | "total" | "shares" | "categoryId" | "note" | "merchant" | "walletId" | "toWalletId">
+    >,
   ): Promise<EntryRecord | null>;
   remove(id: string): Promise<boolean>;
 }
@@ -97,8 +104,30 @@ export interface PersonRepo {
   update(id: string, patch: Partial<Omit<PersonRecord, "id">>): Promise<PersonRecord | null>;
 }
 
+/** Where money sits (cash, a bank account, a card). Set up by the user; archived, never deleted. */
+export interface WalletRecord {
+  id: string;
+  name: string;
+  icon: string;
+  /** What was in it before the first entry. May be negative (a credit card). */
+  openingBalance: Satang;
+  sort: number;
+  archived: boolean;
+}
+export interface WalletRepo {
+  list(): Promise<WalletRecord[]>;
+  create(w: Pick<WalletRecord, "name" | "icon" | "openingBalance" | "sort">): Promise<WalletRecord>;
+  update(id: string, patch: Partial<Omit<WalletRecord, "id">>): Promise<WalletRecord | null>;
+  /** Money in minus money out per wallet, over every entry (see domain walletDeltas). */
+  netFlows(): Promise<Map<string, Satang>>;
+  /** The wallet new entries go to when none is picked: the chosen default if still active, else the first active one. */
+  defaultId(): Promise<string | null>;
+  setDefault(id: string | null): Promise<void>;
+}
+
 export interface Repos {
   entries: EntryRepo;
+  wallets: WalletRepo;
   loggedDays: LoggedDayRepo;
   xp: XpRepo;
   receiptLines: ReceiptLineRepo;
@@ -182,6 +211,8 @@ export interface PresetRecord {
   /** A fronted preset: who it's for and how it splits. Both null = all ours. */
   personId: string | null;
   splitKind: "equal" | "theirs" | null;
+  /** null = the default wallet at the time of the tap. */
+  walletId: string | null;
   sort: number;
 }
 export interface PresetRepo {

@@ -52,6 +52,8 @@
 | คนที่ติดเรา (ตอนไม่มีใครติด) | `favorite` |
 | ปฏิทิน / รายการล่าสุด | `calendar_month` / `history` |
 | undo | `undo` |
+| กระเป๋า (ให้ผู้ใช้เลือก `WALLET_ICON_CHOICES`) | เงินสด `payments` · ธนาคาร `account_balance` · บัตร `credit_card` · `account_balance_wallet` · e-wallet `smartphone` · `savings` |
+| โอนระหว่างกระเป๋า / กระเป๋าหลัก | `swap_horiz` / `star` |
 | หมวดตั้งต้น | อาหาร `restaurant` · เดินทาง `train` · ช้อปปิ้ง `shopping_bag` · บิล `receipt` · บันเทิง `movie` · สุขภาพ `health_and_safety` · อื่นๆ `more_horiz` · เงินเดือน `account_balance_wallet` · รายได้อื่น `savings` |
 
 ## Design tokens (ร่าง)

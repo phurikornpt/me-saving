@@ -7,6 +7,7 @@ import { api, ApiError } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import { personName } from "@/client/people";
 import { useDashboard } from "@/client/queries";
+import { WalletPicker } from "./Wallets";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
@@ -30,6 +31,7 @@ export function RepayScreen() {
   const balance = owing.find((b) => b.personId === personId)?.balance ?? 0;
   const name = personName(people, personId);
   const [amount, setAmount] = useState("");
+  const [walletId, setWalletId] = useState<string | null>(null);
 
   let total = 0;
   try {
@@ -40,8 +42,9 @@ export function RepayScreen() {
   const over = total > balance;
 
   const save = useMutation({
-    mutationFn: (v: { personId: string; total: number }) => api.repay(v.personId, v.total),
-    onMutate: (v) => applyOptimisticEntry(qc, { kind: "repayment", total: v.total, personId: v.personId }),
+    mutationFn: (v: { personId: string; total: number; walletId: string | null }) =>
+      api.repay(v.personId, v.total, v.walletId ?? undefined),
+    onMutate: (v) => applyOptimisticEntry(qc, { kind: "repayment", total: v.total, personId: v.personId, walletId: v.walletId }),
     onSuccess: (out, v) => {
       afterLog(out);
       void qc.invalidateQueries({ queryKey: ["entries"] });
@@ -93,6 +96,10 @@ export function RepayScreen() {
         <p className="mt-3 text-xs text-ink-3">เงินที่ได้คืนไม่นับเป็นรายรับ</p>
       </section>
 
+      <section className="px-4 pt-4">
+        <WalletPicker wallets={data?.wallets ?? []} value={walletId} onChange={setWalletId} label="เข้ากระเป๋า" />
+      </section>
+
       <div className="safe-bottom mt-auto space-y-4 pt-4">
         <Keypad value={amount} onChange={setAmount} />
         <div className="px-4">
@@ -100,7 +107,7 @@ export function RepayScreen() {
             className="btn3d w-full py-4 text-lg"
             disabled={!personId || total === 0 || over || save.isPending}
             onClick={() => {
-              save.mutate({ personId: personId!, total });
+              save.mutate({ personId: personId!, total, walletId });
               router.replace("/");
             }}
           >

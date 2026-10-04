@@ -98,6 +98,7 @@ export function createPresetRepo(sequelize: Sequelize, userId: string): PresetRe
     categoryId: p.categoryId,
     personId: p.personId,
     splitKind: p.splitKind,
+    walletId: p.walletId ?? null,
     sort: p.sort,
   });
   return {

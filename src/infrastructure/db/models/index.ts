@@ -39,10 +39,20 @@ export class Person extends Model<InferAttributes<Person>, InferCreationAttribut
   declare archived: CreationOptional<boolean>;
 }
 
+export class Wallet extends Model<InferAttributes<Wallet>, InferCreationAttributes<Wallet>> {
+  declare id: CreationOptional<string>;
+  declare userId: ForeignKey<User["id"]>;
+  declare name: string;
+  declare icon: string; // Material Symbols name
+  declare openingBalance: CreationOptional<number>;
+  declare sort: CreationOptional<number>;
+  declare archived: CreationOptional<boolean>;
+}
+
 export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes<Entry>> {
   declare id: CreationOptional<string>;
   declare userId: ForeignKey<User["id"]>;
-  declare kind: "expense" | "income" | "repayment";
+  declare kind: "expense" | "income" | "repayment" | "transfer";
   declare occurredAt: Date;
   declare createdAt: CreationOptional<Date>;
   declare total: number;
@@ -53,6 +63,8 @@ export class Entry extends Model<InferAttributes<Entry>, InferCreationAttributes
   declare note: string | null;
   declare merchant: string | null;
   declare source: CreationOptional<"manual" | "preset" | "receipt" | "itemized" | "wheel">;
+  declare walletId: ForeignKey<Wallet["id"]>;
+  declare toWalletId: ForeignKey<Wallet["id"]> | null;
   declare shares?: EntryShare[];
 }
 
@@ -99,6 +111,7 @@ export class Preset extends Model<InferAttributes<Preset>, InferCreationAttribut
   declare categoryId: ForeignKey<Category["id"]> | null;
   declare personId: ForeignKey<Person["id"]> | null;
   declare splitKind: "equal" | "theirs" | null;
+  declare walletId: CreationOptional<ForeignKey<Wallet["id"]> | null>;
   declare sort: CreationOptional<number>;
 }
 
@@ -121,6 +134,7 @@ export class Setting extends Model<InferAttributes<Setting>, InferCreationAttrib
   declare userId: ForeignKey<User["id"]>;
   declare dashboardLayout: CreationOptional<LayoutItem[]>;
   declare meNote: CreationOptional<string>;
+  declare defaultWalletId: CreationOptional<ForeignKey<Wallet["id"]> | null>;
 }
 
 export class LoginAttempt extends Model<
@@ -136,6 +150,7 @@ export interface Models {
   User: typeof User;
   Category: typeof Category;
   Person: typeof Person;
+  Wallet: typeof Wallet;
   Entry: typeof Entry;
   EntryShare: typeof EntryShare;
   ReceiptLine: typeof ReceiptLine;
@@ -201,6 +216,18 @@ export function initModels(sequelize: Sequelize): Models {
       },
       opts("Person", "people"),
     );
+    Wallet.init(
+      {
+        id: uuid,
+        userId,
+        name: { type: DataTypes.TEXT, allowNull: false },
+        icon: { type: DataTypes.TEXT, allowNull: false },
+        openingBalance: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        archived: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      },
+      opts("Wallet", "wallets"),
+    );
     Entry.init(
       {
         id: uuid,
@@ -215,6 +242,8 @@ export function initModels(sequelize: Sequelize): Models {
         note: { type: DataTypes.TEXT, allowNull: true },
         merchant: { type: DataTypes.TEXT, allowNull: true },
         source: { type: DataTypes.TEXT, allowNull: false, defaultValue: "manual" },
+        walletId: { type: DataTypes.UUID, allowNull: false },
+        toWalletId: { type: DataTypes.UUID, allowNull: true },
       },
       opts("Entry", "entries"),
     );
@@ -262,6 +291,7 @@ export function initModels(sequelize: Sequelize): Models {
         categoryId: { type: DataTypes.UUID, allowNull: true },
         personId: { type: DataTypes.UUID, allowNull: true },
         splitKind: { type: DataTypes.TEXT, allowNull: true },
+        walletId: { type: DataTypes.UUID, allowNull: true },
         sort: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
       },
       opts("Preset", "presets"),
@@ -290,6 +320,7 @@ export function initModels(sequelize: Sequelize): Models {
         userId: { ...userId, primaryKey: true },
         dashboardLayout: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
         meNote: { type: DataTypes.TEXT, allowNull: false, defaultValue: "" },
+        defaultWalletId: { type: DataTypes.UUID, allowNull: true },
       },
       opts("Setting", "settings"),
     );
@@ -317,5 +348,5 @@ export function initModels(sequelize: Sequelize): Models {
 
     boundTo = sequelize;
   }
-  return { User, Category, Person, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
+  return { User, Category, Person, Wallet, Entry, EntryShare, ReceiptLine, OwnerMemory, Preset, LoggedDay, XpEvent, Setting, LoginAttempt };
 }

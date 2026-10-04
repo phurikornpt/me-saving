@@ -13,4 +13,5 @@ export const useEntriesOn = (day: string | null) =>
 export const useOutstanding = () => useQuery({ queryKey: ["outstanding"], queryFn: api.outstanding });
 export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: api.people, staleTime: 5 * 60_000 });
 export const useCategories = () => useQuery({ queryKey: ["categories"], queryFn: api.categories, staleTime: 5 * 60_000 });
+export const useWallets = () => useQuery({ queryKey: ["wallets"], queryFn: api.wallets, staleTime: 60_000 });
 export const useSettings = () => useQuery({ queryKey: ["settings"], queryFn: api.settings });

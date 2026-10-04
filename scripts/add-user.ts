@@ -3,7 +3,7 @@ import { createUser } from "../src/infrastructure/db/repos/user-repo";
 import { getSequelize } from "../src/infrastructure/db/sequelize";
 import { hashPassword } from "../src/infrastructure/security/password";
 
-// Adds an account with its own empty data (default categories only).
+// Adds an account with its own empty data (default categories and a "เงินสด" wallet only).
 //   dev:  pnpm user:add
 //   prod: DATABASE_URL=<neon direct url> pnpm user:add:prod
 // The password is read from a hidden prompt so it never lands in shell history.
@@ -36,7 +36,7 @@ async function main() {
   const sequelize = getSequelize();
   try {
     const id = await createUser(sequelize, email, await hashPassword(pw));
-    console.log(`\nCreated ${email} (${id}) with the default categories.`);
+    console.log(`\nCreated ${email} (${id}) with the default categories and a "เงินสด" wallet.`);
   } finally {
     await sequelize.close();
   }

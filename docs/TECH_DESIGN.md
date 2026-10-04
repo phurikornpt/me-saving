@@ -85,11 +85,13 @@ scripts/                migrate.ts, hash-password.ts, try-receipt.ts, smoke/*.py
 | `RecordEntry` | จดรายจ่าย/รายรับ (รวมถึงออกก่อนให้คนอื่นและปุ่มลัด) → บันทึก logged_day ถ้าเป็นรายการแรกของวัน → ให้ XP → คืน `{entry, xpGained, streak, leveledUp}` |
 | `RecordRepayment` | คนหนึ่งจ่ายคืน → ตรวจว่าไม่เกินยอดติดของคนนั้น → ให้โบนัส +20 ถ้ายอดของเขาเหลือ 0 |
 | `MarkNoSpendDay` | ไม่ได้ใช้เงินวันนี้ (ใช้ได้ถ้าวันนี้ยังไม่ได้จด) |
+| `RecordTransfer` | โอนระหว่างกระเป๋า 2 ใบที่ยังไม่ซ่อน ไม่ให้ XP/streak |
+| `ManageWallets` | รายการกระเป๋าพร้อมยอด / เพิ่ม / แก้ชื่อ-icon / ซ่อน (ต้องเหลือ ≥ 1: `LAST_WALLET`) / ตั้งยอดจริง (คำนวณ `openingBalance` ย้อน) / ตั้งกระเป๋าหลัก |
 | `ParseReceipt` | รูป → `ReceiptParser` → ใช้ OwnerMemory ทับค่าที่ AI เดา → คืนร่าง (ไม่บันทึก) ตรวจ mime/ขนาดรูป และงบ 20 ครั้ง/24 ชม. |
 | `SaveReceiptEntry` | บันทึกรายการ + บรรทัดใบเสร็จ (เฉลี่ยส่วนลด) → upsert OwnerMemory → ให้ XP เหมือน `RecordEntry` |
 | `UpdateEntry` / `DeleteEntry` | แก้/ลบ (ไม่ดึง XP หรือ streak คืน) รายการจากใบเสร็จแก้ยอด/ส่วนแบ่งไม่ได้ (`ENTRY_LOCKED`) และห้ามทำให้ยอดติดของใครติดลบ |
 | `ListEntries` | รายการล่าสุด หรือรายการของวันที่ระบุ (`day`, `limit` ไม่เกิน 100) |
-| `GetDashboard` | ข้อมูลทุก widget (streak, level, คนทั้งหมด + ยอดติดของแต่ละคน, ยอดวันนี้, 5 รายการล่าสุด, ปุ่มลัด, layout) |
+| `GetDashboard` | ข้อมูลทุก widget (streak, level, คนทั้งหมด + ยอดติดของแต่ละคน, ยอดวันนี้, 5 รายการล่าสุด, ปุ่มลัด, layout, กระเป๋าพร้อมยอด) |
 | `GetCalendarMonth` | ยอดรายวัน + วิธีที่จดของแต่ละวัน + ยอดรวมเดือน + `maxSpent` สำหรับ heatmap |
 | `GetOutstanding` | ทุกคนที่ยังติดเรา พร้อมยอดค้างตามรายการ (FIFO ต่อคน) |
 | `ManagePeople` | เพิ่ม / แก้ชื่อและโน้ตพฤติกรรม / ซ่อน คน (ไม่มีลบ) |
@@ -165,6 +167,7 @@ schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน mi
 - `logged_days` บันทึกตอน**กดจดครั้งแรกของวัน** (ใช้ `created_at` ตามเวลาไทย) ส่วน streak คำนวณจากวันที่ต่อเนื่องในตารางนี้
 - **บัญชี:** ตาราง `users (id, email unique lower-case, password_hash, created_at)` ตารางระดับบนทุกตาราง (`categories`, `entries`, `people`, `presets`, `xp_events`, `logged_days`, `owner_memory`, `settings`) มี `user_id` (ON DELETE CASCADE) ตารางลูก (`receipt_lines`, `entry_shares`) เป็นของบัญชีผ่าน entry · `logged_days` PK = (user_id, day), `owner_memory` PK = (user_id, canonical_name), `settings` PK = user_id
 - repo ทุกตัวสร้างต่อบัญชี (`createRepos(sequelize, userId)`, `createStatsRepo(sequelize, userId)` ...) ทุก query กรอง `user_id` และทุกการเขียนใส่ `user_id` เอง use case ไม่รู้จัก user_id เลย ส่วน `container().forUser(userId)` ประกอบ use case ของบัญชีนั้นต่อ request
+- **กระเป๋า (`007-wallets`):** ตาราง `wallets (id, user_id, name, icon, opening_balance int (ติดลบได้), sort, archived, UNIQUE (user_id, id))` · `entries.wallet_id` NOT NULL และ `entries.to_wallet_id` (เฉพาะ `kind = 'transfer'` และต้องไม่ใช่ใบเดียวกัน: `entries_transfer_check`) อ้างอิงผ่าน FK แบบ `(user_id, wallet_id)` → DB ไม่ยอมให้รายการชี้ไปที่กระเป๋าของอีกบัญชี · `presets.wallet_id` (null = กระเป๋าหลักตอนแตะ) · `settings.default_wallet_id` · ยอดในกระเป๋า = `opening_balance` + Σ(income, repayment) − Σ(expense ยอดเต็ม, transfer ขาออก) + Σ(transfer ขาเข้า) คำนวณสดใน `WalletRepo.netFlows` (ตรงกับ `walletDeltas` ใน `domain/wallet.ts`) · stats กรอง `kind IN ('expense','income')` อยู่แล้ว การโอนจึงไม่ไปปนยอดจ่าย/รับ · migration ย้ายรายการเดิมทั้งหมดเข้า "เงินสด" ของแต่ละบัญชี บัญชีใหม่ได้ "เงินสด" จาก `seedDefaultWallet`
 - migration `005-users` สร้างบัญชีแรกจาก `AUTH_EMAIL`/`AUTH_PASSWORD_HASH` แล้วยกข้อมูลเดิมทั้งหมดให้ บัญชีใน `AUTH_EXTRA_USERS` กลายเป็นบัญชีว่าง ถ้ามีข้อมูลแต่ไม่ได้ตั้ง env จะ throw · Auth.js ยังใช้ JWT session ใน cookie โดย `sub` = id ของบัญชี
 
 ## 4. Flow สำคัญ
@@ -211,7 +214,10 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | GET | `/api/entries?day=YYYY-MM-DD&limit=N` | รายการล่าสุด หรือของวันที่ระบุ |
 | POST | `/api/entries` | จดรายจ่าย/รายรับ (รวมออกก่อน, ปุ่มลัด, จดย้อนหลังด้วย `occurredAt`) → `{ entry, xpGained, streak, leveledUp }` |
 | PATCH / DELETE | `/api/entries/[id]` | แก้ / ลบรายการ |
-| POST | `/api/repayments` | `{ personId, amount }` คนหนึ่งจ่ายคืน → `{ entry, balanceAfter, xpGained, streak, leveledUp }` |
+| POST | `/api/repayments` | `{ personId, amount, walletId? }` คนหนึ่งจ่ายคืน → `{ entry, balanceAfter, xpGained, streak, leveledUp }` |
+| POST | `/api/transfers` | `{ fromWalletId, toWalletId, amount, note? }` โอนระหว่างกระเป๋า → `{ entry }` |
+| GET / POST | `/api/wallets` | กระเป๋าทั้งหมด (รวมที่ซ่อน) พร้อม `balance`, `isDefault` / เพิ่มกระเป๋า `{ name, icon, balance }` |
+| PATCH | `/api/wallets/[id]` | แก้ชื่อ / icon / ลำดับ / ซ่อน / `balance` (ยอดจริงตอนนี้) / `isDefault: true` (ไม่มี DELETE) |
 | GET / POST | `/api/people` | รายการคน (รวมที่ซ่อน) / เพิ่มคน `{ name, note }` |
 | PATCH | `/api/people/[id]` | แก้ชื่อ / โน้ต / ลำดับ / ซ่อน (ไม่มี DELETE) |
 | GET | `/api/people/outstanding` | ทุกคนที่ยังติดเรา + ยอดค้างตามรายการ (FIFO ต่อคน) |
@@ -223,6 +229,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | GET / POST | `/api/presets` | รายการปุ่มลัด / เพิ่มปุ่มลัด |
 | PATCH / DELETE | `/api/presets/[id]` | แก้ / ลบปุ่มลัด |
 | GET / PATCH | `/api/settings` | layout ของ dashboard |
+- `walletId` บน POST ที่เป็นการจด (entries, repayments, receipts) ไม่บังคับ: ไม่ส่ง = กระเป๋าหลัก (client เก่าที่ cache ไว้จึงยังใช้ได้) ส่งกระเป๋าที่ไม่ใช่ของเราหรือซ่อนแล้ว → `UNKNOWN_WALLET`
 - POST ที่เป็นการจด จะตอบกลับพร้อม `{ entry, xpGained, streak, leveledUp }` → client เอาไปแสดงเอฟเฟกต์ได้เลยโดยไม่ต้อง refetch
 - **การอัปเดต cache หลังจด:** ตอนนี้ client รอ server ตอบแล้ว `invalidateQueries` (dashboard, calendar, outstanding) พร้อมโชว์ +XP จากค่าที่ server ส่งกลับ (`useAfterLog`) — **ยังไม่ได้ทำ optimistic update (`onMutate`) ตามที่ออกแบบไว้เดิม** ส่วน error จะขึ้น toast
 - **เปิดแอปแล้วเห็นข้อมูลทันที:** เก็บ cache ของ TanStack Query ไว้ใน localStorage (key `me-budget-cache`, อายุ 1 วัน, `buster: "v1"`) → เปิดแอปมาเห็นข้อมูลล่าสุดก่อน แล้วค่อย refetch อยู่เบื้องหลัง

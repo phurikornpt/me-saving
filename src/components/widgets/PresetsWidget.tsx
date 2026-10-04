@@ -5,6 +5,7 @@ import Link from "next/link";
 import { api } from "@/client/api";
 import { applyOptimisticEntry } from "@/client/optimistic";
 import type { DashboardDTO } from "@/client/types";
+import { activeWallets } from "@/client/wallets";
 import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht } from "@/domain/money";
 import { personColor } from "@/client/people";
@@ -18,6 +19,9 @@ const splitOf = (p: DashboardDTO["presets"][number]): SplitMode | undefined =>
   p.personId && p.splitKind ? { kind: p.splitKind, people: [p.personId] } : undefined;
 
 export function PresetsWidget({ data }: { data: DashboardDTO }) {
+  // A preset whose wallet was archived since falls back to the default instead of failing.
+  const walletOf = (p: DashboardDTO["presets"][number]) =>
+    p.walletId && activeWallets(data.wallets ?? []).some((w) => w.id === p.walletId) ? p.walletId : undefined;
   const qc = useQueryClient();
   const fb = useFeedback();
   const afterLog = useAfterLog();
@@ -31,10 +35,11 @@ export function PresetsWidget({ data }: { data: DashboardDTO }) {
         note: p.label,
         source: "preset",
         split: splitOf(p),
+        walletId: walletOf(p),
       }),
     onMutate: (p) =>
       applyOptimisticEntry(qc, {
-        kind: "expense", total: p.amount, categoryId: p.categoryId, note: p.label, source: "preset",
+        kind: "expense", total: p.amount, categoryId: p.categoryId, note: p.label, source: "preset", walletId: walletOf(p),
         shares: sharesFor(p.amount, splitOf(p) ?? { kind: "none" }),
       }),
     onSuccess: (out) => {

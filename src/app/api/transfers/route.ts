@@ -1,0 +1,10 @@
+import { api, readJson } from "@/lib/http";
+import { container } from "@/lib/container";
+import { transferBody } from "@/lib/schemas";
+
+export const runtime = "nodejs";
+
+export const POST = api(async (req, _ctx, me) => {
+  const body = await readJson(req, transferBody.parse);
+  return Response.json(await container().forUser(me.userId).recordTransfer.execute(body), { status: 201 });
+});
