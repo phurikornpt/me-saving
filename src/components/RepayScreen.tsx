@@ -13,6 +13,7 @@ import { useAfterLog } from "@/client/useAfterLog";
 import { formatBaht, parseBaht } from "@/domain/money";
 import { useFeedback } from "./Feedback";
 import { Icon } from "./Icon";
+import { Skeleton } from "./Loading";
 import { Keypad } from "./Keypad";
 import { PersonDot } from "./People";
 
@@ -86,7 +87,12 @@ export function RepayScreen() {
       )}
 
       <section className="px-6 pt-6 text-center">
-        <p className="text-sm text-ink-3">{personId ? `${name} ติดอยู่ ฿${formatBaht(balance)}` : "ไม่มีใครติดเรา"}</p>
+        {/* "no one owes us" is only true once the balances are known */}
+        {data ? (
+          <p className="text-sm text-ink-3">{personId ? `${name} ติดอยู่ ฿${formatBaht(balance)}` : "ไม่มีใครติดเรา"}</p>
+        ) : (
+          <Skeleton className="mx-auto h-5 w-40" />
+        )}
         <div className={`font-bold text-6xl ${over ? "text-expense" : "text-partner"}`} aria-live="polite">
           <span className="text-3xl text-ink-3">฿ </span>
           {amount || "0"}

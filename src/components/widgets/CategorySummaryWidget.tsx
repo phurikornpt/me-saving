@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useCategoryBreakdown } from "@/client/queries";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { breakdownQuery, useCategoryBreakdown } from "@/client/queries";
 import { useWalletFilter } from "@/client/walletFilter";
 import { formatBaht } from "@/domain/money";
 import { Icon } from "../Icon";
@@ -25,7 +26,13 @@ interface Row { key: string; name: string; icon: string; spent: number; color: s
 export function CategorySummaryWidget({ today }: { today: string }) {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [picked, setPicked] = useState<string | null>(null);
-  const { data } = useCategoryBreakdown(month, useWalletFilter());
+  const wallet = useWalletFilter();
+  const { data, isPlaceholderData } = useCategoryBreakdown(month, wallet);
+  const qc = useQueryClient();
+  useEffect(() => {
+    if (!data) return;
+    for (const by of [-1, 1]) void qc.prefetchQuery(breakdownQuery(shiftMonth(month, by), wallet));
+  }, [data, month, wallet, qc]);
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 
   const rows: Row[] = [];
@@ -64,6 +71,8 @@ export function CategorySummaryWidget({ today }: { today: string }) {
       }
     >
       {!data && <div className="flex justify-center py-2"><Skeleton className="h-36 w-36 !rounded-full" /></div>}
+      {/* the previous month's chart stays until the new one arrives, dimmed so it is not mistaken for it */}
+      <div className={`transition-opacity duration-200 ${isPlaceholderData ? "pointer-events-none opacity-50" : ""}`} aria-busy={isPlaceholderData}>
       {data && total === 0 && <p className="py-6 text-center text-sm text-ink-3">ยังไม่มีรายจ่ายในเดือนนี้</p>}
       {data && total > 0 && (
         <>
@@ -116,6 +125,7 @@ export function CategorySummaryWidget({ today }: { today: string }) {
           </ul>
         </>
       )}
+      </div>
     </WidgetCard>
   );
 }

@@ -28,8 +28,8 @@ export function PresetsPage() {
 
   return (
     <SettingsPage title="ปุ่มลัด" action={<AddButton label="เพิ่ม" onClick={() => setAdding(true)} />}>
-      <SettingsGroup footer="แตะปุ่มลัดบน dashboard ครั้งเดียวก็จดเสร็จ">
-        {presets.length === 0 && emptyHint(dash.isLoading ? "กำลังโหลด…" : "ยังไม่มีปุ่มลัด")}
+      <SettingsGroup loading={dash.isPending} footer="แตะปุ่มลัดบน dashboard ครั้งเดียวก็จดเสร็จ">
+        {presets.length === 0 && emptyHint("ยังไม่มีปุ่มลัด")}
         {presets.map((p) => (
           <SettingsItem
             key={p.id}

@@ -33,7 +33,8 @@ type Editing = WalletDTO | "new" | null;
 export function WalletsPage() {
   const qc = useQueryClient();
   const fb = useFeedback();
-  const { data: wallets = [] } = useWallets();
+  const { data, isPending } = useWallets();
+  const wallets = data ?? [];
   const [editing, setEditing] = useState<Editing>(null);
   const [showHidden, setShowHidden] = useState(false);
   const refresh = () => {
@@ -53,6 +54,7 @@ export function WalletsPage() {
   return (
     <SettingsPage title="กระเป๋าเงิน" action={<AddButton label="เพิ่ม" onClick={() => setEditing("new")} />}>
       <SettingsGroup
+        loading={isPending}
         footer={'ยอดคิดจากยอดตั้งต้นบวกลบรายการที่จด ถ้าไม่ตรงกับเงินจริง แตะกระเป๋าแล้วใส่ยอดที่มีจริงตอนนี้ จ่ายบิลบัตรให้ใช้ "โอน" จากธนาคารไปบัตร'}
       >
         {active.map((w) => (

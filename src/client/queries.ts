@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { SpendFilter } from "@/domain/spend-filter";
 import { api } from "./api";
 
@@ -14,14 +14,14 @@ export const useDashboard = (wallet: string | null = null) =>
     queryFn: () => api.dashboard(wallet),
     placeholderData: (prev) => prev,
   });
+export const calendarQuery = (month: string, wallet: string | null = null, spend: SpendFilter = "all") =>
+  queryOptions({ queryKey: ["calendar", month, wallet, spend], queryFn: () => api.calendar(month, wallet, spend) });
 export const useCalendar = (month: string, wallet: string | null = null, spend: SpendFilter = "all") =>
-  useQuery({ queryKey: ["calendar", month, wallet, spend], queryFn: () => api.calendar(month, wallet, spend), placeholderData: (prev) => prev });
+  useQuery({ ...calendarQuery(month, wallet, spend), placeholderData: (prev) => prev });
+export const breakdownQuery = (month: string, wallet: string | null = null) =>
+  queryOptions({ queryKey: ["breakdown", month, wallet], queryFn: () => api.categoryBreakdown(month, wallet) });
 export const useCategoryBreakdown = (month: string, wallet: string | null = null) =>
-  useQuery({
-    queryKey: ["breakdown", month, wallet],
-    queryFn: () => api.categoryBreakdown(month, wallet),
-    placeholderData: (prev) => prev,
-  });
+  useQuery({ ...breakdownQuery(month, wallet), placeholderData: (prev) => prev });
 /**
  * The AI summary of a month. Only fetched once `enabled` (the person asked for it): a fetch can spend AI quota,
  * so it never retries on its own. The server caches it, so asking again is free.
@@ -39,7 +39,8 @@ export const useMonthSummary = (month: string, enabled: boolean) => {
 };
 /** What is left of the shared daily AI allowance. Other screens invalidate ["aiBudget"] after an AI call. */
 export const useAiBudget = () => useQuery({ queryKey: ["aiBudget"], queryFn: api.aiBudget, staleTime: 30_000 });
-export const useEntriesOn =(day: string | null) =>
+export const entriesQuery = (day: string) => queryOptions({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day) });
+export const useEntriesOn = (day: string | null) =>
   useQuery({ queryKey: ["entries", day], queryFn: () => api.entriesOn(day!), enabled: !!day });
 export const useOutstanding = () => useQuery({ queryKey: ["outstanding"], queryFn: api.outstanding });
 export const usePeople = () => useQuery({ queryKey: ["people"], queryFn: api.people, staleTime: 5 * 60_000 });

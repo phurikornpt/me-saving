@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { FORWARD } from "@/client/nav";
 import { Icon } from "../Icon";
+import { Skeleton } from "../Loading";
 import { PageTransition } from "../PageTransition";
 
 /** A settings sub-page: back arrow to the settings list, a title, and one optional action (usually "+ เพิ่ม"). */
@@ -32,34 +34,56 @@ export function AddButton({ label, onClick }: { label: string; onClick: () => vo
   );
 }
 
-/** A labelled card of rows separated by hairlines. */
-export function SettingsGroup({ title, children, footer }: { title?: string; children: ReactNode; footer?: ReactNode }) {
+/** Rows the size of real ones, shown until the first response so the page does not jump when data lands. */
+function SkeletonRows({ n }: { n: number }) {
+  return (
+    <div aria-busy="true" aria-label="กำลังโหลด" className="divide-y divide-line">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="flex items-center gap-3 py-3">
+          <Skeleton className="h-9 w-9 !rounded-full" />
+          <Skeleton className="h-4 w-32" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * A labelled card of rows separated by hairlines. While `loading`, placeholder rows stand in (so an empty
+ * list is never claimed before the data is known); the real rows then fade in, but only if we had to wait.
+ */
+export function SettingsGroup({ title, children, footer, loading = false }: { title?: string; children: ReactNode; footer?: ReactNode; loading?: boolean }) {
+  const arrived = useArrivedLate(loading);
   return (
     <section>
       {title && <h2 className="mb-1 px-2 text-sm text-ink-3">{title}</h2>}
-      <div className="divide-y divide-line rounded-[24px] bg-card px-4">{children}</div>
+      <div className={`divide-y divide-line rounded-[24px] bg-card px-4 ${arrived ? "fade-in" : ""}`}>
+        {loading ? <SkeletonRows n={2} /> : children}
+      </div>
       {footer && <p className="mt-1 px-2 text-xs text-ink-3">{footer}</p>}
     </section>
   );
 }
 
-const rowBody = (icon: string, title: string, summary?: string, tone?: string) => (
+/** `summary` undefined with `loading` holds the line's height with a placeholder; text then fades in. */
+const rowBody = (icon: string, title: string, summary?: string, tone?: string, loading = false) => (
   <>
     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-surface">
       <Icon name={icon} size={20} />
     </span>
     <span className="min-w-0 flex-1">
       <span className="block truncate">{title}</span>
-      {summary && <span className={`block truncate text-xs ${tone ?? "text-ink-3"}`}>{summary}</span>}
+      {summary && <span className={`fade-in block truncate text-xs ${tone ?? "text-ink-3"}`}>{summary}</span>}
+      {!summary && loading && <Skeleton className="my-0.5 h-3 w-24" />}
     </span>
   </>
 );
 
-/** A row that opens a sub-page. */
+/** A row that opens a sub-page. A `summary` of undefined means "still loading". */
 export function SettingsLink({ href, icon, title, summary }: { href: string; icon: string; title: string; summary?: string }) {
   return (
     <Link href={href} transitionTypes={FORWARD} className="press flex items-center gap-3 py-3">
-      {rowBody(icon, title, summary)}
+      {rowBody(icon, title, summary, undefined, summary === undefined)}
       <Icon name="chevron_right" className="text-ink-3" />
     </Link>
   );

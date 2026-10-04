@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { api } from "@/client/api";
 import { introPlaying } from "@/client/intro";
+import { staggerDelay } from "@/client/motion";
 import { markNoSpendLogged } from "@/client/justLogged";
 import { applyOptimisticNoSpend } from "@/client/optimistic";
 import { useDashboard } from "@/client/queries";
@@ -14,6 +15,7 @@ import { FORWARD } from "@/client/nav";
 import { setWalletFilter, useWalletFilter } from "@/client/walletFilter";
 import type { DashboardDTO } from "@/client/types";
 import { useAfterLog } from "@/client/useAfterLog";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { usePullToRefresh } from "@/client/usePullToRefresh";
 import { wake } from "@/client/wake";
 import type { WidgetId } from "@/domain/dashboard-layout";
@@ -61,6 +63,8 @@ function PillBg() {
 export function Dashboard() {
   const base = useDashboard();
   const { isLoading, isError, refetch } = base;
+  // the widgets rise in when the first response lands after a wait; data that was already cached just appears
+  const arrivedLate = useArrivedLate(isLoading);
   // A wallet picked on this device narrows the money views (today, recent, calendar, categories).
   const stored = useWalletFilter();
   const activeWallets = (base.data?.wallets ?? []).filter((w) => !w.archived);
@@ -179,12 +183,13 @@ export function Dashboard() {
         transition={{ duration: 0.24, ease: "easeOut" }}
       >
         {data?.layout.filter((w) => w.enabled).map((w, i) => (
-          // Rise in one by one only while the intro plays; `initial` is read at mount, so refetches never replay it.
+          // Rise in one by one while the intro plays, or when the data only just arrived (the skeleton was showing);
+          // `initial` is read at mount, so refetches never replay it.
           <motion.div
             key={w.id}
-            initial={introPlaying() ? { opacity: 0, y: 12 } : false}
+            initial={introPlaying() || arrivedLate ? { opacity: 0, y: 12 } : false}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut", delay: 0.45 + i * 0.05 }}
+            transition={{ duration: 0.3, ease: "easeOut", delay: introPlaying() ? 0.45 + i * 0.05 : staggerDelay(i, 0.05, 0.3) }}
           >
             {renderWidget(w.id, data)}
           </motion.div>

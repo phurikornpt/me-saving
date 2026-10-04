@@ -1,13 +1,15 @@
 "use client";
 
-import { DUR } from "@/client/motion";
+import { DUR, staggerDelay } from "@/client/motion";
 import { FORWARD } from "@/client/nav";
 import Link from "next/link";
 import { AnimatePresence, motion, useAnimate } from "motion/react";
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { readNoSpendLogged, subscribeNoSpendLogged } from "@/client/justLogged";
-import { useCalendar, useCategories, useEntriesOn } from "@/client/queries";
+import { calendarQuery, entriesQuery, useCalendar, useCategories, useEntriesOn } from "@/client/queries";
 import { matchesSpend, setSpendFilter, useSpendFilter } from "@/client/spendFilter";
+import { useArrivedLate } from "@/client/useDelayedFlag";
 import { inWallet, useWalletFilter } from "@/client/walletFilter";
 import type { EntryDTO } from "@/client/types";
 import { addDays } from "@/domain/day";
@@ -16,6 +18,7 @@ import { formatBaht, formatCompact } from "@/domain/money";
 import { EditEntrySheet } from "../EditEntrySheet";
 import { EntryRow } from "../EntryRow";
 import { Icon } from "../Icon";
+import { Skeleton } from "../Loading";
 import { Sheet } from "../Sheet";
 import { WidgetCard } from "./WidgetCard";
 
@@ -35,16 +38,30 @@ export function CalendarWidget({ today }: { today: string }) {
   const wallet = useWalletFilter();
   const [grid, animateGrid] = useAnimate<HTMLDivElement>();
   const spend = useSpendFilter();
-  const { data } = useCalendar(month, wallet, spend);
+  const { data, isPlaceholderData } = useCalendar(month, wallet, spend);
+  const qc = useQueryClient();
+  // What to play once the numbers for the new month/filter are really on screen (dir 0 = fade only).
+  const [pending, setPending] = useState<{ dir: 1 | -1 | 0 } | null>(null);
+  useEffect(() => {
+    if (!pending || isPlaceholderData || !data || !grid.current) return;
+    void animateGrid(grid.current, pending.dir ? { x: [pending.dir * 28, 0], opacity: [0.2, 1] } : { opacity: [0.25, 1] }, { duration: DUR.base + 0.05 });
+    setPending(null);
+  }, [pending, isPlaceholderData, data, animateGrid, grid]);
+  // Warm the neighbouring months so a press usually finds its numbers ready.
+  useEffect(() => {
+    if (!data) return;
+    for (const by of [-1, 1]) void qc.prefetchQuery(calendarQuery(shiftMonth(month, by), wallet, spend));
+  }, [data, month, wallet, spend, qc]);
   const { data: categories = [] } = useCategories();
   const dayEntries = useEntriesOn(openDay);
+  const rowsArrivedLate = useArrivedLate(dayEntries.isLoading);
   const shown = dayEntries.data?.filter((e) => inWallet(e, wallet) && matchesSpend(e, spend));
 
   const firstDow = new Date(`${month}-01T00:00:00Z`).getUTCDay();
-  // The month slides in from the side you pressed; the numbers behind it may still be the old month's for a moment.
+  // The month slides in from the side you pressed, but only once its numbers have arrived (see the effect above).
   const go = (dir: 1 | -1) => {
     setMonth(shiftMonth(month, dir));
-    void animateGrid(grid.current, { x: [dir * 28, 0], opacity: [0.2, 1] }, { duration: DUR.base + 0.05 });
+    setPending({ dir });
   };
   const title = new Date(`${month}-01T12:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric" });
 
@@ -67,7 +84,7 @@ export function CalendarWidget({ today }: { today: string }) {
         <div className="mb-2 flex gap-2" role="group" aria-label="กรองรายจ่าย">
           {SPEND_FILTERS.map((s) => (
             <button key={s} className="pill text-sm" aria-pressed={spend === s} onClick={() => {
-                if (s !== spend) void animateGrid(grid.current, { opacity: [0.25, 1] }, { duration: DUR.base });
+                if (s !== spend) setPending({ dir: 0 });
                 setSpendFilter(s);
               }}>
               {SPEND_LABEL[s]}
@@ -79,6 +96,8 @@ export function CalendarWidget({ today }: { today: string }) {
             <div key={w}>{w}</div>
           ))}
         </div>
+        {/* old numbers dim while the new ones load, so they never pass for the new month's */}
+        <div className={`transition-opacity duration-150 ${isPlaceholderData ? "opacity-50" : ""}`}>
         <div ref={grid} className="mt-1 grid grid-cols-7 gap-1">
           {Array.from({ length: firstDow }, (_, i) => (
             <div key={`pad${i}`} />
@@ -89,6 +108,8 @@ export function CalendarWidget({ today }: { today: string }) {
             return (
               <button
                 key={d.day}
+                // start fetching the day as the finger lands, so the list is often ready by the time the sheet is open
+                onPointerDown={() => void qc.prefetchQuery(entriesQuery(d.day))}
                 onClick={() => setOpenDay(d.day)}
                 className={`relative flex min-h-[3.6rem] flex-col items-center rounded-xl px-0.5 pt-1 text-[10px] leading-tight ${
                   d.day === today ? "ring-2 ring-ink" : ""
@@ -106,6 +127,7 @@ export function CalendarWidget({ today }: { today: string }) {
               </button>
             );
           })}
+        </div>
         </div>
         {data && spend !== "all" && (
           <p className="mt-3 text-center text-sm text-ink-2">
@@ -126,14 +148,21 @@ export function CalendarWidget({ today }: { today: string }) {
         onOpenChange={(o) => !o && setOpenDay(null)}
         title={openDay ? new Date(`${openDay}T12:00:00Z`).toLocaleDateString("th-TH", { weekday: "long", day: "numeric", month: "long" }) : ""}
       >
-        {dayEntries.isLoading && <p className="py-4 text-center text-ink-3">กำลังโหลด…</p>}
+        {dayEntries.isLoading && (
+          <div className="flex flex-col gap-3 py-3" aria-busy="true" aria-label="กำลังโหลด">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+          </div>
+        )}
         {shown?.length === 0 && <p className="py-4 text-center text-ink-3">ไม่มีรายการ</p>}
         <ul className="divide-y divide-line">
           <AnimatePresence initial={false}>
-            {shown?.map((e) => (
+            {shown?.map((e, i) => (
               <motion.li
                 key={e.id}
                 layout="position"
+                initial={rowsArrivedLate ? { opacity: 0, y: 8 } : false}
+                animate={{ opacity: 1, y: 0, transition: { duration: DUR.base, delay: rowsArrivedLate ? staggerDelay(i) : 0 } }}
                 className="overflow-hidden"
                 exit={{ opacity: 0, height: 0 }}
                 transition={{ duration: DUR.base }}

@@ -5,26 +5,34 @@ import { DomainError } from "@/domain/errors";
 
 type Ctx = Parameters<TextEntryParser["parse"]>[1];
 
-// One schema for both: it is sent to Gemini as the response contract AND used to validate what comes back.
-// Person / wallet keys are enums of the keys we handed out, so an invented one fails validation.
-function buildSchema(ctx: Ctx) {
+// Two flavours of one schema. `strict` validates what comes back (bounds, key enums, nothing invented).
+// `wire` is what Gemini receives as the response contract, kept to the constructs the receipt parser already
+// sends successfully: Gemini answers 400 INVALID_ARGUMENT to schemas it dislikes, and we cannot tell which
+// construct it dislikes from here. So no numeric bounds / maxItems / enum-or-null unions on the wire (the
+// strict flavour enforces them afterwards), and the wallet is a nullable string with its keys in the description.
+// Person keys stay an enum in both: a plain enum array is proven to work.
+function buildSchema(ctx: Ctx, wire = false) {
   const keys = (list: { key: string }[]) => z.enum(list.map((x) => x.key) as [string, ...string[]]);
   const item = z.object({
     note: z.string().nullable().describe("A few words of what it was, e.g. 'ข้าวมันไก่'; null if nothing to add"),
-    amount: z.number().min(0).max(20_000_000).nullable().describe("Amount in baht, or null if none was said"),
+    amount: (wire ? z.number() : z.number().min(0).max(20_000_000)).nullable().describe("Amount in baht, or null if none was said"),
     category: z.string().nullable().describe("One of the provided category names of the same kind, or null"),
     me: z.boolean().describe("true if the speaker pays / uses a part of this item"),
-    people: (ctx.people.length ? z.array(keys(ctx.people)) : z.array(z.string())).max(ctx.people.length ? 10 : 0).describe("Keys of the people this item is shared with or is for"),
+    people: (wire ? ctx.people.length ? z.array(keys(ctx.people)) : z.array(z.string()) : (ctx.people.length ? z.array(keys(ctx.people)) : z.array(z.string())).max(ctx.people.length ? 10 : 0)).describe(
+      "Keys of the people this item is shared with or is for",
+    ),
     uncertain: z.array(z.enum(["amount", "category", "person"])).describe("Fields you are only guessing"),
   });
   const entry = z.object({
     kind: z.enum(["expense", "income"]),
     name: z.string().nullable().describe("A name for several items bought together, e.g. 'ค่า 7-11'; null if none"),
-    wallet: (ctx.wallets.length ? keys(ctx.wallets).nullable() : z.null()).describe("Key of the wallet if one was named, else null"),
-    items: z.array(item).min(1).max(20),
+    wallet: (wire ? z.string().nullable() : ctx.wallets.length ? keys(ctx.wallets).nullable() : z.null()).describe(
+      ctx.wallets.length ? `Key of the wallet if one was named (one of: ${ctx.wallets.map((w) => w.key).join(", ")}), else null` : "Always null",
+    ),
+    items: wire ? z.array(item).min(1) : z.array(item).min(1).max(20),
     uncertain: z.array(z.enum(["wallet"])).describe("Set if you are only guessing the wallet"),
   });
-  return z.object({ entries: z.array(entry).min(1).max(10) });
+  return z.object({ entries: wire ? z.array(entry).min(1) : z.array(entry).min(1).max(10) });
 }
 
 function toJsonSchema(schema: z.ZodType) {
@@ -67,6 +75,9 @@ function buildPrompt(ctx: Ctx, text: string) {
   ].join("\n");
 }
 
+/** What is sent to Gemini as the response contract (exported so a test can pin which constructs it uses). */
+export const wireSchema = (ctx: Ctx) => toJsonSchema(buildSchema(ctx, true));
+
 export function createGeminiTextEntryParser(opts: { apiKey: string; model?: string; retryDelayMs?: number }): TextEntryParser {
   const ai = new GoogleGenAI({ apiKey: opts.apiKey, httpOptions: { timeout: 20_000 } });
   const model = opts.model ?? "gemini-3.5-flash-lite";
@@ -78,7 +89,7 @@ export function createGeminiTextEntryParser(opts: { apiKey: string; model?: stri
         ai.models.generateContent({
           model,
           contents: [{ role: "user", parts: [{ text: buildPrompt(ctx, text) }] }],
-          config: { responseMimeType: "application/json", responseJsonSchema: toJsonSchema(schema), temperature: 0.1 },
+          config: { responseMimeType: "application/json", responseJsonSchema: wireSchema(ctx), temperature: 0.1 },
         });
 
       let out: string | undefined;
