@@ -68,6 +68,7 @@ src/
     db/repos/login-attempt-repo.ts
     db/migrate.ts + db/migrations/   Umzug (001-initial, 002-seed-categories)
     ai/GeminiReceiptParser.ts
+    ai/GeminiTextEntryParser.ts   ประโยคเดียว → ร่างรายการ (port `TextEntryParser`)
     security/           password.ts (scrypt), env-credential-verifier.ts
     clock/SystemClock.ts
   app/                  หน้า (/, /new, /repay, /scan, /settings, /login), manifest.ts และ api/**
@@ -119,7 +120,7 @@ scripts/                migrate.ts, hash-password.ts, try-receipt.ts, smoke/*.py
 
 ### Error
 - ไม่ได้ login → 401 `UNAUTHORIZED` · zod/JSON ผิด → 400 `BAD_REQUEST` · อย่างอื่น → 500 `INTERNAL` (log ไว้ แต่ไม่ส่งรายละเอียดให้ client)
-- `DomainError` แมปเป็น HTTP ใน `src/lib/http.ts`: `INVALID_AMOUNT`/`INVALID_SPLIT`/`INVALID_RECEIPT`/`RECEIPT_TOTAL_MISMATCH` → 422 · `REPAYMENT_EXCEEDS_BALANCE`/`BALANCE_WOULD_GO_NEGATIVE`/`ENTRY_LOCKED`/`NO_SPEND_ALREADY_LOGGED` → 409 · `NOT_FOUND` → 404 · `RATE_LIMITED` (สแกนครบโควตา) → 429 · `AI_UNAVAILABLE` (Gemini ล้ม/ตอบมาอ่านไม่ได้ รวมถึงโดน 429 จาก Google) → 503
+- `DomainError` แมปเป็น HTTP ใน `src/lib/http.ts`: `INVALID_AMOUNT`/`INVALID_SPLIT`/`INVALID_RECEIPT`/`INVALID_TEXT`/`RECEIPT_TOTAL_MISMATCH` → 422 · `REPAYMENT_EXCEEDS_BALANCE`/`BALANCE_WOULD_GO_NEGATIVE`/`ENTRY_LOCKED`/`NO_SPEND_ALREADY_LOGGED` → 409 · `NOT_FOUND` → 404 · `RATE_LIMITED` (สแกนครบโควตา) → 429 · `AI_UNAVAILABLE` (Gemini ล้ม/ตอบมาอ่านไม่ได้ รวมถึงโดน 429 จาก Google) → 503
 - รูปแบบ body: `{ error: { code, message } }` ใช้ `code` คงที่ เช่น `REPAYMENT_EXCEEDS_BALANCE` ให้ client เอาไปแสดงข้อความภาษาไทยเอง
 
 ### การเทสตามชั้น
@@ -171,6 +172,17 @@ schema_migrations name (PK)  -- สร้างโดย Umzug storage ใน mi
 - migration `005-users` สร้างบัญชีแรกจาก `AUTH_EMAIL`/`AUTH_PASSWORD_HASH` แล้วยกข้อมูลเดิมทั้งหมดให้ บัญชีใน `AUTH_EXTRA_USERS` กลายเป็นบัญชีว่าง ถ้ามีข้อมูลแต่ไม่ได้ตั้ง env จะ throw · Auth.js ยังใช้ JWT session ใน cookie โดย `sub` = id ของบัญชี
 
 ## 4. Flow สำคัญ
+### จดด้วยประโยคเดียว
+```
+client: พิมพ์ หรือพูด (Web Speech API `th-TH` ซ่อนปุ่มไมค์เมื่อไม่รองรับ) → ข้อความในกล่องเดียวกัน
+  → POST /api/entry/parse {text} (ต้อง login แล้ว)
+server: ParseEntryText ตรวจข้อความ (ไม่ว่าง, ≤ 300 ตัว ไม่งั้น INVALID_TEXT 422)
+  → spendAiBudget (key `ai:<userId>` ร่วมกับสแกน, เต็มแล้ว RATE_LIMITED 429, ครั้งที่ล้มก็นับ)
+  → ส่งประโยค (เป็น data) + ชื่อหมวด + คน (key p1..) + กระเป๋า (key w1..) ให้ Gemini ตอบตาม zod schema
+  → แปลง key กลับเป็น id (key/หมวดที่ AI แต่งขึ้นถูกทิ้ง และใส่ใน `uncertain`) → ส่งร่างกลับ ไม่บันทึกอะไร
+client: หน้า /say แก้ร่างได้ → กดบันทึก → POST /api/entries (RecordEntry เดิม) + toast ย้อนกลับ
+```
+
 ### สแกนใบเสร็จ
 ```
 มือถือ: ถ่ายรูป → ย่อรูปฝั่ง client (ด้านยาวประมาณ 1600px, JPEG) ให้ไฟล์ < 4.5MB ตามลิมิตของ Vercel
@@ -223,6 +235,7 @@ client: หน้าตรวจ/แก้ → กดบันทึก → POST
 | GET | `/api/people/outstanding` | ทุกคนที่ยังติดเรา + ยอดค้างตามรายการ (FIFO ต่อคน) |
 | POST | `/api/no-spend` | วันนี้ไม่ได้ใช้เงิน |
 | POST | `/api/receipt/parse` | รูป (multipart field `image`, `people` ถ้าหารกัน) → ร่างใบเสร็จ JSON ไม่บันทึกอะไร (`maxDuration = 30`) |
+| POST | `/api/entry/parse` | `{text}` → ร่างรายการ JSON (ยอดเป็น satang, `uncertain[]`) ไม่บันทึกอะไร นับโควตา AI (`maxDuration = 30`) |
 | POST | `/api/receipts` | บันทึกใบเสร็จที่ตรวจแล้ว (1 entry + lines + อัปเดตความจำเจ้าของ) |
 | GET / POST | `/api/categories` | รายการหมวด / เพิ่มหมวด |
 | PATCH / DELETE | `/api/categories/[id]` | แก้หมวด / ซ่อน (archive) หมวด |

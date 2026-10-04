@@ -162,6 +162,9 @@ export const walletPatchBody = z.object({
 export const parsePeopleField = (raw: unknown) =>
   people.parse(typeof raw === "string" && raw.trim() ? raw.split(",").map((s) => s.trim()) : []);
 
+/** One sentence to turn into a draft entry. Length is judged by the use case (INVALID_TEXT); this only bounds the payload. */
+export const parseEntryBody = z.object({ text: z.string().max(2000) });
+
 export const settingsPatchBody = z.object({
   dashboardLayout: z.array(z.object({ id: z.string(), enabled: z.boolean() })).optional(),
   meNote: z.string().trim().max(500).optional(),

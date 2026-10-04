@@ -7,6 +7,7 @@ import { GetOutstanding } from "@/application/use-cases/get-outstanding";
 import { ListEntries } from "@/application/use-cases/list-entries";
 import { ManageCategories, ManagePeople, ManagePresets, ManageSettings } from "@/application/use-cases/manage-settings";
 import { ManageWallets } from "@/application/use-cases/manage-wallets";
+import { ParseEntryText } from "@/application/use-cases/parse-entry-text";
 import { ParseReceipt } from "@/application/use-cases/parse-receipt";
 import { SaveReceiptEntry } from "@/application/use-cases/save-receipt-entry";
 import { MarkNoSpendDay } from "@/application/use-cases/mark-no-spend-day";
@@ -19,6 +20,7 @@ import { createRepos, createTransactionRunner } from "@/infrastructure/db/repos"
 import { createCategoryRepo, createPresetRepo, createSettingsRepo, createStatsRepo } from "@/infrastructure/db/repos/read-repos";
 import { createDbCredentialVerifier } from "@/infrastructure/db/repos/user-repo";
 import { createGeminiReceiptParser } from "@/infrastructure/ai/GeminiReceiptParser";
+import { createGeminiTextEntryParser } from "@/infrastructure/ai/GeminiTextEntryParser";
 import { getSequelize } from "@/infrastructure/db/sequelize";
 import { aiDailyLimit } from "./env";
 
@@ -30,6 +32,13 @@ function build() {
   let parser: ReturnType<typeof createGeminiReceiptParser> | undefined;
   const receiptParser = () =>
     (parser ??= createGeminiReceiptParser({
+      apiKey: process.env.GEMINI_API_KEY ?? "",
+      model: process.env.GEMINI_MODEL || undefined,
+    }));
+
+  let textParser: ReturnType<typeof createGeminiTextEntryParser> | undefined;
+  const textEntryParser = () =>
+    (textParser ??= createGeminiTextEntryParser({
       apiKey: process.env.GEMINI_API_KEY ?? "",
       model: process.env.GEMINI_MODEL || undefined,
     }));
@@ -62,6 +71,11 @@ function build() {
         new ParseReceipt(receiptParser(), repos.ownerMemory, categories, repos.people, settings, attempts, systemClock, {
           // One budget per account for every AI feature: new ones must count under this same key.
           key: `ai:${userId}`,
+          perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
+        }),
+      parseEntryText: () =>
+        new ParseEntryText(textEntryParser(), categories, repos.people, repos.wallets, attempts, systemClock, {
+          key: `ai:${userId}`, // the same budget as a receipt scan
           perDay: aiDailyLimit(process.env.AI_DAILY_LIMIT, process.env.RECEIPT_SCAN_DAILY_LIMIT),
         }),
       recordEntry: new RecordEntry(tx, systemClock),
