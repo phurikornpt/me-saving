@@ -96,6 +96,7 @@ export function SayScreen() {
   };
 
   const read = useMutation({
+    meta: { ai: true }, // the aurora shows the wait; the top bar stays out
     mutationFn: () => api.parseEntryText(text.trim()),
     // Whether it worked or not, it may have used one of today's AI calls.
     onSettled: () => void qc.invalidateQueries({ queryKey: ["aiBudget"] }),

@@ -35,6 +35,7 @@ export const useMonthSummary = (month: string, enabled: boolean) => {
     enabled,
     retry: false,
     staleTime: 5 * 60_000,
+    meta: { ai: true }, // the card shows its own small aurora; the top bar stays out
   });
 };
 /** What is left of the shared daily AI allowance. Other screens invalidate ["aiBudget"] after an AI call. */

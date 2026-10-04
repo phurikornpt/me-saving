@@ -33,13 +33,20 @@ export function DashboardSkeleton() {
   );
 }
 
-/** Thin indeterminate bar at the top while anything is fetching or saving. Waits 250ms so quick calls don't flash it, then stays 400ms. */
+/**
+ * A hairline across the top that breathes (fades in and out) while anything is fetching or saving: nothing
+ * travels across the screen, so it stays out of the way. Waits 200ms so quick calls don't flash it, then stays 400ms.
+ * Calls tagged `meta: { ai: true }` are left out: those screens already show the aurora, and two signals would compete.
+ * Ink colour, never green or the aurora's blue/violet: those mean "success" and "the AI is working".
+ */
 export function TopProgress() {
-  const show = useDelayedFlag(useIsFetching() + useIsMutating() > 0, 250, 400);
+  const fetching = useIsFetching({ predicate: (q) => !q.meta?.ai });
+  const mutating = useIsMutating({ predicate: (m) => !m.meta?.ai });
+  const show = useDelayedFlag(fetching + mutating > 0, 200, 400);
   if (!show) return null;
   return (
     <div aria-hidden className="pointer-events-none fixed inset-x-0 top-0 z-50 h-0.5 overflow-hidden">
-      <div className="top-progress-bar h-full w-1/3 rounded-full bg-primary" style={{ animation: "top-progress 1.1s ease-in-out infinite" }} />
+      <div className="top-progress-bar h-full w-full bg-ink" />
     </div>
   );
 }

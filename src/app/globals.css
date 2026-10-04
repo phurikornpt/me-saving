@@ -204,7 +204,8 @@ body {
 .wheel-hero-on::after { display: none; }
 @keyframes wheel-pulse { 0% { transform: scale(0.92); opacity: 0.75; } 100% { transform: scale(1.22); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .wheel-hero::after { animation: none; } }
-@keyframes top-progress { 0% { transform: translateX(-100%); } 100% { transform: translateX(350%); } }
+.top-progress-bar { animation: top-breathe 1.6s ease-in-out infinite; }
+@keyframes top-breathe { 0%, 100% { opacity: 0.12; } 50% { opacity: 0.75; } }
 @keyframes scan-line { 0%, 100% { top: 6%; } 50% { top: 90%; } }
 /* Intro on the first open of "/" per session; <html data-intro="play"> is set by INTRO_INIT_SCRIPT.
    Total ~900ms: icon 0-500ms, overlay fades 500-800ms, header/[+] rise in behind it. */
@@ -295,7 +296,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .flash-once, .fade-in, .aurora-in, .dot-pop, .flame-pop, .fresh-row, .shake-once, .pic-reading::after, .pic-bad { animation: none; }
   ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
   .press, .press:active:not(:disabled) { transform: none; transition: none; }
-  .skeleton, .top-progress-bar, .scan-line { animation: none; }
+  .skeleton, .scan-line { animation: none; }
+  .top-progress-bar { animation: none; opacity: 0.5; }
   html[data-intro="play"] .app-intro { display: none; }
   html[data-intro="play"] .intro-rise, html[data-intro="play"] .intro-pop { animation: none; }
 }
@@ -306,6 +308,7 @@ html[data-motion="reduce"] .wheel-hero::after { animation: none; }
 html[data-motion="reduce"] .toast-drain { display: none; }
 html[data-motion="reduce"] ::view-transition-old(*), html[data-motion="reduce"] ::view-transition-new(*), html[data-motion="reduce"] ::view-transition-group(*) { animation-duration: 0s !important; animation-delay: 0s !important; }
 html[data-motion="reduce"] .press, html[data-motion="reduce"] .press:active:not(:disabled) { transform: none; transition: none; }
-html[data-motion="reduce"] .skeleton, html[data-motion="reduce"] .top-progress-bar, html[data-motion="reduce"] .scan-line { animation: none; }
+html[data-motion="reduce"] .skeleton, html[data-motion="reduce"] .scan-line { animation: none; }
+html[data-motion="reduce"] .top-progress-bar { animation: none; opacity: 0.5; }
 html[data-motion="reduce"][data-intro="play"] .app-intro { display: none; }
 html[data-motion="reduce"][data-intro="play"] .intro-rise, html[data-motion="reduce"][data-intro="play"] .intro-pop { animation: none; }
