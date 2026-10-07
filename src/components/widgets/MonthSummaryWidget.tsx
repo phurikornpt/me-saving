@@ -37,14 +37,14 @@ export function MonthSummaryWidget({ today }: { today: string }) {
           <AiBudgetNote />
         </div>
       )}
-      {asked && isFetching && !data && (
+      {asked && isFetching && (
         <div className="flex flex-col items-center py-1" role="status">
           <AuroraCloud mode="thinking" pulse={0} blur={5} className="-my-3 h-28 w-28" />
           <span className="text-xs text-ink-3">กำลังสรุป…</span>
         </div>
       )}
       {/* the text arrives whole from the server; showing it a line at a time is a reveal, not a stream */}
-      {data && (
+      {data && !isFetching && (
         <div className="leading-relaxed">
           {summaryLines(data.text).map((line, i) => (
             <motion.p

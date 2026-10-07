@@ -1,6 +1,6 @@
 "use client";
 
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, defaultShouldDehydrateQuery } from "@tanstack/react-query";
 import { persistQueryClient } from "@tanstack/react-query-persist-client";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import { MotionConfig } from "motion/react";
@@ -23,7 +23,14 @@ export function Providers({ children }: { children: ReactNode }) {
   // server HTML (hydration mismatch).
   useEffect(() => {
     const persister = createSyncStoragePersister({ storage: window.localStorage, key: "me-budget-cache" });
-    const [unsubscribe] = persistQueryClient({ queryClient: client, persister, maxAge: DAY, buster: "v1" });
+    const [unsubscribe] = persistQueryClient({
+      queryClient: client,
+      persister,
+      maxAge: DAY,
+      buster: "v2",
+      // AI answers stay out: a restored one would show on press with no loading, and could be yesterday's
+      dehydrateOptions: { shouldDehydrateQuery: (q) => defaultShouldDehydrateQuery(q) && !q.meta?.ai },
+    });
     return unsubscribe;
   }, [client]);
 
