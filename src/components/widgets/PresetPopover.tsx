@@ -117,7 +117,8 @@ export function PresetPopover({
   return createPortal(
     <>
       <motion.div
-        className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
+        className="fixed inset-0 z-40 select-none bg-black/30 backdrop-blur-[2px]"
+        style={{ WebkitTouchCallout: "none" }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={onClose}
@@ -128,8 +129,11 @@ export function PresetPopover({
         aria-modal="true"
         aria-label={`${preset.label}: เลือกราคาและเวลา`}
         tabIndex={-1}
-        className={`fixed z-50 rounded-[28px] p-4 outline-none ${glass}`}
-        style={{ left, width, transformOrigin: origin, ...place }}
+        // it opens under a finger still held from the chip: without this the browser's own long-press
+        // selects the text under it and shows the copy menu
+        className={`fixed z-50 select-none rounded-[28px] p-4 outline-none ${glass}`}
+        style={{ left, width, transformOrigin: origin, WebkitTouchCallout: "none", ...place }}
+        onContextMenu={(e) => e.preventDefault()}
         initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.55 }}
         animate={{ opacity: 1, scale: 1 }}
         transition={reduce ? { duration: 0.12 } : { type: "spring", stiffness: 520, damping: 30 }}
